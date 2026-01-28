@@ -1,0 +1,40 @@
+# HOTARU - SaaS Application
+# Core Framework
+streamlit>=1.28.0
+
+# Google Sheets Connection
+gspread>=5.12.0
+google-auth>=2.23.0
+google-auth-oauthlib>=1.1.0
+st-gsheets-connection>=0.0.4
+
+# Graph Visualization
+pyvis>=0.3.2
+streamlit-agraph>=0.0.45
+
+# Web Scraping & HTTP
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# URL & Sitemap Processing
+usp-py>=0.1.1
+urllib3>=2.0.0
+
+# Data Processing
+pandas>=2.1.0
+numpy>=1.26.0
+
+# Clustering & ML (for smart sampling)
+scikit-learn>=1.3.0
+
+# Async Processing
+aiohttp>=3.9.0
+asyncio>=3.4.3
+
+# Utilities
+python-dotenv>=1.0.0
+hashlib-compat>=1.0.1
+
+# Security
+cryptography>=41.0.0
