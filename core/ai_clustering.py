@@ -1,6 +1,6 @@
 """
 HOTARU - AI Clustering Module
-Uses OpenAI API to intelligently categorize and group URLs.
+Uses Mistral AI API to intelligently categorize and group URLs.
 """
 
 import streamlit as st
@@ -9,14 +9,14 @@ import json
 from typing import List, Dict, Optional
 
 
-def get_openai_api_key() -> Optional[str]:
-    """Get OpenAI API key from secrets."""
-    return st.secrets.get("openai", {}).get("api_key", None)
+def get_mistral_api_key() -> Optional[str]:
+    """Get Mistral API key from secrets."""
+    return st.secrets.get("mistral", {}).get("api_key", None)
 
 
 def categorize_urls_with_ai(urls: List[Dict], site_url: str) -> Optional[Dict]:
     """
-    Use OpenAI to intelligently categorize URLs into meaningful groups.
+    Use Mistral AI to intelligently categorize URLs into meaningful groups.
 
     Args:
         urls: List of URL dictionaries with path, title, etc.
@@ -25,10 +25,10 @@ def categorize_urls_with_ai(urls: List[Dict], site_url: str) -> Optional[Dict]:
     Returns:
         Dictionary with categories and their URLs
     """
-    api_key = get_openai_api_key()
+    api_key = get_mistral_api_key()
 
     if not api_key:
-        st.warning("Clé API OpenAI non configurée. Ajoutez-la dans les secrets.")
+        st.warning("Cle API Mistral non configuree. Ajoutez-la dans les secrets.")
         return None
 
     # Prepare URL data for the prompt
@@ -39,23 +39,23 @@ def categorize_urls_with_ai(urls: List[Dict], site_url: str) -> Optional[Dict]:
             "title": u.get("title", "")[:50] if u.get("title") else ""
         })
 
-    prompt = f"""Analyse ces URLs du site {site_url} et crée des catégories intelligentes en français.
+    prompt = f"""Analyse ces URLs du site {site_url} et cree des categories intelligentes en francais.
 
-URLs à analyser:
+URLs a analyser:
 {json.dumps(url_list, indent=2, ensure_ascii=False)}
 
 INSTRUCTIONS:
 1. Identifie les patterns dans les URLs (ex: /cirfa-*, /emploi-*, /metier-*)
-2. Crée des catégories claires avec des noms compréhensibles en français
-3. Chaque catégorie doit avoir un nom court et descriptif (ex: "CIRFA", "Offres d'emploi", "Métiers", "Actualités")
+2. Cree des categories claires avec des noms comprehensibles en francais
+3. Chaque categorie doit avoir un nom court et descriptif (ex: "CIRFA", "Offres d'emploi", "Metiers", "Actualites")
 4. Regroupe les URLs similaires ensemble
-5. Maximum 10 catégories
+5. Maximum 10 categories
 
-Réponds UNIQUEMENT avec un JSON valide dans ce format exact:
+Reponds UNIQUEMENT avec un JSON valide dans ce format exact:
 {{
   "categories": [
     {{
-      "name": "Nom de la catégorie",
+      "name": "Nom de la categorie",
       "description": "Description courte",
       "url_patterns": ["pattern1", "pattern2"],
       "paths": ["/chemin1", "/chemin2"]
@@ -66,17 +66,17 @@ Réponds UNIQUEMENT avec un JSON valide dans ce format exact:
 
     try:
         response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
+            "https://api.mistral.ai/v1/chat/completions",
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json"
             },
             json={
-                "model": "gpt-4o-mini",
+                "model": "mistral-small-latest",
                 "messages": [
                     {
                         "role": "system",
-                        "content": "Tu es un expert SEO qui analyse la structure des sites web. Tu réponds uniquement en JSON valide."
+                        "content": "Tu es un expert SEO qui analyse la structure des sites web. Tu reponds uniquement en JSON valide."
                     },
                     {
                         "role": "user",
@@ -90,7 +90,7 @@ Réponds UNIQUEMENT avec un JSON valide dans ce format exact:
         )
 
         if response.status_code != 200:
-            st.error(f"Erreur API OpenAI: {response.status_code}")
+            st.error(f"Erreur API Mistral: {response.status_code} - {response.text}")
             return None
 
         result = response.json()
@@ -163,7 +163,7 @@ def apply_ai_categories(pages: List[Dict], categories: Dict) -> List[Dict]:
 
         if not assigned:
             page["ai_category"] = "Autres"
-            page["ai_category_desc"] = "Pages non catégorisées"
+            page["ai_category_desc"] = "Pages non categorisees"
 
     return pages
 
