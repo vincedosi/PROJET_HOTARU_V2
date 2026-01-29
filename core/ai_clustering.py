@@ -9,60 +9,71 @@ import json
 from typing import List, Dict, Optional
 
 
-def get_mistral_api_key() -> Optional[str]:
-    """Get Mistral API key from secrets."""
-    return st.secrets.get("mistral", {}).get("api_key", None)
-
-
-def categorize_urls_with_ai(urls: List[Dict], site_url: str) -> Optional[Dict]:
+def categorize_urls_with_ai(urls: List[Dict], site_url: str, api_key: str) -> Optional[Dict]:
     """
     Use Mistral AI to intelligently categorize URLs into meaningful groups.
 
     Args:
         urls: List of URL dictionaries with path, title, etc.
         site_url: The base site URL
+        api_key: Mistral API key (passed from session)
 
     Returns:
-        Dictionary with categories and their URLs
+        Dictionary with clusters and renamed pages
     """
-    api_key = get_mistral_api_key()
-
     if not api_key:
-        st.warning("Cle API Mistral non configuree. Ajoutez-la dans les secrets.")
         return None
 
     # Prepare URL data for the prompt
-    url_list = []
-    for u in urls[:100]:  # Limit to 100 URLs for API call
-        url_list.append({
+    nodes_data = []
+    for u in urls[:80]:  # Limit for API
+        nodes_data.append({
+            "url": u.get("url", ""),
             "path": u.get("path", ""),
-            "title": u.get("title", "")[:50] if u.get("title") else ""
+            "title": u.get("title", "")[:60] if u.get("title") else "",
+            "h1": u.get("h1", "")[:60] if u.get("h1") else ""
         })
 
-    prompt = f"""Analyse ces URLs du site {site_url} et cree des categories intelligentes en francais.
+    # Expert prompt for architecture analysis
+    system_prompt = """Tu es un expert en architecture d'information et UX.
+Tu analyses des structures de sites web pour les reorganiser de maniere logique.
+Tu reponds UNIQUEMENT en JSON valide, sans texte avant ou apres."""
 
-URLs a analyser:
-{json.dumps(url_list, indent=2, ensure_ascii=False)}
+    user_prompt = f"""Analyse ces pages du site {site_url} et reorganise-les intelligemment.
 
-INSTRUCTIONS:
-1. Identifie les patterns dans les URLs (ex: /cirfa-*, /emploi-*, /metier-*)
-2. Cree des categories claires avec des noms comprehensibles en francais
-3. Chaque categorie doit avoir un nom court et descriptif (ex: "CIRFA", "Offres d'emploi", "Metiers", "Actualites")
-4. Regroupe les URLs similaires ensemble
-5. Maximum 10 categories
+PAGES A ANALYSER:
+{json.dumps(nodes_data, indent=2, ensure_ascii=False)}
 
-Reponds UNIQUEMENT avec un JSON valide dans ce format exact:
+MISSION:
+1. Cree des CLUSTERS (categories meres) logiques et clairs en francais
+2. Associe chaque page au cluster le plus pertinent
+3. Renomme chaque page avec un titre COURT et LISIBLE (max 25 caracteres)
+   - Exemple: "contact-us.html" -> "Contact"
+   - Exemple: "product-category-furniture-sofas" -> "Canapes"
+   - Exemple: "cirfa-de-lyon-69" -> "CIRFA Lyon"
+
+REGLES:
+- Maximum 8 clusters
+- Noms de clusters courts (1-3 mots)
+- Noms de pages comprehensibles par un humain
+- Garde l'URL originale pour le lien
+
+REPONDS UNIQUEMENT avec ce JSON:
 {{
-  "categories": [
+  "clusters": [
     {{
-      "name": "Nom de la categorie",
+      "name": "Nom du Cluster",
       "description": "Description courte",
-      "url_patterns": ["pattern1", "pattern2"],
-      "paths": ["/chemin1", "/chemin2"]
+      "pages": [
+        {{
+          "url": "url_originale",
+          "label": "Nom Court Lisible",
+          "original_path": "/chemin/original"
+        }}
+      ]
     }}
   ]
-}}
-"""
+}}"""
 
     try:
         response = requests.post(
@@ -74,30 +85,23 @@ Reponds UNIQUEMENT avec un JSON valide dans ce format exact:
             json={
                 "model": "mistral-small-latest",
                 "messages": [
-                    {
-                        "role": "system",
-                        "content": "Tu es un expert SEO qui analyse la structure des sites web. Tu reponds uniquement en JSON valide."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
                 ],
-                "temperature": 0.3,
-                "max_tokens": 2000
+                "temperature": 0.2,
+                "max_tokens": 4000
             },
-            timeout=60
+            timeout=90
         )
 
         if response.status_code != 200:
-            st.error(f"Erreur API Mistral: {response.status_code} - {response.text}")
+            st.error(f"Erreur API Mistral: {response.status_code}")
             return None
 
         result = response.json()
         content = result["choices"][0]["message"]["content"]
 
-        # Parse JSON from response
-        # Handle potential markdown code blocks
+        # Clean JSON from markdown
         if "```json" in content:
             content = content.split("```json")[1].split("```")[0]
         elif "```" in content:
@@ -106,75 +110,21 @@ Reponds UNIQUEMENT avec un JSON valide dans ce format exact:
         return json.loads(content.strip())
 
     except json.JSONDecodeError as e:
-        st.error(f"Erreur parsing JSON: {str(e)}")
+        st.error(f"Erreur parsing: {str(e)}")
         return None
     except Exception as e:
-        st.error(f"Erreur API: {str(e)}")
+        st.error(f"Erreur: {str(e)}")
         return None
 
 
-def apply_ai_categories(pages: List[Dict], categories: Dict) -> List[Dict]:
+def generate_smart_graph_data(ai_result: Dict, site_url: str, original_pages: List[Dict]) -> Dict:
     """
-    Apply AI-generated categories to pages.
+    Generate graph data from AI-categorized results.
 
     Args:
-        pages: Original page list
-        categories: AI-generated categories
-
-    Returns:
-        Updated pages with ai_category field
-    """
-    if not categories or "categories" not in categories:
-        return pages
-
-    cat_list = categories["categories"]
-
-    for page in pages:
-        path = page.get("path", "").lower()
-        assigned = False
-
-        # Try to match patterns
-        for cat in cat_list:
-            patterns = cat.get("url_patterns", [])
-            paths = cat.get("paths", [])
-
-            # Check patterns
-            for pattern in patterns:
-                pattern_clean = pattern.lower().replace("*", "")
-                if pattern_clean in path:
-                    page["ai_category"] = cat["name"]
-                    page["ai_category_desc"] = cat.get("description", "")
-                    assigned = True
-                    break
-
-            if assigned:
-                break
-
-            # Check exact paths
-            for p in paths:
-                if p.lower() == path or path.startswith(p.lower()):
-                    page["ai_category"] = cat["name"]
-                    page["ai_category_desc"] = cat.get("description", "")
-                    assigned = True
-                    break
-
-            if assigned:
-                break
-
-        if not assigned:
-            page["ai_category"] = "Autres"
-            page["ai_category_desc"] = "Pages non categorisees"
-
-    return pages
-
-
-def generate_smart_graph_data(pages: List[Dict], site_url: str) -> Dict:
-    """
-    Generate smart graph data from AI-categorized pages.
-
-    Args:
-        pages: Pages with ai_category field
+        ai_result: Result from Mistral with clusters
         site_url: Base site URL
+        original_pages: Original pages with scores
 
     Returns:
         Graph data with nodes and edges
@@ -182,71 +132,68 @@ def generate_smart_graph_data(pages: List[Dict], site_url: str) -> Dict:
     nodes = []
     edges = []
 
+    # Create URL to score mapping
+    score_map = {p.get("url", ""): p.get("score", 50) for p in original_pages}
+
     # Root node
+    root_label = site_url.replace("https://", "").replace("http://", "").replace("www.", "")
+    if len(root_label) > 30:
+        root_label = root_label[:27] + "..."
+
     nodes.append({
         "id": "root",
-        "label": site_url.replace("https://", "").replace("http://", ""),
-        "size": 35,
+        "label": root_label,
+        "size": 40,
         "color": "#FFFFFF",
-        "type": "root"
+        "type": "root",
+        "url": site_url
     })
 
-    # Group by AI category
-    categories = {}
-    for page in pages:
-        cat = page.get("ai_category", "Autres")
-        if cat not in categories:
-            categories[cat] = {
-                "pages": [],
-                "description": page.get("ai_category_desc", "")
-            }
-        categories[cat]["pages"].append(page)
+    clusters = ai_result.get("clusters", [])
 
-    # Create category nodes and page nodes
-    for cat_name, cat_data in categories.items():
-        cat_id = f"cat_{cat_name.replace(' ', '_')}"
-        page_count = len(cat_data["pages"])
+    for i, cluster in enumerate(clusters):
+        cluster_name = cluster.get("name", f"Groupe {i+1}")
+        cluster_id = f"cluster_{i}"
+        pages = cluster.get("pages", [])
 
-        # Category node
+        # Cluster node
         nodes.append({
-            "id": cat_id,
-            "label": f"{cat_name} ({page_count})",
-            "size": 25,
+            "id": cluster_id,
+            "label": f"{cluster_name} ({len(pages)})",
+            "size": 28,
             "color": "#FFFFFF",
-            "type": "category",
-            "description": cat_data["description"]
+            "type": "cluster",
+            "description": cluster.get("description", "")
         })
 
         edges.append({
             "source": "root",
-            "target": cat_id,
+            "target": cluster_id,
             "width": 2
         })
 
-        # Page nodes (limit per category for readability)
-        for i, page in enumerate(cat_data["pages"][:15]):
-            score = page.get("score", 0)
+        # Page nodes
+        for j, page in enumerate(pages[:12]):  # Limit per cluster
+            page_url = page.get("url", "")
+            page_label = page.get("label", "Page")
+            page_id = f"page_{i}_{j}"
 
-            # Short label
-            path_parts = page["path"].strip("/").split("/")
-            short_label = path_parts[-1][:25] if path_parts[-1] else "index"
-
-            page_id = f"page_{hash(page['url']) % 100000}"
+            # Get score from original data
+            score = score_map.get(page_url, 50)
 
             nodes.append({
                 "id": page_id,
-                "label": short_label,
-                "size": 12,
+                "label": page_label[:25],
+                "size": 15,
                 "color": "#FFFFFF",
                 "type": "page",
-                "url": page["url"],
+                "url": page_url,
                 "score": score,
-                "title": page.get("title", ""),
-                "full_path": page["path"]
+                "original_path": page.get("original_path", "")
             })
 
             edges.append({
-                "source": cat_id,
+                "source": cluster_id,
                 "target": page_id,
                 "width": 1
             })
@@ -254,5 +201,5 @@ def generate_smart_graph_data(pages: List[Dict], site_url: str) -> Dict:
     return {
         "nodes": nodes,
         "edges": edges,
-        "categories": list(categories.keys())
+        "cluster_count": len(clusters)
     }
