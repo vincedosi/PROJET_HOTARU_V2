@@ -1,24 +1,25 @@
 """
 HOTARU - Database Module
-Google Sheets connection and operations using st.connection (gsheets).
+Google Sheets connection using gspread directly.
 """
 
 import streamlit as st
 import pandas as pd
+import gspread
+from google.oauth2.service_account import Credentials
 from typing import Optional, Any, List, Dict
-from pathlib import Path
 
-# PLACER VOTRE FICHIER service_account.json À LA RACINE DU PROJET
-# Le chemin par défaut est: ./service_account.json
-SERVICE_ACCOUNT_FILE = "service_account.json"
+
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
 
 
 class DatabaseManager:
     """
     Database manager using Google Sheets as backend.
-
-    This class provides CRUD operations for Google Sheets,
-    using Streamlit's st.connection with gsheets connector.
+    Uses gspread directly for Streamlit Cloud compatibility.
     """
 
     def __init__(self, spreadsheet_url: Optional[str] = None):
@@ -27,27 +28,60 @@ class DatabaseManager:
 
         Args:
             spreadsheet_url: Optional Google Sheets URL.
-                            If not provided, uses the one from secrets.toml
         """
-        self.spreadsheet_url = spreadsheet_url
-        self._connection = None
+        self.spreadsheet_url = spreadsheet_url or st.secrets.get("spreadsheet", {}).get("url", "")
+        self._client = None
+        self._spreadsheet = None
 
     @property
-    def connection(self):
-        """Get or create the Google Sheets connection."""
-        if self._connection is None:
+    def client(self):
+        """Get or create the gspread client."""
+        if self._client is None:
             try:
-                self._connection = st.connection("gsheets", type="GSheetsConnection")
+                # Get credentials from Streamlit secrets
+                credentials_dict = st.secrets.get("gcp_service_account", {})
+
+                if not credentials_dict:
+                    st.error("Configuration manquante: gcp_service_account")
+                    return None
+
+                credentials = Credentials.from_service_account_info(
+                    dict(credentials_dict),
+                    scopes=SCOPES
+                )
+                self._client = gspread.authorize(credentials)
+
             except Exception as e:
                 st.error(f"Erreur de connexion Google Sheets: {str(e)}")
-                st.info("Vérifiez que le fichier service_account.json est présent")
                 return None
-        return self._connection
+        return self._client
+
+    @property
+    def spreadsheet(self):
+        """Get or open the spreadsheet."""
+        if self._spreadsheet is None:
+            try:
+                client = self.client
+                if client is None:
+                    return None
+
+                # Get spreadsheet URL from secrets
+                spreadsheet_url = st.secrets.get("spreadsheet", {}).get("url", "")
+
+                if spreadsheet_url:
+                    self._spreadsheet = client.open_by_url(spreadsheet_url)
+                else:
+                    st.error("URL du spreadsheet non configurée")
+                    return None
+
+            except Exception as e:
+                st.error(f"Erreur ouverture spreadsheet: {str(e)}")
+                return None
+        return self._spreadsheet
 
     def read_sheet(
         self,
         worksheet: str,
-        usecols: Optional[List[int]] = None,
         ttl: int = 300
     ) -> Optional[pd.DataFrame]:
         """
@@ -55,28 +89,23 @@ class DatabaseManager:
 
         Args:
             worksheet: Name of the worksheet to read
-            usecols: Optional list of column indices to read
-            ttl: Cache time-to-live in seconds (default: 5 minutes)
+            ttl: Cache time-to-live in seconds (not used with gspread)
 
         Returns:
             DataFrame with sheet data or None on error
         """
         try:
-            conn = self.connection
-            if conn is None:
+            sheet = self.spreadsheet
+            if sheet is None:
                 return None
 
-            df = conn.read(
-                worksheet=worksheet,
-                usecols=usecols,
-                ttl=ttl
-            )
-            return df
+            ws = sheet.worksheet(worksheet)
+            data = ws.get_all_records()
+            return pd.DataFrame(data)
 
+        except gspread.exceptions.WorksheetNotFound:
+            return pd.DataFrame()
         except Exception as e:
-            # Sheet might not exist
-            if "not found" in str(e).lower():
-                return pd.DataFrame()
             st.error(f"Erreur lecture feuille '{worksheet}': {str(e)}")
             return None
 
@@ -96,14 +125,25 @@ class DatabaseManager:
             True if successful, False otherwise
         """
         try:
-            conn = self.connection
-            if conn is None:
+            sheet = self.spreadsheet
+            if sheet is None:
                 return False
 
-            conn.update(
-                worksheet=worksheet,
-                data=data
-            )
+            try:
+                ws = sheet.worksheet(worksheet)
+            except gspread.exceptions.WorksheetNotFound:
+                ws = sheet.add_worksheet(title=worksheet, rows=100, cols=20)
+
+            # Clear and update
+            ws.clear()
+
+            if not data.empty:
+                # Write header and data
+                ws.update([data.columns.tolist()] + data.values.tolist())
+            else:
+                # Write only header
+                ws.update([data.columns.tolist()])
+
             return True
 
         except Exception as e:
@@ -126,163 +166,74 @@ class DatabaseManager:
             True if successful, False otherwise
         """
         try:
-            # Read existing data
-            existing_df = self.read_sheet(worksheet, ttl=0)
+            sheet = self.spreadsheet
+            if sheet is None:
+                return False
 
-            if existing_df is None:
-                existing_df = pd.DataFrame()
+            ws = sheet.worksheet(worksheet)
 
-            # Create new row DataFrame
-            new_row = pd.DataFrame([row_data])
+            # Get headers
+            headers = ws.row_values(1)
 
-            # Append
-            if existing_df.empty:
-                updated_df = new_row
-            else:
-                updated_df = pd.concat([existing_df, new_row], ignore_index=True)
+            # Create row in correct order
+            row = [row_data.get(h, "") for h in headers]
 
-            # Write back
-            return self.write_sheet(worksheet, updated_df)
+            ws.append_row(row)
+            return True
 
         except Exception as e:
             st.error(f"Erreur ajout ligne: {str(e)}")
             return False
 
-    def update_cell(
-        self,
-        worksheet: str,
-        key_column: str,
-        key_value: Any,
-        update_column: str,
-        update_value: Any
-    ) -> bool:
+    def get_user(self, email: str) -> Optional[Dict]:
         """
-        Update a specific cell in a worksheet.
+        Get a user by email.
 
         Args:
-            worksheet: Name of the worksheet
-            key_column: Column to search for the row
-            key_value: Value to match in key_column
-            update_column: Column to update
-            update_value: New value for the cell
+            email: User email
 
         Returns:
-            True if successful, False otherwise
+            User dict or None if not found
         """
         try:
-            df = self.read_sheet(worksheet, ttl=0)
-
+            df = self.read_sheet("users")
             if df is None or df.empty:
-                return False
+                return None
 
-            # Find and update the row
-            mask = df[key_column] == key_value
-            if not mask.any():
-                return False
+            user_row = df[df['email'] == email]
+            if user_row.empty:
+                return None
 
-            df.loc[mask, update_column] = update_value
+            return user_row.iloc[0].to_dict()
 
-            return self.write_sheet(worksheet, df)
-
-        except Exception as e:
-            st.error(f"Erreur mise à jour cellule: {str(e)}")
-            return False
-
-    def delete_row(
-        self,
-        worksheet: str,
-        key_column: str,
-        key_value: Any
-    ) -> bool:
-        """
-        Delete a row from a worksheet.
-
-        Args:
-            worksheet: Name of the worksheet
-            key_column: Column to search for the row
-            key_value: Value to match in key_column
-
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            df = self.read_sheet(worksheet, ttl=0)
-
-            if df is None or df.empty:
-                return False
-
-            # Remove matching rows
-            df = df[df[key_column] != key_value]
-
-            return self.write_sheet(worksheet, df)
-
-        except Exception as e:
-            st.error(f"Erreur suppression ligne: {str(e)}")
-            return False
-
-    def create_worksheet(
-        self,
-        worksheet: str,
-        columns: List[str]
-    ) -> bool:
-        """
-        Create a new worksheet with specified columns.
-
-        Args:
-            worksheet: Name of the new worksheet
-            columns: List of column names
-
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            # Create empty DataFrame with columns
-            df = pd.DataFrame(columns=columns)
-            return self.write_sheet(worksheet, df)
-
-        except Exception as e:
-            st.error(f"Erreur création feuille: {str(e)}")
-            return False
-
-    def query(
-        self,
-        worksheet: str,
-        filters: Dict[str, Any]
-    ) -> Optional[pd.DataFrame]:
-        """
-        Query a worksheet with filters.
-
-        Args:
-            worksheet: Name of the worksheet
-            filters: Dictionary of column:value pairs to filter by
-
-        Returns:
-            Filtered DataFrame or None on error
-        """
-        try:
-            df = self.read_sheet(worksheet)
-
-            if df is None or df.empty:
-                return df
-
-            # Apply filters
-            mask = pd.Series([True] * len(df))
-            for column, value in filters.items():
-                if column in df.columns:
-                    mask &= (df[column] == value)
-
-            return df[mask]
-
-        except Exception as e:
-            st.error(f"Erreur requête: {str(e)}")
+        except Exception:
             return None
+
+    def create_user(self, email: str, password_hash: str) -> bool:
+        """
+        Create a new user.
+
+        Args:
+            email: User email
+            password_hash: Hashed password
+
+        Returns:
+            True if successful
+        """
+        from datetime import datetime
+
+        return self.append_row("users", {
+            "email": email,
+            "password_hash": password_hash,
+            "created_at": datetime.now().isoformat(),
+            "last_login": "",
+            "role": "user"
+        })
 
 
 def get_db() -> DatabaseManager:
     """
     Get a database manager instance.
-
-    Uses Streamlit caching to reuse the connection.
 
     Returns:
         DatabaseManager instance
@@ -295,39 +246,15 @@ def get_db() -> DatabaseManager:
 def init_database():
     """
     Initialize the database with required worksheets.
-
-    Creates the following worksheets if they don't exist:
-    - users: User accounts
-    - audits: Audit history
-    - settings: Application settings
     """
     db = get_db()
 
     # Users worksheet
-    users_columns = [
-        'email',
-        'password_hash',
-        'created_at',
-        'last_login',
-        'role'
-    ]
-    db.create_worksheet('users', users_columns)
+    users_columns = ['email', 'password_hash', 'created_at', 'last_login', 'role']
 
-    # Audits worksheet
-    audits_columns = [
-        'id',
-        'user_email',
-        'url',
-        'created_at',
-        'status',
-        'results_json'
-    ]
-    db.create_worksheet('audits', audits_columns)
-
-    # Settings worksheet
-    settings_columns = [
-        'key',
-        'value',
-        'updated_at'
-    ]
-    db.create_worksheet('settings', settings_columns)
+    try:
+        df = db.read_sheet('users')
+        if df is None or df.empty:
+            db.write_sheet('users', pd.DataFrame(columns=users_columns))
+    except Exception:
+        pass

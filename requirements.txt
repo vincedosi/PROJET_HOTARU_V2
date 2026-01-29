@@ -6,7 +6,6 @@ streamlit>=1.28.0
 gspread>=5.12.0
 google-auth>=2.23.0
 google-auth-oauthlib>=1.1.0
-st-gsheets-connection>=0.0.4
 
 # Graph Visualization
 pyvis>=0.3.2
