@@ -18,7 +18,6 @@ beautifulsoup4>=4.12.0
 lxml>=4.9.0
 
 # URL & Sitemap Processing
-usp-py>=0.1.1
 urllib3>=2.0.0
 
 # Data Processing
@@ -30,11 +29,6 @@ scikit-learn>=1.3.0
 
 # Async Processing
 aiohttp>=3.9.0
-asyncio>=3.4.3
 
 # Utilities
 python-dotenv>=1.0.0
-hashlib-compat>=1.0.1
-
-# Security
-cryptography>=41.0.0
