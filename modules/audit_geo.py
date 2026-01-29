@@ -1,15 +1,16 @@
 """
 HOTARU - Audit GEO Module
-Main audit interface with graph visualization.
+Main audit interface with AI-powered graph visualization.
 """
 
 import streamlit as st
 import json
 from datetime import datetime
-from typing import List, Dict, Optional
+from typing import List, Dict
 from streamlit_agraph import agraph, Node, Edge, Config
 from core.scraping import SmartScraper, URLInfo
 from core.database import get_db
+from core.ai_clustering import categorize_urls_with_ai, apply_ai_categories, generate_smart_graph_data
 
 
 def render_audit_geo():
@@ -21,6 +22,10 @@ def render_audit_geo():
         st.session_state.selected_node = None
     if 'audit_running' not in st.session_state:
         st.session_state.audit_running = False
+    if 'ai_optimized' not in st.session_state:
+        st.session_state.ai_optimized = False
+    if 'ai_graph_data' not in st.session_state:
+        st.session_state.ai_graph_data = None
 
     # Header
     st.markdown("""
@@ -42,42 +47,56 @@ def render_audit_geo():
         </p>
     """, unsafe_allow_html=True)
 
-    # Main layout with potential right panel
-    if st.session_state.selected_node:
-        col_main, col_panel = st.columns([2, 1])
-    else:
-        col_main = st.container()
-        col_panel = None
+    # URL Input Section
+    render_url_input()
 
-    with col_main:
-        render_url_input()
+    # Progress indicator
+    if st.session_state.audit_running:
+        render_progress()
 
-        # Progress indicator
-        if st.session_state.audit_running:
-            render_progress()
+    # Results Section
+    if st.session_state.audit_results:
+        st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
 
-        # Results
-        if st.session_state.audit_results:
-            render_graph()
-            render_stats()
+        # Action buttons row
+        render_action_buttons()
 
-    # Right panel for node details
-    if col_panel and st.session_state.selected_node:
-        with col_panel:
+        st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
+
+        # Graph section
+        st.markdown("""
+            <h2 style="
+                font-size: 1.1rem;
+                font-weight: 600;
+                color: #000000;
+                margin-bottom: 1rem;
+            ">
+                Structure du site
+            </h2>
+        """, unsafe_allow_html=True)
+
+        # Choose which graph to render
+        if st.session_state.ai_optimized and st.session_state.ai_graph_data:
+            render_ai_graph()
+        else:
+            render_basic_graph()
+
+        # Stats section
+        render_stats()
+
+        # Selected node panel
+        if st.session_state.selected_node:
             render_node_panel()
 
 
 def render_url_input():
     """Render the URL input field."""
-    st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
-
-    # Create form for URL input
     col1, col2 = st.columns([4, 1])
 
     with col1:
         url = st.text_input(
             "URL du site",
-            placeholder="exemple.com",
+            placeholder="https://exemple.com",
             key="audit_url_input",
             label_visibility="collapsed"
         )
@@ -93,22 +112,87 @@ def render_url_input():
     if start_audit and url:
         run_audit(url)
 
-    st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
+
+def render_action_buttons():
+    """Render the action buttons row."""
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        # AI Optimize button
+        ai_btn = st.button(
+            "✨ Optimiser avec IA",
+            key="ai_optimize_btn",
+            use_container_width=True,
+            disabled=st.session_state.ai_optimized
+        )
+
+        if ai_btn:
+            run_ai_optimization()
+
+    with col2:
+        # Reset to basic view
+        if st.session_state.ai_optimized:
+            if st.button("↩️ Vue basique", key="reset_view_btn", use_container_width=True):
+                st.session_state.ai_optimized = False
+                st.session_state.ai_graph_data = None
+                st.rerun()
+
+    with col3:
+        # Export button (placeholder)
+        st.button("📥 Exporter", key="export_btn", use_container_width=True, disabled=True)
+
+    with col4:
+        # New audit button
+        if st.button("🔄 Nouvel audit", key="new_audit_btn", use_container_width=True):
+            st.session_state.audit_results = None
+            st.session_state.ai_optimized = False
+            st.session_state.ai_graph_data = None
+            st.session_state.selected_node = None
+            st.rerun()
+
+
+def run_ai_optimization():
+    """Run AI-powered URL categorization."""
+    results = st.session_state.audit_results
+    if not results:
+        return
+
+    with st.spinner("Analyse IA en cours..."):
+        pages = results.get('pages', [])
+        site_url = results.get('url', '')
+
+        # Call AI categorization
+        categories = categorize_urls_with_ai(pages, site_url)
+
+        if categories:
+            # Apply categories to pages
+            updated_pages = apply_ai_categories(pages, categories)
+            results['pages'] = updated_pages
+
+            # Generate smart graph data
+            graph_data = generate_smart_graph_data(updated_pages, site_url)
+            st.session_state.ai_graph_data = graph_data
+            st.session_state.ai_optimized = True
+
+            st.success("Categorisation IA terminee!")
+            st.rerun()
+        else:
+            st.error("Echec de l'optimisation IA. Verifiez votre cle API OpenAI.")
 
 
 def render_progress():
     """Render the progress indicator."""
-    progress_container = st.empty()
     progress_text = st.session_state.get('audit_progress_text', 'Initialisation...')
     progress_value = st.session_state.get('audit_progress_value', 0)
-
-    progress_container.progress(progress_value, text=progress_text)
+    st.progress(progress_value, text=progress_text)
 
 
 def run_audit(url: str):
     """Run the audit process."""
     st.session_state.audit_running = True
     st.session_state.audit_results = None
+    st.session_state.ai_optimized = False
+    st.session_state.ai_graph_data = None
 
     progress_bar = st.progress(0, text="Initialisation...")
 
@@ -116,20 +200,15 @@ def run_audit(url: str):
         progress_bar.progress(value, text=text)
 
     try:
-        # Initialize scraper
         scraper = SmartScraper(
             base_url=url,
             max_urls=500,
             sample_size=50
         )
 
-        # Run analysis
         results, stats = scraper.run_analysis(progress_callback=update_progress)
-
-        # Calculate scores
         scored_results = calculate_scores(results)
 
-        # Store results
         st.session_state.audit_results = {
             'url': url,
             'pages': scored_results,
@@ -137,7 +216,6 @@ def run_audit(url: str):
             'timestamp': datetime.now().isoformat()
         }
 
-        # Save to database
         save_audit_to_db(url, scored_results, stats)
 
         st.session_state.audit_running = False
@@ -161,9 +239,9 @@ def calculate_scores(pages: List[URLInfo]) -> List[Dict]:
         if page.title:
             if 30 <= len(page.title) <= 60:
                 score += 20
-            elif page.title:
+            else:
                 score += 10
-                issues.append("Titre trop court ou trop long")
+                issues.append("Titre non optimise")
         else:
             issues.append("Titre manquant")
 
@@ -171,7 +249,7 @@ def calculate_scores(pages: List[URLInfo]) -> List[Dict]:
         if page.meta_description:
             if 120 <= len(page.meta_description) <= 160:
                 score += 20
-            elif page.meta_description:
+            else:
                 score += 10
                 issues.append("Meta description non optimale")
         else:
@@ -191,9 +269,9 @@ def calculate_scores(pages: List[URLInfo]) -> List[Dict]:
                 score += 10
                 issues.append("Contenu insuffisant")
             else:
-                issues.append("Contenu très insuffisant")
+                issues.append("Contenu tres insuffisant")
         else:
-            issues.append("Pas de contenu détecté")
+            issues.append("Pas de contenu")
 
         # URL structure (20 points)
         if page.depth <= 3:
@@ -220,41 +298,105 @@ def calculate_scores(pages: List[URLInfo]) -> List[Dict]:
     return scored_pages
 
 
-def render_graph():
-    """Render the URL structure graph."""
+def render_ai_graph():
+    """Render the AI-optimized graph."""
+    graph_data = st.session_state.ai_graph_data
+    if not graph_data:
+        return
+
+    nodes = []
+    edges = []
+
+    # Build nodes
+    for n in graph_data['nodes']:
+        color = "#FFFFFF"
+        border_color = "#000000"
+
+        if n['type'] == 'root':
+            size = 35
+            border_width = 3
+        elif n['type'] == 'category':
+            size = 25
+            border_width = 2
+            border_color = "#FFD700"
+        else:
+            size = 12
+            border_width = 1
+            score = n.get('score', 50)
+            if score >= 70:
+                border_color = "#22C55E"
+            elif score >= 40:
+                border_color = "#F97316"
+            else:
+                border_color = "#EF4444"
+
+        nodes.append(Node(
+            id=n['id'],
+            label=n['label'],
+            size=size,
+            color=color,
+            borderWidth=border_width,
+            borderWidthSelected=border_width + 1,
+            font={'color': '#000000', 'size': 10},
+            title=n.get('description', n.get('title', n['label']))
+        ))
+
+    # Build edges
+    for e in graph_data['edges']:
+        edges.append(Edge(
+            source=e['source'],
+            target=e['target'],
+            color="#000000",
+            width=e.get('width', 1)
+        ))
+
+    config = Config(
+        width="100%",
+        height=600,
+        directed=False,
+        physics=True,
+        hierarchical=False,
+        nodeHighlightBehavior=True,
+        highlightColor="#FFD700",
+        collapsible=False
+    )
+
     st.markdown("""
-        <h2 style="
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: #000000;
-            margin-bottom: 1rem;
-        ">
-            Structure du site
-        </h2>
+        <div style="border: 1px solid #000000; background-color: #FFFFFF; padding: 0.5rem;">
     """, unsafe_allow_html=True)
 
+    selected = agraph(nodes=nodes, edges=edges, config=config)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    if selected and selected.startswith('page_'):
+        for n in graph_data['nodes']:
+            if n['id'] == selected and n.get('url'):
+                st.session_state.selected_node = n['url']
+                st.rerun()
+
+
+def render_basic_graph():
+    """Render the basic graph."""
     results = st.session_state.audit_results
     if not results or not results.get('pages'):
         return
 
     pages = results['pages']
-
-    # Build nodes and edges
     nodes = []
     edges = []
 
     # Root node
     nodes.append(Node(
         id="root",
-        label=results['url'],
+        label=results['url'].replace("https://", "").replace("http://", ""),
         size=30,
         color="#FFFFFF",
         borderWidth=2,
-        borderWidthSelected=3,
         font={'color': '#000000', 'size': 12}
     ))
 
-    # Group pages by cluster
+    # Group by cluster
     clusters: Dict[int, List[Dict]] = {}
     for page in pages:
         cluster_id = page.get('cluster', 0)
@@ -262,18 +404,14 @@ def render_graph():
             clusters[cluster_id] = []
         clusters[cluster_id].append(page)
 
-    # Cluster colors (subtle, mostly white)
-    cluster_colors = ['#FFFFFF'] * 20
-
-    # Add cluster nodes and page nodes
     for cluster_id, cluster_pages in clusters.items():
-        # Cluster node
         cluster_node_id = f"cluster_{cluster_id}"
+
         nodes.append(Node(
             id=cluster_node_id,
             label=f"Groupe {cluster_id + 1}",
             size=20,
-            color=cluster_colors[cluster_id % len(cluster_colors)],
+            color="#FFFFFF",
             borderWidth=1,
             font={'color': '#000000', 'size': 10}
         ))
@@ -285,14 +423,17 @@ def render_graph():
             width=1
         ))
 
-        # Page nodes
         for page in cluster_pages:
-            score = page.get('score', 0)
-            score_color = get_score_indicator_color(score)
-
-            # Short label (last path segment)
             path_parts = page['path'].strip('/').split('/')
             short_label = path_parts[-1][:20] if path_parts[-1] else 'index'
+
+            score = page.get('score', 0)
+            if score >= 70:
+                border_color = "#22C55E"
+            elif score >= 40:
+                border_color = "#F97316"
+            else:
+                border_color = "#EF4444"
 
             nodes.append(Node(
                 id=page['url'],
@@ -301,7 +442,7 @@ def render_graph():
                 color="#FFFFFF",
                 borderWidth=1,
                 font={'color': '#000000', 'size': 9},
-                title=f"{page['url']}\nScore: {score}/100"
+                title=f"Score: {score}/100"
             ))
 
             edges.append(Edge(
@@ -311,7 +452,6 @@ def render_graph():
                 width=0.5
             ))
 
-    # Graph configuration
     config = Config(
         width="100%",
         height=500,
@@ -319,37 +459,20 @@ def render_graph():
         physics=True,
         hierarchical=False,
         nodeHighlightBehavior=True,
-        highlightColor="#FFD700",
-        collapsible=False,
-        node={
-            'labelProperty': 'label',
-            'renderLabel': True
-        },
-        link={
-            'labelProperty': 'label',
-            'renderLabel': False
-        }
+        highlightColor="#FFD700"
     )
 
-    # Container with white background
     st.markdown("""
-        <div style="
-            border: 1px solid #000000;
-            background-color: #FFFFFF;
-            padding: 1rem;
-        ">
+        <div style="border: 1px solid #000000; background-color: #FFFFFF; padding: 0.5rem;">
     """, unsafe_allow_html=True)
 
-    # Render graph
     selected = agraph(nodes=nodes, edges=edges, config=config)
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Handle node selection
-    if selected and selected != st.session_state.selected_node:
-        if selected.startswith('http'):
-            st.session_state.selected_node = selected
-            st.rerun()
+    if selected and selected.startswith('http'):
+        st.session_state.selected_node = selected
+        st.rerun()
 
 
 def render_stats():
@@ -359,17 +482,7 @@ def render_stats():
         return
 
     st.markdown("<div style='height: 2rem;'></div>", unsafe_allow_html=True)
-
-    st.markdown("""
-        <h2 style="
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: #000000;
-            margin-bottom: 1rem;
-        ">
-            Résumé
-        </h2>
-    """, unsafe_allow_html=True)
+    st.markdown("<h2 style='font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem;'>Resume</h2>", unsafe_allow_html=True)
 
     stats = results.get('stats', {})
     pages = results.get('pages', [])
@@ -377,92 +490,32 @@ def render_stats():
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        render_mini_stat("URLs trouvées", str(stats.get('total_urls_found', 0)))
-
+        st.metric("URLs trouvees", stats.get('total_urls_found', 0))
     with col2:
-        render_mini_stat("Clusters", str(stats.get('clusters', 0)))
-
+        st.metric("Groupes", stats.get('clusters', 0))
     with col3:
-        render_mini_stat("Pages analysées", str(len(pages)))
-
+        st.metric("Pages analysees", len(pages))
     with col4:
         avg_score = sum(p.get('score', 0) for p in pages) / len(pages) if pages else 0
-        render_mini_stat("Score moyen", f"{avg_score:.0f}/100")
+        st.metric("Score moyen", f"{avg_score:.0f}/100")
 
     # Score distribution
-    st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
-
     good = len([p for p in pages if p.get('score', 0) >= 70])
     medium = len([p for p in pages if 40 <= p.get('score', 0) < 70])
     bad = len([p for p in pages if p.get('score', 0) < 40])
 
     col1, col2, col3 = st.columns(3)
-
     with col1:
-        st.markdown(f"""
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <div style="width: 12px; height: 12px; border-radius: 50%; background-color: #22C55E;"></div>
-                <span style="color: #000000;">Bon ({good})</span>
-            </div>
-        """, unsafe_allow_html=True)
-
+        st.markdown(f"🟢 Bon ({good})")
     with col2:
-        st.markdown(f"""
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <div style="width: 12px; height: 12px; border-radius: 50%; background-color: #F97316;"></div>
-                <span style="color: #000000;">Moyen ({medium})</span>
-            </div>
-        """, unsafe_allow_html=True)
-
+        st.markdown(f"🟠 Moyen ({medium})")
     with col3:
-        st.markdown(f"""
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <div style="width: 12px; height: 12px; border-radius: 50%; background-color: #EF4444;"></div>
-                <span style="color: #000000;">À améliorer ({bad})</span>
-            </div>
-        """, unsafe_allow_html=True)
-
-
-def render_mini_stat(label: str, value: str):
-    """Render a mini stat card."""
-    st.markdown(f"""
-        <div style="
-            border: 1px solid #000000;
-            padding: 1rem;
-            text-align: center;
-        ">
-            <div style="
-                font-size: 1.5rem;
-                font-weight: 600;
-                color: #000000;
-            ">
-                {value}
-            </div>
-            <div style="
-                font-size: 0.75rem;
-                color: #000000;
-                opacity: 0.6;
-            ">
-                {label}
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+        st.markdown(f"🔴 A ameliorer ({bad})")
 
 
 def render_node_panel():
-    """Render the right panel with node details."""
-    st.markdown("""
-        <div style="
-            border: 1px solid #000000;
-            padding: 1.5rem;
-            height: 100%;
-        ">
-    """, unsafe_allow_html=True)
-
-    # Close button
-    if st.button("✕ Fermer", key="close_panel"):
-        st.session_state.selected_node = None
-        st.rerun()
+    """Render the node details panel."""
+    st.markdown("<div style='height: 2rem;'></div>", unsafe_allow_html=True)
 
     selected_url = st.session_state.selected_node
     results = st.session_state.audit_results
@@ -470,7 +523,6 @@ def render_node_panel():
     if not results or not selected_url:
         return
 
-    # Find page data
     page_data = None
     for page in results.get('pages', []):
         if page['url'] == selected_url:
@@ -478,133 +530,34 @@ def render_node_panel():
             break
 
     if not page_data:
-        st.warning("Page non trouvée")
         return
 
-    # Score indicator
+    st.markdown("<h2 style='font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem;'>Details de la page</h2>", unsafe_allow_html=True)
+
+    if st.button("Fermer", key="close_panel_btn"):
+        st.session_state.selected_node = None
+        st.rerun()
+
     score = page_data.get('score', 0)
-    score_color = get_score_indicator_color(score)
+    st.markdown(f"**Score:** {score}/100")
+    st.markdown(f"**URL:** {page_data['url']}")
 
-    st.markdown(f"""
-        <div style="
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            margin: 1rem 0;
-        ">
-            <div style="
-                width: 40px;
-                height: 40px;
-                border-radius: 50%;
-                background-color: {score_color};
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: white;
-                font-weight: 600;
-            ">
-                {score}
-            </div>
-            <div style="
-                font-size: 0.8rem;
-                color: #000000;
-            ">
-                Score GEO
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+    if page_data.get('ai_category'):
+        st.markdown(f"**Categorie IA:** {page_data['ai_category']}")
 
-    # URL
-    st.markdown(f"""
-        <div style="margin-bottom: 1rem;">
-            <div style="font-size: 0.7rem; color: #000000; opacity: 0.5; margin-bottom: 0.25rem;">
-                URL
-            </div>
-            <div style="font-size: 0.85rem; color: #000000; word-break: break-all;">
-                {page_data['url']}
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"**Titre:** {page_data.get('title') or 'Non defini'}")
+    st.markdown(f"**H1:** {page_data.get('h1') or 'Non defini'}")
+    st.markdown(f"**Mots:** {page_data.get('word_count') or 0}")
 
-    # Title
-    title = page_data.get('title') or 'Non défini'
-    st.markdown(f"""
-        <div style="margin-bottom: 1rem;">
-            <div style="font-size: 0.7rem; color: #000000; opacity: 0.5; margin-bottom: 0.25rem;">
-                Titre
-            </div>
-            <div style="font-size: 0.85rem; color: #000000;">
-                {title}
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-
-    # H1
-    h1 = page_data.get('h1') or 'Non défini'
-    st.markdown(f"""
-        <div style="margin-bottom: 1rem;">
-            <div style="font-size: 0.7rem; color: #000000; opacity: 0.5; margin-bottom: 0.25rem;">
-                H1
-            </div>
-            <div style="font-size: 0.85rem; color: #000000;">
-                {h1}
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-
-    # Word count
-    word_count = page_data.get('word_count') or 0
-    st.markdown(f"""
-        <div style="margin-bottom: 1rem;">
-            <div style="font-size: 0.7rem; color: #000000; opacity: 0.5; margin-bottom: 0.25rem;">
-                Nombre de mots
-            </div>
-            <div style="font-size: 0.85rem; color: #000000;">
-                {word_count}
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-
-    # Issues
     issues = page_data.get('issues', [])
     if issues:
-        st.markdown("""
-            <div style="margin-bottom: 0.5rem;">
-                <div style="font-size: 0.7rem; color: #000000; opacity: 0.5; margin-bottom: 0.25rem;">
-                    Points d'amélioration
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-
+        st.markdown("**Points d'amelioration:**")
         for issue in issues:
-            st.markdown(f"""
-                <div style="
-                    font-size: 0.8rem;
-                    color: #000000;
-                    padding: 0.5rem;
-                    border-left: 2px solid #EF4444;
-                    margin-bottom: 0.5rem;
-                    background-color: #FFFFFF;
-                ">
-                    {issue}
-                </div>
-            """, unsafe_allow_html=True)
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-def get_score_indicator_color(score: int) -> str:
-    """Get the color for a score indicator."""
-    if score >= 70:
-        return "#22C55E"  # Green
-    elif score >= 40:
-        return "#F97316"  # Orange
-    else:
-        return "#EF4444"  # Red
+            st.warning(issue)
 
 
 def save_audit_to_db(url: str, pages: List[Dict], stats: Dict):
-    """Save audit results to database."""
+    """Save audit to database."""
     try:
         db = get_db()
         user_email = st.session_state.get('user_email', 'anonymous')
@@ -623,7 +576,5 @@ def save_audit_to_db(url: str, pages: List[Dict], stats: Dict):
         }
 
         db.append_row('audits', audit_data)
-
-    except Exception as e:
-        # Non-critical, don't show error to user
+    except Exception:
         pass
