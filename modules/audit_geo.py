@@ -7,7 +7,6 @@ import streamlit as st
 import networkx as nx
 from st_pyvis import network as net
 import streamlit.components.v1 as components
-from datetime import datetime
 import json
 
 # --- IMPORTS SÉCURISÉS ---
@@ -117,7 +116,9 @@ def render_audit_geo():
     # Barre d'outils
     col1, col2 = st.columns([4, 1])
     with col1:
-        url = st.text_input("URL cible", placeholder="https://exemple.com", key="audit_url_input", label_visibility="collapsed")
+        # Valeur par défaut vide ou récupérée du state
+        default_url = st.session_state.audit_results['url'] if st.session_state.audit_results else ""
+        url = st.text_input("URL cible", value=default_url, placeholder="https://exemple.com", key="audit_url_input", label_visibility="collapsed")
     with col2:
         analyze_btn = st.button("Lancer l'Audit 🚀", use_container_width=True)
 
@@ -155,7 +156,10 @@ def run_audit(url):
     try:
         status.info("🚀 Démarrage du scraping intelligent...")
         
+        # Configuration du scraper
         scraper = SmartScraper(base_url=url, max_urls=300)
+        
+        # Lancement avec callback de progression
         results, stats = scraper.run_analysis(progress_callback=lambda m, v: progress.progress(v, text=m))
         
         # Construction du graphe NetworkX
