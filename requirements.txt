@@ -10,6 +10,7 @@ google-auth-oauthlib>=1.1.0
 # Graph Visualization
 pyvis>=0.3.2
 streamlit-agraph>=0.0.45
+networkx>=3.2
 
 # Web Scraping & HTTP
 requests>=2.31.0

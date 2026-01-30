@@ -1,550 +1,254 @@
 """
 HOTARU - Audit GEO Module
-Interface principale avec graphe hiérarchique propre.
-
-ÉTAPES DE RÉPARATION APPLIQUÉES:
-1. Graphe hiérarchique (direction: UD - Up to Down)
-2. Maximum 20-30 noeuds parents
-3. Labels lisibles extraits des URLs
-4. Progress bar et logs visibles
+VERSION CORRIGÉE : PyVis + JS Injection + IA Text Mode
 """
 
 import streamlit as st
-from datetime import datetime
-from typing import List, Dict
-from urllib.parse import urlparse
-from collections import Counter
-import re
+import networkx as nx
+from pyvis.network import Network
+import streamlit.components.v1 as components
+import json
 
+# --- IMPORTS SÉCURISÉS ---
+try:
+    from core.scraping import SmartScraper
+    # On importe la nouvelle fonction IA robuste (Texte Brut)
+    from core.ai_clustering import analyze_clusters_with_mistral
+except ImportError as e:
+    st.error(f"Erreur d'import critique : {e}")
+    st.stop()
 
-def render_audit_geo():
-    """Page principale Audit GEO."""
-    init_session_state()
-
-    st.markdown("## 🔍 Audit GEO")
-    st.caption("Analyse structurelle et SEO de votre site")
-
-    # Input URL
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        url = st.text_input(
-            "URL",
-            placeholder="https://exemple.com",
-            key="audit_url_input",
-            label_visibility="collapsed"
-        )
-    with col2:
-        analyze_btn = st.button("Analyser", use_container_width=True)
-
-    if analyze_btn and url:
-        run_audit(url)
-
-    # Résultats
-    if st.session_state.audit_results:
-        render_results()
-
-
+# --- INITIALISATION ---
 def init_session_state():
     """Initialise les variables de session."""
     defaults = {
         'audit_results': None,
-        'audit_running': False,
+        'current_graph_nx': None, # On stocke l'objet NetworkX directement
+        'clusters_summary': {},   # Pour l'IA
         'ai_optimized': False,
-        'ai_graph_data': None,
-        'clustered_data': None,
-        'patterns_summary': [],
         'mistral_api_key': ''
     }
     for k, v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
 
-
-def render_results():
-    """Affiche les résultats avec boutons d'action."""
-    results = st.session_state.audit_results
-
-    # Boutons d'action
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        if st.session_state.ai_optimized:
-            if st.button("↩️ Vue standard", use_container_width=True):
-                st.session_state.ai_optimized = False
-                st.rerun()
-        else:
-            if st.button("✨ Optimiser IA", use_container_width=True):
-                run_ai_optimization()
-
-    with col2:
-        if st.button("🔄 Nouvel audit", use_container_width=True):
-            st.session_state.audit_results = None
-            st.session_state.ai_optimized = False
-            st.session_state.clustered_data = None
-            st.rerun()
-
-    with col3:
-        pages = results.get('pages', [])
-        if pages:
-            avg = sum(p.get('score', 0) for p in pages) / len(pages)
-            st.metric("Score", f"{avg:.0f}/100")
-
-    st.markdown("---")
-
-    # Titre du graphe
-    if st.session_state.ai_optimized:
-        st.markdown("### 🧠 Structure IA")
-        graph_data = st.session_state.ai_graph_data
-    else:
-        st.markdown("### 📊 Structure du site")
-        graph_data = st.session_state.clustered_data
-
-    # Rendu du graphe
-    render_graph(graph_data)
-
-    # Stats
-    render_stats()
-
-
-def render_graph(data: Dict):
-    """Rendu du graphe hiérarchique."""
-    if not data or not data.get('nodes'):
-        st.info("Lancez une analyse pour voir le graphe")
+# --- RENDU GRAPHIQUE (FIX CLIC & DESIGN) ---
+def render_interactive_graph(G):
+    """
+    Génère et affiche le graphe PyVis avec le FIX JAVASCRIPT pour les clics.
+    """
+    if G is None or len(G.nodes) == 0:
+        st.info("Aucune donnée graphique.")
         return
 
-    try:
-        from streamlit_agraph import agraph, Node, Edge, Config
+    # 1. Création du graphe PyVis
+    nt = Network(height="600px", width="100%", bgcolor="#ffffff", font_color="black")
+    nt.from_nx(G)
 
-        nodes = []
-        edges = []
-
-        for n in data['nodes']:
-            ntype = n.get('type', 'page')
-
-            # Style selon le type
-            if ntype == 'root':
-                size, color = 45, "#000000"
-            elif ntype == 'cluster':
-                size, color = 32, "#FFD700"
-            else:
-                score = n.get('score', 50)
-                size = 18
-                color = "#22C55E" if score >= 70 else "#F97316" if score >= 40 else "#EF4444"
-
-            # Tooltip
-            title = n.get('label', '')
-            if n.get('count'):
-                title += f" ({n['count']} pages)"
-            if n.get('url'):
-                title += f"\n🔗 Cliquer pour ouvrir"
-
-            nodes.append(Node(
-                id=n['id'],
-                label=n.get('label', '')[:28],
-                size=size,
-                color="#FFFFFF",
-                borderWidth=2,
-                borderWidthSelected=4,
-                shape="box",
-                font={'color': '#000000', 'size': 11},
-                title=title
-            ))
-
-        for e in data.get('edges', []):
-            edges.append(Edge(
-                source=e['source'],
-                target=e['target'],
-                color="#333333",
-                width=1
-            ))
-
-        # Config hiérarchique
-        config = Config(
-            width="100%",
-            height=450,
-            directed=True,
-            physics=False,
-            hierarchical=True,
-            nodeHighlightBehavior=True,
-            highlightColor="#FFD700"
-        )
-
-        # Container avec bordure
-        st.markdown("""
-            <div style="border: 1px solid #000; padding: 0.5rem; background: #fff;">
-        """, unsafe_allow_html=True)
-
-        selected = agraph(nodes=nodes, edges=edges, config=config)
-
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        # Gestion du clic
-        if selected:
-            for n in data['nodes']:
-                if n['id'] == selected and n.get('url'):
-                    st.link_button(f"🔗 Ouvrir {n.get('label', '')}", n['url'])
-                    break
-
-    except Exception as e:
-        st.warning(f"Graphe indisponible: {e}")
-        # Fallback texte
-        st.markdown("#### Structure (texte)")
-        for n in data.get('nodes', [])[:20]:
-            if n.get('type') == 'root':
-                st.markdown(f"**🌐 {n.get('label')}**")
-            elif n.get('type') == 'cluster':
-                st.markdown(f"├── 📁 {n.get('label')}")
-
-
-def run_audit(url: str):
-    """Lance l'audit avec feedback visuel."""
-    # Containers pour feedback
-    status_box = st.empty()
-    progress_bar = st.progress(0)
-    log_box = st.empty()
-
-    logs = []
-
-    def log(msg):
-        logs.append(f"{datetime.now().strftime('%H:%M:%S')} {msg}")
-        log_box.code('\n'.join(logs[-6:]))
-
-    def progress(msg, val):
-        status_box.info(f"⏳ {msg}")
-        progress_bar.progress(min(val, 1.0))
-
-    try:
-        from core.scraping import SmartScraper
-
-        log("🚀 Démarrage de l'analyse...")
-        progress("Recherche sitemap...", 0.1)
-
-        scraper = SmartScraper(
-            base_url=url,
-            max_urls=500,
-            sample_size=50,
-            specimens_per_pattern=3
-        )
-
-        results, stats = scraper.run_analysis(progress_callback=progress)
-
-        log(f"📊 {stats.get('total_urls_found', 0)} URLs trouvées")
-        log(f"🔍 {stats.get('patterns_detected', 0)} patterns détectés")
-
-        progress("Calcul des scores...", 0.85)
-        scored = calculate_scores(results)
-
-        progress("Génération du graphe...", 0.95)
-        graph_data = build_clean_graph(url, scored, scraper.get_pattern_summary())
-
-        st.session_state.audit_results = {
-            'url': url,
-            'pages': scored,
-            'stats': stats,
-            'timestamp': datetime.now().isoformat()
+    # 2. Configuration Physique (Organigramme Hiérarchique)
+    nt.set_options("""
+    var options = {
+      "layout": {
+        "hierarchical": {
+          "enabled": true,
+          "direction": "UD",
+          "sortMethod": "directed",
+          "nodeSpacing": 150,
+          "levelSeparation": 150
         }
-        st.session_state.clustered_data = graph_data
-        st.session_state.patterns_summary = scraper.get_pattern_summary()
-
-        log("✅ Analyse terminée!")
-        progress("Terminé!", 1.0)
-
-        import time
-        time.sleep(0.5)
-        st.rerun()
-
-    except Exception as e:
-        log(f"❌ ERREUR: {e}")
-        st.error(f"Erreur: {e}")
-
-
-def build_clean_graph(site_url: str, pages: List[Dict], patterns: List[Dict]) -> Dict:
-    """
-    Construit un graphe propre avec MAX 25 noeuds.
-
-    RÈGLE: Si un pattern a >5 pages, on crée UN SEUL noeud cluster.
-    """
-    nodes = []
-    edges = []
-
-    # Noeud racine
-    parsed = urlparse(site_url)
-    root_label = parsed.netloc.replace('www.', '')[:25]
-
-    nodes.append({
-        'id': 'root',
-        'label': root_label,
-        'type': 'root',
-        'url': site_url
-    })
-
-    # Grouper par pattern
-    by_pattern: Dict[str, List] = {}
-    for p in pages:
-        key = p.get('pattern_group') or 'divers'
-        if key == 'unique':
-            key = 'divers'
-        if key not in by_pattern:
-            by_pattern[key] = []
-        by_pattern[key].append(p)
-
-    # Créer les clusters (max 12)
-    sorted_patterns = sorted(by_pattern.items(), key=lambda x: -len(x[1]))[:12]
-
-    for idx, (pattern, pattern_pages) in enumerate(sorted_patterns):
-        cluster_id = f"c{idx}"
-        count = len(pattern_pages)
-
-        # Nom du cluster = segment URL le plus fréquent
-        label = get_cluster_label(pattern, pattern_pages)
-
-        nodes.append({
-            'id': cluster_id,
-            'label': f"📁 {label} ({count})",
-            'type': 'cluster',
-            'count': count
-        })
-
-        edges.append({'source': 'root', 'target': cluster_id})
-
-        # Si petit cluster (<=5), montrer les pages
-        if count <= 5:
-            for j, page in enumerate(pattern_pages):
-                pid = f"p{idx}_{j}"
-                plabel = get_page_label(page.get('path', ''))
-
-                nodes.append({
-                    'id': pid,
-                    'label': plabel,
-                    'type': 'page',
-                    'url': page.get('url', ''),
-                    'score': page.get('score', 50)
-                })
-                edges.append({'source': cluster_id, 'target': pid})
-
-    return {
-        'nodes': nodes,
-        'edges': edges,
-        'cluster_count': len(sorted_patterns)
+      },
+      "physics": {
+        "hierarchicalRepulsion": {
+          "nodeDistance": 120
+        },
+        "solver": "hierarchicalRepulsion"
+      },
+      "nodes": {
+        "shape": "box",
+        "font": { "size": 14, "face": "sans-serif" }
+      },
+      "edges": {
+        "color": { "color": "#000000" },
+        "smooth": { "type": "cubicBezier", "forceDirection": "vertical", "roundness": 0.4 }
+      }
     }
+    """)
 
+    # 3. Génération HTML & Injection JS (Le Fix Vital pour le Clic)
+    try:
+        path = "temp_graph.html"
+        nt.save_graph(path)
+        
+        with open(path, "r", encoding="utf-8") as f:
+            html_content = f.read()
 
-def get_cluster_label(pattern: str, pages: List[Dict]) -> str:
-    """Extrait un nom lisible pour un cluster."""
-    # Essayer depuis le pattern
-    if pattern and pattern not in ('divers', 'other'):
-        clean = pattern.replace('[^/]+', '').replace('/?$', '').replace('(', '').replace(')', '')
-        parts = [p for p in clean.split('/') if p and len(p) > 2]
-        if parts:
-            return parts[0].replace('-', ' ').replace('_', ' ').title()[:18]
+        # Script JS qui intercepte le clic et ouvre l'URL
+        js_click_fix = """
+        <script type="text/javascript">
+            network.on("click", function (params) {
+                if (params.nodes.length > 0) {
+                    var nodeId = params.nodes[0];
+                    var nodeData = nodes.get(nodeId);
+                    // Vérification et ouverture
+                    if (nodeData.url && nodeData.url.startsWith("http")) {
+                        window.open(nodeData.url, '_blank');
+                    }
+                }
+            });
+        </script>
+        </body>
+        """
+        html_content = html_content.replace("</body>", js_click_fix)
 
-    # Sinon analyser les paths
-    if pages:
-        segments = []
-        for p in pages[:15]:
-            path = p.get('path', '')
-            parts = [x for x in path.strip('/').split('/') if x and not x.isdigit() and len(x) > 2]
-            if parts:
-                segments.append(parts[0])
+        # 4. Rendu final
+        components.html(html_content, height=650, scrolling=False)
+        
+    except Exception as e:
+        st.error(f"Erreur de rendu graphique : {e}")
 
-        if segments:
-            common = Counter(segments).most_common(1)
-            if common:
-                return common[0][0].replace('-', ' ').replace('_', ' ').title()[:18]
+# --- LOGIQUE PRINCIPALE ---
+def render_audit_geo():
+    """Page principale Audit GEO."""
+    init_session_state()
 
-    return "Pages"
+    st.markdown("## 🔍 Audit GEO")
+    
+    # Barre d'outils
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        # Valeur par défaut vide ou récupérée du state
+        default_url = st.session_state.audit_results['url'] if st.session_state.audit_results else ""
+        url = st.text_input("URL cible", value=default_url, placeholder="https://exemple.com", key="audit_url_input", label_visibility="collapsed")
+    with col2:
+        analyze_btn = st.button("Lancer l'Audit 🚀", use_container_width=True)
 
+    if analyze_btn and url:
+        run_audit(url)
 
-def get_page_label(path: str) -> str:
-    """Extrait un nom lisible depuis un path."""
-    if not path or path == '/':
-        return "Accueil"
+    # Affichage des résultats
+    if st.session_state.current_graph_nx:
+        st.markdown("---")
+        
+        # Zone Actions
+        c1, c2, c3 = st.columns([1, 1, 2])
+        with c1:
+            st.metric("Pages", len(st.session_state.current_graph_nx.nodes))
+        with c2:
+            st.metric("Clusters", len(st.session_state.clusters_summary))
+        with c3:
+            # BOUTON IA
+            if not st.session_state.ai_optimized:
+                if st.button("✨ Optimiser les noms (IA)", type="primary", use_container_width=True):
+                    run_ai_renaming()
+            else:
+                st.success("✅ Optimisé par Mistral")
 
-    parts = [p for p in path.strip('/').split('/') if p]
-    if not parts:
-        return "Page"
+        # AFFICHAGE DU GRAPHE
+        st.markdown("### 🗺️ Cartographie")
+        render_interactive_graph(st.session_state.current_graph_nx)
 
-    name = parts[-1]
-    name = re.sub(r'\.(html?|php|aspx?)$', '', name)
-    name = re.sub(r'\?.*$', '', name)
-    name = re.sub(r'[-_]+', ' ', name)
-    name = name.title()
-
-    return name[:22] if name else "Page"
-
-
-def run_ai_optimization():
-    """Lance l'optimisation IA avec feedback."""
-    if not st.session_state.get('mistral_api_key'):
-        st.warning("⚠️ Configurez votre clé API Mistral dans la sidebar")
-        return
-
-    results = st.session_state.audit_results
-    if not results:
-        return
-
-    # Feedback containers
+# --- FONCTIONS METIER ---
+def run_audit(url):
+    """Lance le scraper et construit le graphe initial."""
     status = st.empty()
     progress = st.progress(0)
-    log_container = st.container()
-
-    logs = []
-
-    def log(msg):
-        logs.append(f"{datetime.now().strftime('%H:%M:%S')} {msg}")
-
-    with log_container:
-        st.markdown("##### 📋 Journal IA")
-        log_display = st.empty()
-
+    
     try:
-        from core.ai_clustering import categorize_urls_with_ai, generate_smart_graph_data
-
-        def ai_log(msg):
-            log(msg)
-            log_display.code('\n'.join(logs[-8:]))
-
-        def ai_progress(msg, val):
-            status.info(f"🤖 {msg}")
-            progress.progress(min(val, 1.0))
-
-        log("🚀 Démarrage optimisation IA...")
-        ai_progress("Préparation...", 0.1)
-
-        pages = results.get('pages', [])
-        site_url = results.get('url', '')
-
-        ai_result = categorize_urls_with_ai(
-            pages,
-            site_url,
-            st.session_state.mistral_api_key,
-            progress_callback=ai_progress,
-            log_callback=ai_log
-        )
-
-        if ai_result:
-            log("📊 Génération graphe optimisé...")
-            graph = generate_smart_graph_data(ai_result, site_url, pages, None)
-
-            st.session_state.ai_graph_data = graph
-            st.session_state.ai_optimized = True
-
-            log("✅ Optimisation terminée!")
-            ai_progress("Terminé!", 1.0)
-
-            import time
-            time.sleep(0.5)
-            st.rerun()
-        else:
-            log("❌ Échec - vérifiez votre clé API")
-            st.error("Échec de l'optimisation")
-
+        status.info("🚀 Démarrage du scraping intelligent...")
+        
+        # Configuration du scraper
+        scraper = SmartScraper(base_url=url, max_urls=300)
+        
+        # Lancement avec callback de progression
+        results, stats = scraper.run_analysis(progress_callback=lambda m, v: progress.progress(v, text=m))
+        
+        # Construction du graphe NetworkX
+        status.info("📐 Construction de l'architecture...")
+        G, clusters = build_networkx_graph(url, results, scraper.get_pattern_summary())
+        
+        # Sauvegarde en session
+        st.session_state.audit_results = results
+        st.session_state.current_graph_nx = G
+        st.session_state.clusters_summary = clusters # Important pour l'IA
+        st.session_state.ai_optimized = False
+        
+        status.success("Terminé !")
+        st.rerun()
+        
     except Exception as e:
-        log(f"❌ ERREUR: {e}")
-        st.error(f"Erreur: {e}")
+        st.error(f"Erreur durant l'audit : {e}")
 
-
-def calculate_scores(pages) -> List[Dict]:
-    """Calcule les scores SEO."""
-    scored = []
-
-    for page in pages:
-        # Support URLInfo ou dict
-        if hasattr(page, 'url'):
-            data = {
-                'url': page.url,
-                'path': page.path,
-                'depth': page.depth,
-                'cluster': page.cluster,
-                'pattern_group': getattr(page, 'pattern_group', None),
-                'is_specimen': getattr(page, 'is_specimen', True),
-                'title': page.title,
-                'meta_description': page.meta_description,
-                'h1': page.h1,
-                'word_count': page.word_count
-            }
-        else:
-            data = page.copy()
-
-        score = 0
-        issues = []
-
-        title = data.get('title')
-        if title:
-            score += 20 if 30 <= len(title) <= 60 else 10
-        else:
-            issues.append("Titre manquant")
-
-        meta = data.get('meta_description')
-        if meta:
-            score += 20 if 120 <= len(meta) <= 160 else 10
-        else:
-            issues.append("Meta manquante")
-
-        if data.get('h1'):
-            score += 20
-        else:
-            issues.append("H1 manquant")
-
-        wc = data.get('word_count', 0)
-        if wc >= 300:
-            score += 20
-        elif wc >= 100:
-            score += 10
-        else:
-            issues.append("Contenu faible")
-
-        depth = data.get('depth', 5)
-        if depth <= 3:
-            score += 20
-        elif depth <= 5:
-            score += 10
-
-        data['score'] = score
-        data['issues'] = issues
-        scored.append(data)
-
-    return scored
-
-
-def render_stats():
-    """Affiche les statistiques."""
-    results = st.session_state.audit_results
-    if not results:
+def run_ai_renaming():
+    """Appelle Mistral pour renommer les clusters."""
+    if not st.session_state.get('mistral_api_key'):
+        st.warning("⚠️ Clé API manquante (voir Config)")
         return
 
-    st.markdown("---")
-    st.markdown("### 📈 Statistiques")
+    clusters = st.session_state.get('clusters_summary', {})
+    if not clusters:
+        st.warning("Aucun cluster à renommer.")
+        return
 
-    stats = results.get('stats', {})
-    pages = results.get('pages', [])
+    with st.spinner("🧠 Mistral analyse la sémantique des groupes..."):
+        # Appel à la fonction ROBUSTE (Texte Brut)
+        new_names = analyze_clusters_with_mistral(clusters)
+        
+        if new_names:
+            G = st.session_state.current_graph_nx
+            count = 0
+            
+            # Mise à jour du graphe
+            for node_id, data in G.nodes(data=True):
+                group_id = data.get('group_id')
+                if group_id and group_id in new_names:
+                    # On met à jour le label avec l'emoji et le nom
+                    new_label = f"{new_names[group_id]} ({data.get('count', 0)})"
+                    G.nodes[node_id]['label'] = new_label
+                    G.nodes[node_id]['title'] = new_label
+                    count += 1
+            
+            st.session_state.current_graph_nx = G
+            st.session_state.ai_optimized = True
+            st.success(f"{count} groupes renommés avec succès !")
+            st.rerun()
+        else:
+            st.error("L'IA n'a pas renvoyé de résultats.")
 
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        st.metric("URLs", stats.get('total_urls_found', 0))
-    with col2:
-        st.metric("Patterns", stats.get('patterns_detected', 0))
-    with col3:
-        st.metric("Analysées", stats.get('specimens_analyzed', 0))
-    with col4:
-        st.metric("Groupes", stats.get('clusters', 0))
-
-    # Distribution scores
-    good = len([p for p in pages if p.get('score', 0) >= 70])
-    med = len([p for p in pages if 40 <= p.get('score', 0) < 70])
-    bad = len([p for p in pages if p.get('score', 0) < 40])
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown(f"🟢 **Bon** ({good})")
-    with col2:
-        st.markdown(f"🟠 **Moyen** ({med})")
-    with col3:
-        st.markdown(f"🔴 **Faible** ({bad})")
-
-    # Détails patterns
-    if st.session_state.patterns_summary:
-        with st.expander("📊 Détail patterns"):
-            for p in st.session_state.patterns_summary[:10]:
-                st.markdown(f"**{p['name']}**: {p['count']} pages")
+# --- UTILITAIRES GRAPHE ---
+def build_networkx_graph(site_url, pages, patterns):
+    """Convertit les résultats du scraper en objet NetworkX."""
+    G = nx.DiGraph()
+    clusters_data = {} # Pour l'IA
+    
+    # 1. Racine
+    root_id = "root"
+    G.add_node(root_id, label="🌐 Accueil", title=site_url, color="#000000", shape="box", url=site_url)
+    
+    # 2. Traitement des patterns (Clusters)
+    # On trie pour garder les plus gros
+    sorted_patterns = sorted(patterns, key=lambda x: -x['count'])[:15]
+    
+    for idx, p in enumerate(sorted_patterns):
+        cluster_id = f"group_{idx}"
+        pattern_name = p['name'] # Nom technique temporaire (ex: /produit/)
+        count = p['count']
+        samples = p.get('samples', [])
+        
+        # On sauvegarde les données pour l'IA
+        clusters_data[cluster_id] = {
+            "technical_name": pattern_name,
+            "samples": samples
+        }
+        
+        # Ajout du noeud Cluster
+        label = f"📁 {pattern_name} ({count})"
+        G.add_node(cluster_id, label=label, title=label, color="#FFD700", shape="box", group_id=cluster_id, count=count)
+        G.add_edge(root_id, cluster_id)
+        
+        # Ajout des enfants (Specimens) - Max 3 pour ne pas surcharger
+        for i, sample_url in enumerate(samples[:3]):
+            child_id = f"{cluster_id}_p{i}"
+            G.add_node(child_id, label="📄 Page", title=sample_url, color="#ffffff", shape="ellipse", url=sample_url)
+            G.add_edge(cluster_id, child_id)
+            
+    return G, clusters_data
