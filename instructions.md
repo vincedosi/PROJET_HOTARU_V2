@@ -1,53 +1,38 @@
-PROBLÈMES À RÉSOUDRE :
+# 🏮 PROJECT HOTARU V3 - MASTER INSTRUCTIONS (SaaS & Smart Audit)
 
-Navigation : Actuellement, on ne peut pas revenir en arrière. Je veux une sidebar fixe avec des onglets (, Audit , Rapports, Paramètres).
+## 1. UI/UX "ZEN" & NAVIGATION SAAS
+- **Design System :** - Fond blanc partout (#FFFFFF). 
+    - Boutons : bordures noires 1px, coins arrondis, police sans-serif très légère.
+    - Supprimer tous les éléments de décoration Streamlit inutiles.
+- **Navigation :** Créer une sidebar fixe (assets/logo.png en haut).
+- **Onglets (Tabs) :** Audit, Transformation, Rapports, Paramètres.
+- **Persistence :** Utiliser `st.session_state` pour ne pas perdre les données en changeant d'onglet.
 
-Scraping Intelligent (Smart Sampling) : Le crawler actuel sature sur les sites e-commerce ou institutionnels (ex: 500 fiches produits ou 500 CIRFA).
+## 2. MISSION : SCRAPING INTELLIGENT (SMART SAMPLING)
+Le but est d'éviter la saturation sur les sites à gros volume (500+ fiches produits).
 
-Feedback IA : La phase de catégorisation via l'API Mistral manque de feedback visuel (Barre de progression).
+- **Fonction `detect_page_templates(urls)` :** - Analyser les patterns d'URL (ex: `/produit/*` ou `/cirfa/*`) via Regex.
+    - Si un groupe > 5 pages : n'analyser que **3 spécimens** via Mistral/OpenAI.
+    - Les autres pages du groupe "héritent" des scores et métadonnées du groupe.
+- **Workflow de Visualisation :** 1. Construire d'abord un schéma de scraping brut.
+    2. Lancer l'optimisation via IA (Mistral).
+    3. Reconstruire le graphique final.
 
-MISSIONS POUR CLAUDE :
+## 3. INTÉGRATION MISTRAL & GRAPHIQUE
+- **Feedback visuel :** Utiliser `st.progress()` et `st.status()` pendant la phase de regroupement intelligent par Mistral.
+- **Le Graphe (Organigramme) :** - Regrouper les fiches identiques sous un seul nœud parent "Cluster" pour la clarté.
+    - **INTERACTIVITÉ :** Chaque nœud doit contenir le lien de la page web et être CLIQUABLE pour s'y rendre.
+    - Nœuds blancs, bordure noire, pastilles GEO (🔴🟠🟢).
 
-Système de Navigation "SaaS"
-Modifie app.py pour implémenter une sidebar de navigation propre.
-Utilise des st.session_state pour mémoriser l'onglet actif afin que l'utilisateur ne perde pas ses données d'audit en changeant de page.
+## 4. LOGIQUE DE SAUVEGARDE (VERSIONING)
+- Utiliser l'onglet `audits` de la Google Sheet via `service_account.json`.
+- Sauvegarder/Charger les états du JSON du graphe pour permettre le Load & Modify.
 
-Ajoute le logo (assets/logo.png) en haut de cette sidebar.
+## 5. INSTRUCTIONS DE CODAGE IMMÉDIATES POUR CLAUDE CODE
+1. Analyse mon fichier de crawl actuel.
+2. Propose la modification pour inclure la détection de patterns (Regex).
+3. Génère le code de la sidebar de navigation avec le logo.
+4. Intègre la barre de progression dans la fonction qui appelle Mistral.
+5. Implémente le lien cliquable sur les nœuds du graphique.
 
-Logique de "Smart Sampling" (Échantillonnage)
-Avant de lancer l'analyse IA, crée une fonction detect_page_templates(urls).
-Logique : Si 50 pages partagent la même structure d'URL (ex: /produit/* ou /recrutement/cirfa/*), n'analyse avec Mistral/OpenAI que 3 spécimens de ce groupe.
-
-Pour les autres pages du groupe, "hérite" des scores et recommandations du groupe pour construire le graphique sans dépenser de jetons API.
-
-Intégration Mistral & Visualisation
-Pour rappel on construit d abord un schéma scraping brut puis on lance via OPtimiser via IA et on reconstruit alore graphique
-Lors de la phase de "Regroupement Intelligent" par Mistral, implémente une st.progress() bar et un message de statut (st.status) pour informer l'utilisateur.
-
-Le graphique (Graphe Organigramme) doit regrouper ces "fiches identiques" sous un seul nœud parent extensible ou un "cluster" pour que la vue reste claire (comme un organigramme propre).
-
-Rappel toi aussi que tu dois mettre le lien de la page web et pourvoir s'y rendre en cliquant sur le noeud
-
-UI/UX "Zen"
-Applique un style CSS strict :
-Fond blanc partout (background-color: #FFFFFF).
-
-Boutons avec bordures noires de 1px et coins arrondis.
-
-Utilise une police sans-serif très légère.
-
-Supprime tous les éléments de décoration inutiles de Streamlit.
-
-INSTRUCTIONS DE CODAGE :
-Analyse mon fichier de crawl actuel.
-
-Propose une modification du script de scraping pour inclure la détection de patterns d'URL (Regex intelligente).
-
-Génère le code de la sidebar de navigation.
-
-Intègre la barre de progression dans la fonction qui appelle l'API Mistral.
-
-LANCE L'AMÉLIORATION DE LA NAVIGATION ET LA LOGIQUE DE SAMPLING MAINTENANT.
-
-et complète le README.MD en expliquant le but du projet.
-et qu 'on développe une app streamlit dans une ogique d e saas
+**LANCE L'AMÉLIORATION DE LA NAVIGATION ET LA LOGIQUE DE SAMPLING MAINTENANT.**
