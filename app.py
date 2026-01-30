@@ -2,7 +2,7 @@
 HOTARU - SaaS Application
 Japanese Zen / Flat Design
 
-Main router with SaaS navigation sidebar.
+Main router with persistent SaaS navigation sidebar.
 """
 
 import streamlit as st
@@ -11,7 +11,7 @@ from pathlib import Path
 # Page configuration - MUST be first Streamlit command
 st.set_page_config(
     page_title="HOTARU",
-    page_icon="assets/logo.png" if Path("assets/logo.png").exists() else "✨",
+    page_icon="✨",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -19,12 +19,6 @@ st.set_page_config(
 
 def inject_custom_css():
     """Inject custom CSS for Japanese Zen design."""
-    css_file = Path("assets/style.css")
-    if css_file.exists():
-        with open(css_file) as f:
-            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
-    # Additional inline CSS for SaaS navigation
     st.markdown("""
         <style>
         /* Force white background everywhere */
@@ -32,7 +26,12 @@ def inject_custom_css():
             background-color: #FFFFFF !important;
         }
 
-        /* Sidebar pure white with fixed width */
+        /* Sidebar styling */
+        section[data-testid="stSidebar"] {
+            background-color: #FFFFFF !important;
+            border-right: 1px solid #000000;
+        }
+
         section[data-testid="stSidebar"] > div:first-child {
             background-color: #FFFFFF !important;
         }
@@ -42,211 +41,110 @@ def inject_custom_css():
         footer {visibility: hidden;}
         header {visibility: hidden;}
 
-        /* SaaS Navigation Styling */
-        .nav-button {
-            width: 100%;
-            padding: 0.75rem 1rem;
-            margin: 0.25rem 0;
-            border: none;
-            background: transparent;
-            text-align: left;
-            cursor: pointer;
-            border-left: 3px solid transparent;
-            transition: all 0.2s ease;
+        /* Radio button styling for nav */
+        div[data-testid="stRadio"] > label {
+            font-weight: 500;
         }
 
-        .nav-button:hover {
-            background-color: #f5f5f5;
-            border-left-color: #000000;
+        /* Button styling - black border */
+        .stButton > button {
+            border: 1px solid #000000 !important;
+            border-radius: 4px !important;
+            background-color: #FFFFFF !important;
+            color: #000000 !important;
         }
 
-        .nav-button.active {
-            border-left-color: #FFD700;
-            font-weight: 600;
+        .stButton > button:hover {
+            background-color: #f5f5f5 !important;
+            border-color: #FFD700 !important;
         }
 
-        /* API Key vault styling */
-        .vault-indicator {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            margin-right: 0.5rem;
+        /* Progress bar */
+        .stProgress > div > div {
+            background-color: #FFD700 !important;
         }
-
-        .vault-ok { background-color: #22C55E; }
-        .vault-missing { background-color: #EF4444; }
         </style>
     """, unsafe_allow_html=True)
 
 
-def render_sidebar_logo():
-    """Render the HOTARU logo in sidebar."""
-    logo_path = Path("assets/logo.png")
-
+def render_sidebar():
+    """Render the persistent sidebar navigation."""
+    # Logo section
     st.markdown("""
         <div style="
-            padding: 1.5rem 1rem;
-            border-bottom: 1px solid #000000;
-            margin-bottom: 1rem;
             text-align: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid #e0e0e0;
+            margin-bottom: 1rem;
         ">
-    """, unsafe_allow_html=True)
-
-    if logo_path.exists():
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            st.image(str(logo_path), width=100)
-    else:
-        st.markdown("""
             <div style="
                 font-size: 1.5rem;
                 font-weight: 700;
                 color: #000000;
-                letter-spacing: 0.15em;
+                letter-spacing: 0.1em;
             ">
                 <span style="color: #FFD700;">●</span> HOTARU
             </div>
             <div style="
-                font-size: 0.65rem;
-                color: #000000;
-                opacity: 0.5;
+                font-size: 0.7rem;
+                color: #666666;
                 margin-top: 0.25rem;
             ">
                 蛍 · SEO Audit Suite
             </div>
-        """, unsafe_allow_html=True)
+        </div>
+    """, unsafe_allow_html=True)
 
-    st.markdown("</div>", unsafe_allow_html=True)
+    # Navigation using radio buttons (most reliable for state)
+    st.markdown("##### Navigation")
 
+    # Initialize active tab
+    if 'active_tab' not in st.session_state:
+        st.session_state.active_tab = "🔍 Audit GEO"
 
-def render_saas_navigation():
-    """Render the SaaS-style sidebar navigation."""
-    # Initialize navigation state
-    if 'current_page' not in st.session_state:
-        st.session_state.current_page = 'audit_geo'
+    selected = st.radio(
+        "Menu",
+        options=["📊 Dashboard", "🔍 Audit GEO", "📄 Rapports", "⚙️ Parametres"],
+        index=["📊 Dashboard", "🔍 Audit GEO", "📄 Rapports", "⚙️ Parametres"].index(st.session_state.active_tab),
+        key="nav_radio",
+        label_visibility="collapsed"
+    )
 
-    # Navigation items
-    nav_items = [
-        {'id': 'dashboard', 'icon': '📊', 'label': 'Dashboard'},
-        {'id': 'audit_geo', 'icon': '🔍', 'label': 'Audit GEO'},
-        {'id': 'reports', 'icon': '📄', 'label': 'Rapports'},
-        {'id': 'settings', 'icon': '⚙️', 'label': 'Parametres'},
-    ]
+    # Update session state
+    st.session_state.active_tab = selected
 
-    st.markdown("<div style='margin: 0.5rem 0;'>", unsafe_allow_html=True)
-
-    for item in nav_items:
-        is_active = st.session_state.current_page == item['id']
-
-        # Visual indicator for active item
-        if is_active:
-            st.markdown(f"""
-                <div style="
-                    border-left: 3px solid #FFD700;
-                    padding-left: 0.5rem;
-                    margin: 0.25rem 0;
-                ">
-            """, unsafe_allow_html=True)
-
-        if st.button(
-            f"{item['icon']}  {item['label']}",
-            key=f"nav_{item['id']}",
-            use_container_width=True,
-            type="secondary" if not is_active else "primary"
-        ):
-            st.session_state.current_page = item['id']
-            st.rerun()
-
-        if is_active:
-            st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-def render_api_vault():
-    """Render the API Key Vault section in sidebar."""
+    # API Vault section
     st.markdown("---")
-    st.markdown("##### 🔐 API Vault")
+    st.markdown("##### 🔐 API Mistral")
 
-    # Check if API key is configured
     has_api_key = bool(st.session_state.get('mistral_api_key', ''))
 
     if has_api_key:
-        st.markdown("""
-            <div style="
-                padding: 0.5rem;
-                background: #f8f8f8;
-                border: 1px solid #e0e0e0;
-                border-radius: 4px;
-                font-size: 0.8rem;
-            ">
-                <span style="color: #22C55E;">●</span> Mistral API connectee
-            </div>
-        """, unsafe_allow_html=True)
+        st.success("Connectee", icon="✅")
     else:
-        st.markdown("""
-            <div style="
-                padding: 0.5rem;
-                background: #fff8f8;
-                border: 1px solid #ffdddd;
-                border-radius: 4px;
-                font-size: 0.8rem;
-            ">
-                <span style="color: #EF4444;">●</span> API non configuree
-            </div>
-        """, unsafe_allow_html=True)
+        st.warning("Non configuree", icon="⚠️")
+        api_key = st.text_input(
+            "Cle API",
+            type="password",
+            placeholder="Entrez votre cle...",
+            key="sidebar_api_input"
+        )
+        if st.button("Enregistrer", key="save_api_sidebar"):
+            if api_key:
+                st.session_state.mistral_api_key = api_key
+                st.rerun()
 
-        if st.button("🔑 Configurer", key="sidebar_api_btn", use_container_width=True):
-            st.session_state.show_api_modal = True
-            st.session_state.current_page = 'settings'
-            st.rerun()
-
-
-def render_user_section():
-    """Render user info at bottom of sidebar."""
+    # User section
     st.markdown("---")
-
     if st.session_state.get('authenticated', False):
-        user_email = st.session_state.get('user_email', 'user@example.com')
-        user_name = user_email.split('@')[0].title()
-
-        col1, col2 = st.columns([1, 3])
-
-        with col1:
-            st.markdown(f"""
-                <div style="
-                    width: 32px;
-                    height: 32px;
-                    border-radius: 50%;
-                    border: 1px solid #000;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: 0.8rem;
-                    font-weight: 600;
-                    background: #FFFFFF;
-                ">
-                    {user_name[0].upper()}
-                </div>
-            """, unsafe_allow_html=True)
-
-        with col2:
-            st.markdown(f"""
-                <div style="font-size: 0.85rem; font-weight: 500;">{user_name}</div>
-                <div style="font-size: 0.7rem; opacity: 0.6;">{user_email}</div>
-            """, unsafe_allow_html=True)
+        user_email = st.session_state.get('user_email', 'demo@hotaru.app')
+        st.markdown(f"**{user_email.split('@')[0].title()}**")
+        st.caption(user_email)
 
         if st.button("Deconnexion", key="logout_btn", use_container_width=True):
             st.session_state.authenticated = False
             st.session_state.user_email = None
             st.rerun()
-    else:
-        st.markdown("""
-            <div style="font-size: 0.8rem; opacity: 0.6; text-align: center;">
-                Mode demo
-            </div>
-        """, unsafe_allow_html=True)
 
 
 def render_login_page():
@@ -257,84 +155,67 @@ def render_login_page():
         st.markdown("<div style='height: 15vh;'></div>", unsafe_allow_html=True)
 
         # Logo
-        logo_path = Path("assets/logo.png")
-        if logo_path.exists():
-            st.image(str(logo_path), width=150)
-        else:
-            st.markdown("""
-                <div style="text-align: center; margin-bottom: 3rem;">
-                    <div style="
-                        font-size: 2.5rem;
-                        font-weight: 700;
-                        color: #000000;
-                        letter-spacing: 0.2em;
-                    ">
-                        <span style="color: #FFD700;">●</span> HOTARU
-                    </div>
-                    <div style="
-                        font-size: 0.8rem;
-                        color: #000000;
-                        opacity: 0.5;
-                        margin-top: 0.5rem;
-                    ">
-                        蛍 · Firefly Audit Suite
-                    </div>
+        st.markdown("""
+            <div style="text-align: center; margin-bottom: 2rem;">
+                <div style="
+                    font-size: 2.5rem;
+                    font-weight: 700;
+                    color: #000000;
+                    letter-spacing: 0.2em;
+                ">
+                    <span style="color: #FFD700;">●</span> HOTARU
                 </div>
-            """, unsafe_allow_html=True)
-
-        st.markdown("<div style='height: 2rem;'></div>", unsafe_allow_html=True)
+                <div style="
+                    font-size: 0.8rem;
+                    color: #666666;
+                    margin-top: 0.5rem;
+                ">
+                    蛍 · Firefly Audit Suite
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
 
         # Login form
-        with st.form("login_form", clear_on_submit=False):
-            email = st.text_input(
-                "Email",
-                placeholder="votre@email.com",
-                key="login_email"
-            )
-
-            password = st.text_input(
-                "Mot de passe",
-                type="password",
-                placeholder="••••••••",
-                key="login_password"
-            )
-
-            st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+        with st.form("login_form"):
+            email = st.text_input("Email", placeholder="votre@email.com")
+            password = st.text_input("Mot de passe", type="password", placeholder="••••••••")
 
             submitted = st.form_submit_button("Entrer", use_container_width=True)
 
             if submitted:
                 if email and password:
-                    from core.auth import AuthManager
-                    auth = AuthManager()
-
-                    if auth.authenticate(email, password):
-                        st.session_state.authenticated = True
-                        st.session_state.user_email = email
-                        st.rerun()
-                    else:
-                        st.error("Identifiants incorrects")
+                    try:
+                        from core.auth import AuthManager
+                        auth = AuthManager()
+                        if auth.authenticate(email, password):
+                            st.session_state.authenticated = True
+                            st.session_state.user_email = email
+                            st.rerun()
+                        else:
+                            st.error("Identifiants incorrects")
+                    except Exception as e:
+                        st.error(f"Erreur connexion: {str(e)}")
                 else:
                     st.warning("Veuillez remplir tous les champs")
 
 
 def render_main_content():
-    """Render the main content based on current page."""
-    page = st.session_state.get('current_page', 'audit_geo')
+    """Render the main content based on active tab."""
+    tab = st.session_state.get('active_tab', '🔍 Audit GEO')
 
-    if page == 'dashboard':
+    if tab == "📊 Dashboard":
         from modules.dashboard import render_dashboard
         render_dashboard()
 
-    elif page == 'audit_geo':
+    elif tab == "🔍 Audit GEO":
         from modules.audit_geo import render_audit_geo
         render_audit_geo()
 
-    elif page == 'reports':
+    elif tab == "📄 Rapports":
         from modules.reports import render_reports
         render_reports()
 
-    elif page == 'settings':
+    elif tab == "⚙️ Parametres":
         from modules.settings import render_settings
         render_settings()
 
@@ -344,20 +225,17 @@ def main():
     # Inject custom CSS
     inject_custom_css()
 
-    # Check authentication status
+    # Check authentication
     is_authenticated = st.session_state.get('authenticated', False)
 
     if not is_authenticated:
         render_login_page()
     else:
-        # Show main application with SaaS sidebar
+        # ALWAYS show sidebar when authenticated
         with st.sidebar:
-            render_sidebar_logo()
-            render_saas_navigation()
-            render_api_vault()
-            render_user_section()
+            render_sidebar()
 
-        # Main content area
+        # Main content
         render_main_content()
 
 
