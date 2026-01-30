@@ -12,7 +12,6 @@ def get_naming_prompt(cluster_data):
     
     # On prépare le texte des exemples pour l'IA
     examples_text = ""
-    # On s'adapte à la structure de données (qu'elle soit une liste ou un dict)
     if isinstance(cluster_data, dict):
         for c_id, data in cluster_data.items():
             # Gestion sécurisée des formats de données
@@ -22,28 +21,37 @@ def get_naming_prompt(cluster_data):
                 samples = data
             else:
                 samples = []
-                
-            urls_sample = "\n".join([f"- {u}" for u in samples[:3]])
-            examples_text += f"\nGROUPE ID: {c_id}\nURLS:\n{urls_sample}\n"
+            # Affichage enrichi : URL, Titre, H1
+            samples_lines = []
+            for s in samples[:3]:
+                if isinstance(s, dict):
+                    url = s.get('url', '')
+                    title = s.get('title', '') or ''
+                    h1 = s.get('h1', '') or ''
+                    samples_lines.append(f"- URL: {url}\n  Titre: {title}\n  H1: {h1}")
+                else:
+                    samples_lines.append(f"- URL: {s}")
+            examples_text += f"\nGROUPE ID: {c_id}\nSAMPLES:\n" + "\n".join(samples_lines) + "\n"
 
     return f"""
-    Tu es un Architecte de l'Information expert en UX.
-    Ta mission : Analyser des groupes d'URLs et leur donner un nom de catégorie court et pertinent.
+Tu es un Architecte de l'Information expert en UX.
+Ta mission : Analyser des groupes de pages web (chaque groupe contient plusieurs pages similaires). Pour chaque groupe, tu reçois 3 exemples avec leur URL, leur <title> et leur <h1>.
 
-    RÈGLES STRICTES :
-    1. Trouve un nom court (2-4 mots max).
-    2. Ajoute un ÉMOJI pertinent au début.
-    3. Réponds UNIQUEMENT ligne par ligne sous le format : ID: RESULTAT
-    4. PAS DE BLABLA, PAS D'INTRODUCTION, PAS DE JSON.
+RÈGLES STRICTES :
+1. Analyse les points communs entre les titres, h1 et URLs de chaque groupe.
+2. Trouve un nom de catégorie métier court (2-4 mots max) qui représente la valeur métier (ex: 'Meubles de Bureau' au lieu de 'Produits').
+3. Ajoute un ÉMOJI pertinent au début.
+4. Réponds UNIQUEMENT ligne par ligne sous le format : ID: RESULTAT
+5. PAS DE BLABLA, PAS D'INTRODUCTION, PAS DE JSON.
 
-    EXEMPLE DE RÉPONSE ATTENDUE :
-    group_1: 🛍️ Fiches Produits
-    group_2: 📝 Articles de Blog
-    group_3: ⚖️ Mentions Légales
+EXEMPLE DE RÉPONSE ATTENDUE :
+group_1: 🛋️ Canapés & Fauteuils
+group_2: 🍽️ Cuisines Équipées
+group_3: 📝 Conseils & Guides
 
-    A TOI DE JOUER :
-    {examples_text}
-    """
+A TOI DE JOUER :
+{examples_text}
+"""
 
 def analyze_clusters_with_mistral(cluster_data):
     """
