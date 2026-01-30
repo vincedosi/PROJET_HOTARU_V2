@@ -221,36 +221,49 @@ def build_networkx_graph(site_url, pages, patterns):
     """Convertit les résultats du scraper en objet NetworkX."""
     G = nx.DiGraph()
     clusters_data = {} # Pour l'IA
-    
+
     # 1. Racine
     root_id = "root"
     G.add_node(root_id, label="🌐 Accueil", title=site_url, color="#000000", shape="box", url=site_url)
-    
+
     # 2. Traitement des patterns (Clusters)
     # On trie pour garder les plus gros
     sorted_patterns = sorted(patterns, key=lambda x: -x['count'])[:15]
-    
+
+    # Créer un mapping URL -> page info pour accès rapide
+    url_to_info = {p.url: p for p in pages if hasattr(p, 'url')}
+
     for idx, p in enumerate(sorted_patterns):
         cluster_id = f"group_{idx}"
         pattern_name = p['name'] # Nom technique temporaire (ex: /produit/)
         count = p['count']
         samples = p.get('samples', [])
-        
+
+        # Enrichir les samples avec title et h1 si possible
+        enriched_samples = []
+        for sample_url in samples:
+            info = url_to_info.get(sample_url)
+            enriched_samples.append({
+                "url": sample_url,
+                "title": getattr(info, 'title', None) if info else None,
+                "h1": getattr(info, 'h1', None) if info else None
+            })
+
         # On sauvegarde les données pour l'IA
         clusters_data[cluster_id] = {
             "technical_name": pattern_name,
-            "samples": samples
+            "samples": enriched_samples
         }
-        
+
         # Ajout du noeud Cluster
         label = f"📁 {pattern_name} ({count})"
         G.add_node(cluster_id, label=label, title=label, color="#FFD700", shape="box", group_id=cluster_id, count=count)
         G.add_edge(root_id, cluster_id)
-        
+
         # Ajout des enfants (Specimens) - Max 3 pour ne pas surcharger
         for i, sample_url in enumerate(samples[:3]):
             child_id = f"{cluster_id}_p{i}"
             G.add_node(child_id, label="📄 Page", title=sample_url, color="#ffffff", shape="ellipse", url=sample_url)
             G.add_edge(cluster_id, child_id)
-            
+
     return G, clusters_data
