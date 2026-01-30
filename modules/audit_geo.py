@@ -23,6 +23,7 @@ def init_session_state():
     """Initialise les variables de session."""
     defaults = {
         'audit_results': None,
+        'audit_url': '',  # URL de l'audit en cours
         'current_graph_nx': None, # On stocke l'objet NetworkX directement
         'clusters_summary': {},   # Pour l'IA
         'ai_optimized': False,
@@ -117,7 +118,7 @@ def render_audit_geo():
     col1, col2 = st.columns([4, 1])
     with col1:
         # Valeur par défaut vide ou récupérée du state
-        default_url = st.session_state.audit_results['url'] if st.session_state.audit_results else ""
+        default_url = st.session_state.get('audit_url', '')
         url = st.text_input("URL cible", value=default_url, placeholder="https://exemple.com", key="audit_url_input", label_visibility="collapsed")
     with col2:
         analyze_btn = st.button("Lancer l'Audit 🚀", use_container_width=True)
@@ -167,6 +168,7 @@ def run_audit(url):
         G, clusters = build_networkx_graph(url, results, scraper.get_pattern_summary())
         
         # Sauvegarde en session
+        st.session_state.audit_url = url  # Stocke l'URL séparément
         st.session_state.audit_results = results
         st.session_state.current_graph_nx = G
         st.session_state.clusters_summary = clusters # Important pour l'IA
