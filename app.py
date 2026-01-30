@@ -1,182 +1,142 @@
 """
-HOTARU - SaaS Application
-NAVIGATION TOP-BAR (Onglets)
-Pour résoudre définitivement le problème de sidebar.
+HOTARU V3 - APPLICATION SAAS
+Navigation: Top Bar (Onglets Horizontaux)
+Design: Zen Minimaliste (Blanc/Noir)
 """
 
 import streamlit as st
+import os
 
-# --- 1. CONFIGURATION (Première ligne obligatoire) ---
+# --- 1. CONFIGURATION GLOBALE (OBLIGATOIRE EN PREMIER) ---
 st.set_page_config(
     page_title="HOTARU",
     page_icon="✨",
     layout="wide",
-    initial_sidebar_state="collapsed" # On cache la sidebar volontairement
+    initial_sidebar_state="collapsed"  # On cache volontairement la sidebar
 )
 
-# --- 2. CSS ZEN (DESIGN SYSTEM) ---
-def inject_custom_css():
-    st.markdown("""
-        <style>
-        /* Fond Blanc Partout */
-        .stApp, .main, [data-testid="stAppViewContainer"] {
-            background-color: #FFFFFF !important;
-        }
+# --- 2. FONCTION DE CHARGEMENT CSS ---
+def load_css(file_name):
+    """Charge le fichier CSS externe depuis le dossier assets."""
+    try:
+        with open(file_name, "r") as f:
+            st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+    except FileNotFoundError:
+        st.error(f"⚠️ Fichier CSS introuvable : {file_name}")
+        st.warning("Assurez-vous que le fichier 'style.css' est bien dans le dossier 'assets/'.")
 
-        /* Masquer la sidebar native et le bouton hamburger */
-        [data-testid="stSidebar"] { display: none; }
-        [data-testid="collapsedControl"] { display: none; }
-        
-        /* Style du Menu Horizontal (Onglets Radio) */
-        div[role="radiogroup"] {
-            display: flex;
-            flex-direction: row;
-            justify-content: center;
-            width: 100%;
-            background-color: #ffffff;
-            border-bottom: 1px solid #000000;
-            padding-bottom: 10px;
-        }
-        
-        div[data-testid="stRadio"] > label {
-            background-color: #ffffff;
-            padding: 10px 20px;
-            border-radius: 5px;
-            margin: 0 5px;
-            cursor: pointer;
-            border: 1px solid transparent;
-            font-weight: 500;
-        }
-
-        /* Cacher les éléments déco Streamlit */
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        header {visibility: hidden;}
-        
-        /* Boutons Zen */
-        .stButton > button {
-            border: 1px solid #000000 !important;
-            background-color: #FFFFFF !important;
-            color: #000000 !important;
-            border-radius: 0px !important;
-        }
-        .stButton > button:hover {
-            background-color: #f0f0f0 !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
-# --- 3. EN-TÊTE & NAVIGATION ---
+# --- 3. COMPOSANT HEADER (LOGO + MENU) ---
 def render_header():
-    """Affiche le Logo et le Menu de Navigation en haut."""
+    """Affiche le logo et le menu de navigation horizontal."""
     
-    # 1. LOGO CENTRÉ
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
+    # Création des colonnes pour aligner Logo (Gauche) et Menu (Droite/Centre)
+    col_logo, col_nav = st.columns([1, 4])
+    
+    with col_logo:
+        # Logo Texte Zen
         st.markdown("""
-            <div style="text-align: center; padding-top: 1rem; padding-bottom: 0.5rem;">
-                <h1 style="color: black; margin:0; font-size: 2rem;">
-                    <span style="color: #FFD700;">●</span> HOTARU
-                </h1>
-                <p style="color: #666; font-size: 0.8rem; margin:0;">Architecture & SEO Intelligence</p>
+            <div style="padding-top: 10px;">
+                <h2 style="margin:0; font-size:1.8rem; color:black; font-weight:700;">
+                    <span style="color:#FFD700;">●</span> HOTARU
+                </h2>
             </div>
         """, unsafe_allow_html=True)
 
-    # 2. NAVIGATION HORIZONTALE (Au lieu de la sidebar)
-    st.write("") # Spacer
-    
-    # Options du menu
-    options = ["📊 Dashboard", "🔍 Audit GEO", "📄 Rapports", "⚙️ Config"]
-    
-    # Icônes pour faire joli
-    icons = {"📊 Dashboard": "bar-chart", "🔍 Audit GEO": "search", "📄 Rapports": "file-text", "⚙️ Config": "gear"}
-    
-    # On utilise un st.radio horizontal centré
-    # C'est le moyen le plus robuste de naviguer
-    col_nav1, col_nav2, col_nav3 = st.columns([1, 4, 1])
-    with col_nav2:
+    with col_nav:
+        # Liste des onglets
+        options = ["📊 Dashboard", "🔍 Audit GEO", "📄 Rapports", "⚙️ Config"]
+        
+        # Récupération de l'onglet actif
+        current_index = 0
+        if "active_tab" in st.session_state and st.session_state.active_tab in options:
+            current_index = options.index(st.session_state.active_tab)
+
+        # Menu Horizontal (Plus robuste que la sidebar)
         selected = st.radio(
-            "Menu",
+            "Navigation",
             options,
-            index=0 if "active_tab" not in st.session_state else options.index(st.session_state.active_tab),
+            index=current_index,
             horizontal=True,
             label_visibility="collapsed",
-            key="top_nav"
+            key="top_nav_bar"
         )
-    
-    st.markdown("---") # Ligne de séparation
+        
+    st.markdown("---") # Ligne de séparation fine sous le menu
     return selected
 
-# --- 4. PAGE DE CONNEXION ---
-def render_login_page():
+# --- 4. PAGE DE LOGIN ---
+def render_login():
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        st.markdown("<h2 style='text-align: center; color: black;'>Connexion</h2>", unsafe_allow_html=True)
+        st.markdown("<br><br><br>", unsafe_allow_html=True)
+        st.markdown("<h1 style='text-align: center;'>Connexion</h1>", unsafe_allow_html=True)
         
-        with st.form("login"):
+        with st.form("login_form"):
             email = st.text_input("Email", value="demo@hotaru.app")
             password = st.text_input("Mot de passe", type="password", value="demo")
             submit = st.form_submit_button("Entrer", use_container_width=True)
             
             if submit:
-                # Bypass temporaire pour que tu puisses entrer
-                st.session_state.authenticated = True
-                st.session_state.user_email = email
-                st.session_state.active_tab = "🔍 Audit GEO"
-                st.rerun()
+                # Simulation Auth (A connecter à ton AuthManager plus tard)
+                if email and password:
+                    st.session_state.authenticated = True
+                    st.session_state.user_email = email
+                    st.session_state.active_tab = "🔍 Audit GEO"
+                    st.rerun()
+                else:
+                    st.error("Veuillez remplir les champs.")
 
 # --- 5. ROUTEUR PRINCIPAL ---
 def main():
-    inject_custom_css()
+    # Chargement du CSS externe
+    load_css("assets/style.css")
 
-    # Init Session
+    # Initialisation des États
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = False
     if 'active_tab' not in st.session_state:
         st.session_state.active_tab = "🔍 Audit GEO"
 
-    # LOGIQUE
+    # LOGIQUE D'AFFICHAGE
     if not st.session_state.authenticated:
-        render_login_page()
+        render_login()
     else:
-        # AFFICHER HEADER + NAV (Toujours visible)
+        # 1. AFFICHER LE HEADER (Toujours visible)
         selected_page = render_header()
         st.session_state.active_tab = selected_page
 
-        # ROUTAGE CONTENU
+        # 2. AFFICHER LE CONTENU
         if selected_page == "📊 Dashboard":
-            st.info("🚧 Dashboard en construction - Passez à l'onglet Audit")
-            
+            st.title("Tableau de bord")
+            st.info("🚧 Module en construction. Cliquez sur 'Audit GEO'.")
+
         elif selected_page == "🔍 Audit GEO":
+            # Import dynamique (pour éviter les erreurs si le fichier est cassé)
             try:
                 from modules.audit_geo import render_audit_geo
                 render_audit_geo()
             except ImportError:
                 st.error("⚠️ Fichier 'modules/audit_geo.py' introuvable.")
-                st.code("Vérifie que le dossier 'modules' existe bien.")
+                st.info("Demande à Claude de générer le module d'audit.")
             except Exception as e:
-                st.error(f"Erreur dans le module : {e}")
-                
+                st.error(f"Erreur dans le module Audit : {e}")
+
         elif selected_page == "📄 Rapports":
-            st.write("Historique des rapports (Vide pour l'instant)")
-            
+            st.title("Mes Rapports")
+            st.write("Historique des audits sauvegardés.")
+
         elif selected_page == "⚙️ Config":
-            # Petit panneau de config rapide
-            st.subheader("Configuration Rapide")
-            
-            # Gestion Clé API simplifiée
-            col_a, col_b = st.columns(2)
-            with col_a:
+            st.subheader("Configuration")
+            c1, c2 = st.columns(2)
+            with c1:
                 st.caption("Clé API Mistral")
-                key_input = st.text_input("Clé", type="password", key="settings_key_input")
-                if st.button("Sauvegarder Clé"):
-                    st.session_state.mistral_api_key = key_input
+                key = st.text_input("API Key", type="password", key="api_key_input")
+                if st.button("Sauvegarder"):
+                    st.session_state.mistral_api_key = key
                     st.success("Clé enregistrée !")
-            
-            with col_b:
-                st.caption("Compte")
-                if st.button("Déconnexion"):
+            with c2:
+                st.caption("Session")
+                if st.button("Se déconnecter"):
                     st.session_state.authenticated = False
                     st.rerun()
 
