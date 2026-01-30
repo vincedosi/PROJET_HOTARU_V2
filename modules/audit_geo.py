@@ -5,7 +5,7 @@ VERSION CORRIGÉE : PyVis + JS Injection + IA Text Mode
 
 import streamlit as st
 import networkx as nx
-from st_pyvis import network as net
+from pyvis.network import Network
 import streamlit.components.v1 as components
 import json
 
@@ -42,7 +42,7 @@ def render_interactive_graph(G):
         return
 
     # 1. Création du graphe PyVis
-    nt = net.Network(height="600px", width="100%", bgcolor="#ffffff", font_color="black")
+    nt = Network(height="600px", width="100%", bgcolor="#ffffff", font_color="black")
     nt.from_nx(G)
 
     # 2. Configuration Physique (Organigramme Hiérarchique)

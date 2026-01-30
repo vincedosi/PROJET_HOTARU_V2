@@ -569,6 +569,8 @@ class SmartScraper:
                 'name': pattern.category_name,
                 'count': pattern.count,
                 'specimens': len(pattern.specimen_urls),
-                'example': pattern.example_urls[0] if pattern.example_urls else ''
+                'example': pattern.example_urls[0] if pattern.example_urls else '',
+                # 'samples' is a list of URLs for audit_geo.py graph building
+                'samples': pattern.example_urls[:5] if pattern.example_urls else []
             })
         return sorted(summary, key=lambda x: x['count'], reverse=True)
