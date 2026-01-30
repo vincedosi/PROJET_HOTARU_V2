@@ -1,93 +1,123 @@
-🏮 PROJECT HOTARU V3 - MASTER INSTRUCTIONS (FIX & FINAL)
-1. UX & NAVIGATION (RÉPARATION URGENTE)
-Problème actuel : La sidebar disparaît après les interactions et l'interface manque de structure.
+Markdown
+# 🚨 MISSION URGENTE : RÉPARATION NAVIGATION & GRAPHE
 
-A. Sidebar Persistante (Sidebar Fixe)
-Modifie app.py. La Sidebar doit être codée au tout début du script, avant toute logique de page.
+## CONTEXTE CRITIQUE
+L'application est cassée sur 3 points majeurs :
+1. **Navigation :** La sidebar disparaît, on est bloqué.
+2. **Interaction Graphe :** Le clic sur un nœud recharge l'app avec une erreur (URL interne) au lieu d'ouvrir le site web.
+3. **Qualité des données :** Le scraper génère des noms de groupes illisibles (`?$(102)`).
 
-Contenu :
+## INSTRUCTIONS DE CODAGE (À EXÉCUTER DANS L'ORDRE)
 
-Logo assets/logo.png (centré, fond blanc).
+### 1. FIX NAVIGATION (Dans `app.py`)
+La Sidebar doit être affichée **AVANT** toute autre logique conditionnelle pour ne jamais disparaître.
+**Code obligatoire :**
+```python
+import streamlit as st
+# ... imports ...
 
-Menu de navigation (st.radio ou boutons) :
+# CONFIGURATION PAGE & CSS
+st.set_page_config(layout="wide", page_title="Hotaru V3")
 
-📊 Dashboard (Accueil, KPIs).
+# --- SIDEBAR PERSISTANTE ---
+with st.sidebar:
+    st.image("assets/logo.png", use_container_width=True)
+    st.markdown("---")
+    # Navigation qui contrôle l'affichage principal
+    selected_page = st.radio("Menu", ["📊 Dashboard", "🔍 Audit GEO", "⚙️ Paramètres"], key="nav_main")
 
-🔍 Audit GEO (Le scanner).
+# --- ROUTEUR ---
+if selected_page == "📊 Dashboard":
+    # call dashboard function...
+elif selected_page == "🔍 Audit GEO":
+    # call audit function...
+# ...
+2. FIX INTERACTIVITÉ GRAPHE (Dans modules/audit_geo.py)
+ABANDONNE streamlit-agraph. Utilise PyVis avec injection JavaScript manuelle pour gérer le clic (window.open).
 
-⚙️ Paramètres (Clés API & Profil).
+Pattern de code OBLIGATOIRE à implémenter :
 
-Mécanisme : Utilise st.session_state pour stocker l'onglet actif. Si je clique sur "Analyser" dans l'Audit, la sidebar DOIT rester visible.
+Python
+from st_pyvis import network as net
+import streamlit.components.v1 as components
 
-B. Design System "Zen"
-Fond 100% Blanc. Bordures noires fines (1px). Pas d'ombres.
+def render_interactive_graph(graph_data):
+    # 1. Création du graphe PyVis
+    nt = net.Network(height="600px", width="100%", bgcolor="#ffffff", font_color="black")
+    nt.from_nx(graph_data) # Si tu utilises networkx, sinon ajoute les noeuds manuellement
 
-Suppression des éléments décoratifs Streamlit par défaut.
+    # IMPORTANT : Assure-toi que chaque noeud a l'attribut 'url'
+    # ex: nt.add_node(id, label="...", title="...", url="[https://site.com/page](https://site.com/page)")
 
-2. GRAPHE INTERACTIF (CORRECTION DU CLIC)
-Problème critique : Le clic sur un nœud recharge l'app avec une URL interne erronée (/component/streamlit_agraph...). Solution : Utiliser PyVis avec injection JavaScript manuelle. Abandonner streamlit-agraph.
-
-Implémentation technique OBLIGATOIRE :
-Dans modules/audit_geo.py, tu dois générer le graphe comme ceci pour que les liens externes fonctionnent :
-
-Générer le fichier HTML via net.save_graph("temp.html").
-
-Lire le HTML en string.
-
-Injecter ce script JS avant la balise </body> :
-
-JavaScript
-<script type="text/javascript">
-    network.on("click", function (params) {
-        if (params.nodes.length > 0) {
-            var nodeId = params.nodes[0];
-            var node = nodes.get(nodeId);
-            // Ouvre le lien dans un nouvel onglet
-            if (node.url && node.url.startsWith("http")) {
-                window.open(node.url, '_blank');
-            }
+    # 2. Force layout hiérarchique (Organigramme)
+    nt.hrepulsion(node_distance=120, central_gravity=0.0)
+    nt.set_options("""
+    var options = {
+      "layout": {
+        "hierarchical": {
+          "enabled": true,
+          "direction": "UD",
+          "sortMethod": "directed"
         }
-    });
-</script>
-Afficher avec streamlit.components.v1.html(html_content, height=700).
+      }
+    }
+    """)
 
-3. SMART CRAWLER (STOP AUX SPAGHETTIS)
-Problème actuel : Noms de groupes illisibles (?$(102)) et trop de nœuds.
+    # 3. Génération HTML & Injection JS (Le Fix Vital)
+    path = "temp_graph.html"
+    nt.save_graph(path)
+    
+    with open(path, "r", encoding="utf-8") as f:
+        html_content = f.read()
 
-A. Logique de Clustering (Regex)
-Dans core/scraper.py :
+    # Script JS qui intercepte le clic et ouvre l'URL
+    js_click_fix = """
+    <script type="text/javascript">
+        network.on("click", function (params) {
+            if (params.nodes.length > 0) {
+                var nodeId = params.nodes[0];
+                var nodeData = nodes.get(nodeId);
+                // Vérification et ouverture
+                if (nodeData.url && nodeData.url.startsWith("http")) {
+                    window.open(nodeData.url, '_blank');
+                } else {
+                    console.log("URL manquante pour ce noeud");
+                }
+            }
+        });
+    </script>
+    </body>
+    """
+    html_content = html_content.replace("</body>", js_click_fix)
 
-Analyser les URLs. Si un dossier (ex: /offres/) contient > 5 pages :
+    # 4. Rendu final
+    components.html(html_content, height=650, scrolling=False)
+3. FIX DASHBOARD & SAUVEGARDE (Dans modules/audit_geo.py)
+Restructure la page. Si aucun audit n'est chargé, affiche :
 
-Créer un Cluster Virtuel.
+Bouton [📂 Charger un Audit] (Ouvre un tableau des audits GSheets).
 
-Ne scraper que 3 pages de ce groupe.
+Input URL + Bouton Analyser.
 
-Nommage Propre : Le nom du cluster doit être le segment d'URL nettoyé.
+Si un audit est affiché, ajoute une barre d'outils au-dessus du graphe : [💾 Sauvegarder dans GSheets] [✨ Optimiser avec IA]
 
-Mauvais : ?, \d+, groupe_1.
+4. FIX NOMMAGE SCRAPER (Dans core/scraper.py)
+Corrige la regex de clustering.
 
-Bon : /offres/job-123 -> Nom: "OFFRES". (Regex: [a-zA-Z]{3,})
+Logique : Récupérer le premier segment significatif après le domaine.
 
-Si le nom est vide, mettre "DIVERS".
+Nettoyage : Supprimer chiffres et caractères spéciaux.
 
-B. Logs Visuels
-Afficher un st.expander("Journal d'activité", expanded=True) qui montre la progression : [INFO] Cluster détecté : 'OFFRES' (102 pages).
+Exemple : site.com/offres/job-12 -> Cluster "OFFRES".
 
-4. GESTION DES DONNÉES (SAAS)
-Onglet Audit : Doit avoir une barre d'actions en haut :
+Si le nom résultant est vide ou ?, forcer le nom "DIVERS".
 
-[Charger un Audit] (Depuis GSheets).
+ACTION REQUISE
+Exécute ces 4 corrections. Commence par app.py pour la Sidebar, puis modules/audit_geo.py pour le fix PyVis/JS.
 
-[Sauvegarder] (Envoie le JSON compressé dans GSheets).
 
-Paramètres (Vault) : Formulaire sécurisé pour entrer les clés API (Mistral/OpenAI). Les stocker chiffrées dans GSheets ou en session, mais ne plus les demander à chaque fois.
 
-5. ORDRE D'EXÉCUTION POUR LE CODE
-Refais app.py pour garantir la Sidebar.
 
-Corrige core/scraper.py pour avoir des noms de clusters lisibles.
+Une fois le fichier enregistré, lance simplement :
 
-Refais le rendu graphique dans modules/audit_geo.py avec le Fix JavaScript pour les liens.
-
-Ajoute les boutons Save/Load connectés à GSheets.
+> `claude "Lis instructions_claude.md et exécute scrupuleusement les 4 étapes de réparation. C'est urgent pour débloquer l'interface."`
