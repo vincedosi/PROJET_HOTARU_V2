@@ -1,441 +1,71 @@
-/* ============================================
-   HOTARU - Japanese Zen / Flat Design
-   Colors: Pure White (#FFFFFF) & Pure Black (#000000)
-   Accent: Firefly Yellow (#FFD700) for active elements only
-   ============================================ */
-
-/* === GLOBAL RESET === */
-* {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-}
-
-/* === REMOVE STREAMLIT DEFAULT STYLES === */
-/* Remove the red/colored header bar */
-header[data-testid="stHeader"] {
-    background-color: #FFFFFF !important;
-    border-bottom: 1px solid #000000;
-}
-
-/* Hide Streamlit branding */
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-header {visibility: hidden;}
-
-/* Remove deploy button */
-.stDeployButton {display: none;}
-
-/* === MAIN CONTAINER === */
-.main .block-container {
-    background-color: #FFFFFF !important;
-    padding-top: 2rem;
-    padding-bottom: 2rem;
-    max-width: 1200px;
-}
-
-[data-testid="stAppViewContainer"] {
+/* === 1. FOND BLANC PUR PARTOUT === */
+.stApp, .main, [data-testid="stAppViewContainer"] {
     background-color: #FFFFFF !important;
 }
 
-[data-testid="stApp"] {
-    background-color: #FFFFFF !important;
+/* === 2. SUPPRESSION TOTALE DE LA SIDEBAR === */
+/* C'est ici que la magie opère pour supprimer le volet latéral qui bug */
+[data-testid="stSidebar"] { display: none !important; }
+[data-testid="collapsedControl"] { display: none !important; }
+
+/* === 3. NAVIGATION HORIZONTALE (TOP BAR) === */
+div[data-testid="stRadio"] {
+    background-color: #ffffff;
+    padding: 10px 0;
+    margin-bottom: 0px;
+    width: 100%;
 }
 
-/* === SIDEBAR === */
-[data-testid="stSidebar"] {
-    background-color: #FFFFFF !important;
-    border-right: 1px solid #000000;
+/* Style des onglets (Labels) */
+div[data-testid="stRadio"] > label {
+    background-color: transparent;
+    color: #000000 !important; /* Texte noir forcé */
+    font-weight: 600;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 10px 20px;
+    border-radius: 6px;
+    transition: background-color 0.2s;
 }
 
-[data-testid="stSidebar"] > div:first-child {
-    background-color: #FFFFFF !important;
+div[data-testid="stRadio"] > label:hover {
+    background-color: #f5f5f5;
 }
 
-/* Sidebar content */
-.css-1d391kg, .css-1lcbmhc {
-    background-color: #FFFFFF !important;
-}
-
-section[data-testid="stSidebar"] {
-    background-color: #FFFFFF !important;
-    width: 280px !important;
-}
-
-section[data-testid="stSidebar"] > div {
-    background-color: #FFFFFF !important;
-}
-
-/* === BUTTONS - Outline Black Style === */
+/* === 4. BOUTONS ZEN (NOIR & BLANC) === */
 .stButton > button {
+    border: 1px solid #000000 !important;
+    border-radius: 4px !important;
     background-color: #FFFFFF !important;
     color: #000000 !important;
-    border: 1px solid #000000 !important;
-    border-radius: 9999px !important;
-    padding: 0.5rem 2rem !important;
-    font-weight: 500 !important;
-    transition: all 0.2s ease !important;
+    font-weight: 500;
     box-shadow: none !important;
+    padding: 0.5rem 1rem;
 }
 
 .stButton > button:hover {
     background-color: #000000 !important;
     color: #FFFFFF !important;
-    border: 1px solid #000000 !important;
-    box-shadow: none !important;
+    border-color: #000000 !important;
 }
 
-.stButton > button:focus {
-    box-shadow: none !important;
-    outline: none !important;
-}
-
-.stButton > button:active {
-    background-color: #000000 !important;
-    color: #FFFFFF !important;
-}
-
-/* Active state button (with yellow accent) */
-.stButton > button[data-active="true"],
-.active-button > button {
-    background-color: #FFFFFF !important;
-    color: #000000 !important;
-    border: 2px solid #FFD700 !important;
-}
-
-/* === TEXT INPUTS - Material Minimal Style (Bottom Border Only) === */
+/* === 5. INPUTS MINIMALISTES === */
 .stTextInput > div > div > input {
-    background-color: transparent !important;
-    border: none !important;
-    border-bottom: 1px solid #000000 !important;
-    border-radius: 0 !important;
-    padding: 0.75rem 0 !important;
-    font-size: 1rem !important;
-    color: #000000 !important;
-    box-shadow: none !important;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    border-bottom: 1px solid #cccccc;
+    background-color: transparent;
+    border-radius: 0;
+    color: #000000;
 }
 
 .stTextInput > div > div > input:focus {
-    border-bottom: 2px solid #000000 !important;
-    box-shadow: none !important;
-    outline: none !important;
+    box-shadow: none;
+    border-bottom: 2px solid #FFD700; /* Ligne Or au focus */
 }
 
-.stTextInput > div > div > input::placeholder {
-    color: #000000 !important;
-    opacity: 0.5 !important;
-}
-
-/* Text input label */
-.stTextInput > label {
-    color: #000000 !important;
-    font-weight: 400 !important;
-    font-size: 0.875rem !important;
-}
-
-/* === PASSWORD INPUT === */
-.stTextInput input[type="password"] {
-    background-color: transparent !important;
-    border: none !important;
-    border-bottom: 1px solid #000000 !important;
-    border-radius: 0 !important;
-}
-
-/* === SELECT BOX === */
-.stSelectbox > div > div {
-    background-color: #FFFFFF !important;
-    border: 1px solid #000000 !important;
-    border-radius: 9999px !important;
-}
-
-.stSelectbox > div > div:hover {
-    border-color: #000000 !important;
-}
-
-/* === METRIC CARDS === */
-[data-testid="stMetric"] {
-    background-color: #FFFFFF !important;
-    border: 1px solid #000000 !important;
-    border-radius: 0 !important;
-    padding: 1.5rem !important;
-}
-
-[data-testid="stMetricValue"] {
-    color: #000000 !important;
-    font-weight: 600 !important;
-}
-
-[data-testid="stMetricLabel"] {
-    color: #000000 !important;
-}
-
-/* === EXPANDER === */
-.streamlit-expanderHeader {
-    background-color: #FFFFFF !important;
-    border: 1px solid #000000 !important;
-    color: #000000 !important;
-}
-
-.streamlit-expanderContent {
-    border: 1px solid #000000 !important;
-    border-top: none !important;
-}
-
-/* === TABS === */
-.stTabs [data-baseweb="tab-list"] {
-    gap: 0 !important;
-    background-color: #FFFFFF !important;
-    border-bottom: 1px solid #000000 !important;
-}
-
-.stTabs [data-baseweb="tab"] {
-    background-color: #FFFFFF !important;
-    color: #000000 !important;
-    border: none !important;
-    border-bottom: 2px solid transparent !important;
-    padding: 1rem 2rem !important;
-}
-
-.stTabs [data-baseweb="tab"]:hover {
-    color: #000000 !important;
-    background-color: #FFFFFF !important;
-}
-
-.stTabs [aria-selected="true"] {
-    background-color: #FFFFFF !important;
-    color: #000000 !important;
-    border-bottom: 2px solid #FFD700 !important;
-}
-
-/* === DATAFRAMES === */
-.stDataFrame {
-    border: 1px solid #000000 !important;
-}
-
-.stDataFrame [data-testid="stDataFrameResizable"] {
-    border: none !important;
-}
-
-/* === DIVIDER === */
-hr {
-    border-color: #000000 !important;
-    border-width: 1px !important;
-    opacity: 1 !important;
-}
-
-/* === MARKDOWN TEXT === */
-.stMarkdown {
-    color: #000000 !important;
-}
-
-.stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
-.stMarkdown h4, .stMarkdown h5, .stMarkdown h6 {
-    color: #000000 !important;
-    font-weight: 600 !important;
-}
-
-.stMarkdown p {
-    color: #000000 !important;
-}
-
-.stMarkdown a {
-    color: #000000 !important;
-    text-decoration: underline !important;
-}
-
-.stMarkdown a:hover {
-    color: #FFD700 !important;
-}
-
-/* === SPINNER === */
-.stSpinner > div {
-    border-top-color: #000000 !important;
-}
-
-/* === SUCCESS/ERROR/WARNING MESSAGES === */
-.stSuccess {
-    background-color: #FFFFFF !important;
-    border: 1px solid #000000 !important;
-    color: #000000 !important;
-}
-
-.stError {
-    background-color: #FFFFFF !important;
-    border: 1px solid #000000 !important;
-    color: #000000 !important;
-}
-
-.stWarning {
-    background-color: #FFFFFF !important;
-    border: 1px solid #000000 !important;
-    color: #000000 !important;
-}
-
-.stInfo {
-    background-color: #FFFFFF !important;
-    border: 1px solid #000000 !important;
-    color: #000000 !important;
-}
-
-/* === CHECKBOX === */
-.stCheckbox > label > div[data-testid="stMarkdownContainer"] {
-    color: #000000 !important;
-}
-
-.stCheckbox > label > div:first-child {
-    border-color: #000000 !important;
-}
-
-/* === SLIDER === */
-.stSlider > div > div > div {
-    background-color: #000000 !important;
-}
-
-.stSlider > div > div > div > div {
-    background-color: #FFD700 !important;
-}
-
-/* === PROGRESS BAR === */
-.stProgress > div > div > div {
-    background-color: #000000 !important;
-}
-
-/* === CUSTOM CLASSES FOR NAVIGATION === */
-/* Active menu item indicator */
-.nav-item-active {
-    border-left: 3px solid #FFD700 !important;
-    background-color: #FFFFFF !important;
-}
-
-/* Logo container */
-.logo-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 2rem 1rem;
-    border-bottom: 1px solid #000000;
-    margin-bottom: 2rem;
-}
-
-/* User profile section */
-.user-profile {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding: 1rem;
-    border-top: 1px solid #000000;
-    background-color: #FFFFFF;
-}
-
-/* === GRAPH CONTAINER (PyVis/Agraph) === */
-.graph-container {
-    background-color: #FFFFFF !important;
-    border: 1px solid #000000 !important;
-}
-
-iframe {
-    background-color: #FFFFFF !important;
-}
-
-/* === SCROLLBAR === */
-::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-}
-
-::-webkit-scrollbar-track {
-    background: #FFFFFF;
-}
-
-::-webkit-scrollbar-thumb {
-    background: #000000;
-    border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: #000000;
-}
-
-/* === SIDEBAR NAVIGATION BUTTONS === */
-.sidebar-nav-button > button {
-    width: 100% !important;
-    text-align: left !important;
-    justify-content: flex-start !important;
-    padding: 0.75rem 1rem !important;
-    margin-bottom: 0.25rem !important;
-    border-radius: 0 !important;
-    border: none !important;
-    border-left: 3px solid transparent !important;
-    background-color: #FFFFFF !important;
-}
-
-.sidebar-nav-button > button:hover {
-    background-color: #FFFFFF !important;
-    color: #000000 !important;
-    border-left: 3px solid #000000 !important;
-}
-
-.sidebar-nav-button-active > button {
-    border-left: 3px solid #FFD700 !important;
-    background-color: #FFFFFF !important;
-    color: #000000 !important;
-}
-
-/* === LOGIN PAGE === */
-.login-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 80vh;
-    padding: 2rem;
-}
-
-.login-logo {
-    margin-bottom: 3rem;
-}
-
-.login-form {
-    width: 100%;
-    max-width: 320px;
-}
-
-/* === OVERLAY PANEL (Right side) === */
-.overlay-panel {
-    position: fixed;
-    top: 0;
-    right: 0;
-    width: 400px;
-    height: 100vh;
-    background-color: #FFFFFF;
-    border-left: 1px solid #000000;
-    padding: 2rem;
-    z-index: 1000;
-    overflow-y: auto;
-}
-
-/* === SCORE BADGES === */
-.score-badge {
-    display: inline-block;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    margin-right: 0.5rem;
-}
-
-.score-good {
-    background-color: #22C55E;
-}
-
-.score-medium {
-    background-color: #F97316;
-}
-
-.score-bad {
-    background-color: #EF4444;
-}
-
-/* === WHITESPACE UTILITY === */
-.spacer-sm { height: 1rem; }
-.spacer-md { height: 2rem; }
-.spacer-lg { height: 4rem; }
-.spacer-xl { height: 6rem; }
+/* === 6. NETTOYAGE GENERAL === */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
