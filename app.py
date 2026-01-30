@@ -344,11 +344,10 @@ def main():
     # Inject custom CSS
     inject_custom_css()
 
-    # Check authentication status (skip for demo mode)
+    # Check authentication status
     is_authenticated = st.session_state.get('authenticated', False)
-    demo_mode = True  # Set to False to require login
 
-    if not is_authenticated and not demo_mode:
+    if not is_authenticated:
         render_login_page()
     else:
         # Show main application with SaaS sidebar
