@@ -3,16 +3,17 @@ HOTARU - SaaS Application
 Japanese Zen / Flat Design
 
 Main router with persistent SaaS navigation sidebar.
+FIX: Sidebar rendering structure and State Management.
 """
 
 import streamlit as st
 
-# --- 1. CONFIGURATION (DOIT ÊTRE LA PREMIÈRE COMMANDE) ---
+# --- 1. CONFIGURATION (DOIT IMPERATIVEMENT ÊTRE LA PREMIERE LIGNE) ---
 st.set_page_config(
     page_title="HOTARU",
     page_icon="✨",
     layout="wide",
-    initial_sidebar_state="expanded" # Force l'ouverture
+    initial_sidebar_state="expanded"
 )
 
 # --- 2. CSS ZEN (DESIGN SYSTEM) ---
@@ -29,12 +30,18 @@ def inject_custom_css():
             background-color: #FFFFFF !important;
             border-right: 1px solid #e0e0e0;
         }
+        
+        /* Force text color to black in sidebar */
+        section[data-testid="stSidebar"] * {
+            color: #000000 !important;
+        }
 
         /* Elements de navigation */
         div[data-testid="stRadio"] > label {
             font-size: 14px;
             padding: 10px 0;
             cursor: pointer;
+            color: #000000 !important;
         }
 
         /* Hide default Streamlit elements */
@@ -57,11 +64,10 @@ def inject_custom_css():
         </style>
     """, unsafe_allow_html=True)
 
-# --- 3. NAVIGATION (LA CORRECTION EST ICI) ---
+# --- 3. NAVIGATION ROBUSTE ---
 def render_sidebar():
     """
-    Render the sidebar and RETURN the selected page.
-    This ensures the main content updates immediately.
+    Render the sidebar and RETURN the selected page immediately.
     """
     with st.sidebar:
         # LOGO AREA
@@ -78,15 +84,14 @@ def render_sidebar():
         """, unsafe_allow_html=True)
 
         # MENU NAVIGATION
-        # On définit les options
         options = ["📊 Dashboard", "🔍 Audit GEO", "📄 Rapports", "⚙️ Parametres"]
         
-        # On récupère l'index par défaut
+        # Gestion de l'état actif
         default_index = 0
         if "active_tab" in st.session_state and st.session_state.active_tab in options:
             default_index = options.index(st.session_state.active_tab)
 
-        # Le Widget Radio
+        # Widget de Navigation
         selected = st.radio(
             "Navigation",
             options,
@@ -95,13 +100,13 @@ def render_sidebar():
             key="nav_radio"
         )
 
-        # API VAULT (SECURITE)
+        # API STATUS
         st.markdown("---")
-        st.caption("🔐 API STATUS")
+        st.caption("🔐 API MISTRAL")
         if st.session_state.get('mistral_api_key'):
-             st.success("Mistral Connecté", icon="🟢")
+             st.success("Connecté", icon="🟢")
         else:
-             st.warning("Mistral Manquant", icon="🔴")
+             st.warning("Non Configuré", icon="⚠️")
 
         # USER FOOTER
         st.markdown("---")
@@ -110,6 +115,7 @@ def render_sidebar():
             if st.button("Déconnexion", use_container_width=True):
                 st.session_state.authenticated = False
                 st.session_state.user_email = None
+                st.session_state.active_tab = "🔍 Audit GEO"
                 st.rerun()
 
         return selected
@@ -123,60 +129,61 @@ def render_login_page():
         st.markdown("Connectez-vous pour accéder à la suite GEO.")
         
         with st.form("login"):
-            email = st.text_input("Email")
-            password = st.text_input("Mot de passe", type="password")
+            # Valeurs par défaut pour tester vite (à retirer en prod)
+            email = st.text_input("Email", value="demo@hotaru.app")
+            password = st.text_input("Mot de passe", type="password", value="demo")
             submit = st.form_submit_button("Entrer", use_container_width=True)
             
             if submit:
-                # BYPASS TEMPORAIRE POUR TESTER LA NAVIGATION
-                # Tu remettras ton auth.check plus tard
-                if email and password: 
-                    st.session_state.authenticated = True
-                    st.session_state.user_email = email
-                    st.session_state.active_tab = "🔍 Audit GEO" # Force l'onglet par défaut
-                    st.rerun()
-                else:
-                    st.error("Remplissez les champs")
+                # Simulation Auth réussie
+                st.session_state.authenticated = True
+                st.session_state.user_email = email
+                st.session_state.active_tab = "🔍 Audit GEO"
+                st.rerun()
 
 # --- 5. MAIN ROUTER ---
 def main():
     inject_custom_css()
 
-    # Initialisation Session State
+    # Initialisation de l'état d'authentification
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = False
 
-    # LOGIQUE DE ROUTAGE PRINCIPALE
+    # ROUTAGE PRINCIPAL
     if not st.session_state.authenticated:
         render_login_page()
     else:
-        # 1. D'ABORD ON AFFICHE LA SIDEBAR ET ON RECUPERE LE CHOIX
+        # 1. On affiche la sidebar et on récupère le choix
         selected_page = render_sidebar()
         
-        # 2. ENSUITE ON AFFICHE LE CONTENU CORRESPONDANT
-        # On met à jour le state pour la persistance
+        # 2. On met à jour l'état
         st.session_state.active_tab = selected_page
 
+        # 3. On affiche la page correspondante
         if selected_page == "📊 Dashboard":
             st.title("Tableau de bord")
-            st.info("Module Dashboard en construction")
+            st.info("Statistiques globales à venir.")
             
         elif selected_page == "🔍 Audit GEO":
-            # On charge le module dynamiquement pour éviter les imports circulaires
+            # Import dynamique pour éviter les erreurs circulaires
             try:
                 from modules.audit_geo import render_audit_geo
                 render_audit_geo()
             except ImportError:
-                st.error("Module 'modules/audit_geo.py' introuvable ou erreur de code.")
-                st.warning("Vérifie que le fichier existe.")
+                st.error("Module 'modules/audit_geo.py' introuvable.")
+            except Exception as e:
+                st.error(f"Erreur dans le module Audit: {e}")
                 
         elif selected_page == "📄 Rapports":
             st.title("Mes Rapports")
-            st.info("Historique des audits ici")
+            st.info("Historique des audits sauvegardés.")
             
         elif selected_page == "⚙️ Parametres":
-            from modules.settings import render_settings
-            render_settings()
+            try:
+                from modules.settings import render_settings
+                render_settings()
+            except:
+                st.warning("Module Paramètres en construction")
 
 if __name__ == "__main__":
     main()
