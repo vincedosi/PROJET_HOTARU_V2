@@ -1,189 +1,184 @@
 """
 HOTARU - SaaS Application
-Japanese Zen / Flat Design
-
-Main router with persistent SaaS navigation sidebar.
-FIX: Sidebar rendering structure and State Management.
+NAVIGATION TOP-BAR (Onglets)
+Pour résoudre définitivement le problème de sidebar.
 """
 
 import streamlit as st
 
-# --- 1. CONFIGURATION (DOIT IMPERATIVEMENT ÊTRE LA PREMIERE LIGNE) ---
+# --- 1. CONFIGURATION (Première ligne obligatoire) ---
 st.set_page_config(
     page_title="HOTARU",
     page_icon="✨",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed" # On cache la sidebar volontairement
 )
 
 # --- 2. CSS ZEN (DESIGN SYSTEM) ---
 def inject_custom_css():
     st.markdown("""
         <style>
-        /* Force white background everywhere */
+        /* Fond Blanc Partout */
         .stApp, .main, [data-testid="stAppViewContainer"] {
             background-color: #FFFFFF !important;
         }
 
-        /* Sidebar styling - Blanc pur et bordure fine */
-        section[data-testid="stSidebar"] {
-            background-color: #FFFFFF !important;
-            border-right: 1px solid #e0e0e0;
+        /* Masquer la sidebar native et le bouton hamburger */
+        [data-testid="stSidebar"] { display: none; }
+        [data-testid="collapsedControl"] { display: none; }
+        
+        /* Style du Menu Horizontal (Onglets Radio) */
+        div[role="radiogroup"] {
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+            width: 100%;
+            background-color: #ffffff;
+            border-bottom: 1px solid #000000;
+            padding-bottom: 10px;
         }
         
-        /* Force text color to black in sidebar */
-        section[data-testid="stSidebar"] * {
-            color: #000000 !important;
-        }
-
-        /* Elements de navigation */
         div[data-testid="stRadio"] > label {
-            font-size: 14px;
-            padding: 10px 0;
+            background-color: #ffffff;
+            padding: 10px 20px;
+            border-radius: 5px;
+            margin: 0 5px;
             cursor: pointer;
-            color: #000000 !important;
+            border: 1px solid transparent;
+            font-weight: 500;
         }
 
-        /* Hide default Streamlit elements */
+        /* Cacher les éléments déco Streamlit */
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
         header {visibility: hidden;}
-
-        /* Buttons Zen */
+        
+        /* Boutons Zen */
         .stButton > button {
             border: 1px solid #000000 !important;
-            border-radius: 4px !important;
             background-color: #FFFFFF !important;
             color: #000000 !important;
-            transition: all 0.2s;
+            border-radius: 0px !important;
         }
         .stButton > button:hover {
             background-color: #f0f0f0 !important;
-            border-color: #000000 !important;
         }
         </style>
     """, unsafe_allow_html=True)
 
-# --- 3. NAVIGATION ROBUSTE ---
-def render_sidebar():
-    """
-    Render the sidebar and RETURN the selected page immediately.
-    """
-    with st.sidebar:
-        # LOGO AREA
+# --- 3. EN-TÊTE & NAVIGATION ---
+def render_header():
+    """Affiche le Logo et le Menu de Navigation en haut."""
+    
+    # 1. LOGO CENTRÉ
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
         st.markdown("""
-            <div style="text-align: center; padding: 1rem 0; margin-bottom: 2rem;">
-                <div style="font-size: 1.8rem; font-weight: 700; letter-spacing: 0.1em;">
+            <div style="text-align: center; padding-top: 1rem; padding-bottom: 0.5rem;">
+                <h1 style="color: black; margin:0; font-size: 2rem;">
                     <span style="color: #FFD700;">●</span> HOTARU
-                </div>
-                <div style="font-size: 0.7rem; color: #666; margin-top: 5px;">
-                    蛍 · SEO Audit Suite
-                </div>
+                </h1>
+                <p style="color: #666; font-size: 0.8rem; margin:0;">Architecture & SEO Intelligence</p>
             </div>
-            <hr style="margin: 0 0 20px 0; border: none; border-bottom: 1px solid #eee;">
         """, unsafe_allow_html=True)
 
-        # MENU NAVIGATION
-        options = ["📊 Dashboard", "🔍 Audit GEO", "📄 Rapports", "⚙️ Parametres"]
-        
-        # Gestion de l'état actif
-        default_index = 0
-        if "active_tab" in st.session_state and st.session_state.active_tab in options:
-            default_index = options.index(st.session_state.active_tab)
-
-        # Widget de Navigation
+    # 2. NAVIGATION HORIZONTALE (Au lieu de la sidebar)
+    st.write("") # Spacer
+    
+    # Options du menu
+    options = ["📊 Dashboard", "🔍 Audit GEO", "📄 Rapports", "⚙️ Config"]
+    
+    # Icônes pour faire joli
+    icons = {"📊 Dashboard": "bar-chart", "🔍 Audit GEO": "search", "📄 Rapports": "file-text", "⚙️ Config": "gear"}
+    
+    # On utilise un st.radio horizontal centré
+    # C'est le moyen le plus robuste de naviguer
+    col_nav1, col_nav2, col_nav3 = st.columns([1, 4, 1])
+    with col_nav2:
         selected = st.radio(
-            "Navigation",
+            "Menu",
             options,
-            index=default_index,
+            index=0 if "active_tab" not in st.session_state else options.index(st.session_state.active_tab),
+            horizontal=True,
             label_visibility="collapsed",
-            key="nav_radio"
+            key="top_nav"
         )
+    
+    st.markdown("---") # Ligne de séparation
+    return selected
 
-        # API STATUS
-        st.markdown("---")
-        st.caption("🔐 API MISTRAL")
-        if st.session_state.get('mistral_api_key'):
-             st.success("Connecté", icon="🟢")
-        else:
-             st.warning("Non Configuré", icon="⚠️")
-
-        # USER FOOTER
-        st.markdown("---")
-        if st.session_state.get('user_email'):
-            st.caption(f"👤 {st.session_state.user_email}")
-            if st.button("Déconnexion", use_container_width=True):
-                st.session_state.authenticated = False
-                st.session_state.user_email = None
-                st.session_state.active_tab = "🔍 Audit GEO"
-                st.rerun()
-
-        return selected
-
-# --- 4. LOGIN PAGE ---
+# --- 4. PAGE DE CONNEXION ---
 def render_login_page():
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
-        st.markdown("<br><br><br>", unsafe_allow_html=True)
-        st.title("HOTARU 3.0")
-        st.markdown("Connectez-vous pour accéder à la suite GEO.")
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center; color: black;'>Connexion</h2>", unsafe_allow_html=True)
         
         with st.form("login"):
-            # Valeurs par défaut pour tester vite (à retirer en prod)
             email = st.text_input("Email", value="demo@hotaru.app")
             password = st.text_input("Mot de passe", type="password", value="demo")
             submit = st.form_submit_button("Entrer", use_container_width=True)
             
             if submit:
-                # Simulation Auth réussie
+                # Bypass temporaire pour que tu puisses entrer
                 st.session_state.authenticated = True
                 st.session_state.user_email = email
                 st.session_state.active_tab = "🔍 Audit GEO"
                 st.rerun()
 
-# --- 5. MAIN ROUTER ---
+# --- 5. ROUTEUR PRINCIPAL ---
 def main():
     inject_custom_css()
 
-    # Initialisation de l'état d'authentification
+    # Init Session
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = False
+    if 'active_tab' not in st.session_state:
+        st.session_state.active_tab = "🔍 Audit GEO"
 
-    # ROUTAGE PRINCIPAL
+    # LOGIQUE
     if not st.session_state.authenticated:
         render_login_page()
     else:
-        # 1. On affiche la sidebar et on récupère le choix
-        selected_page = render_sidebar()
-        
-        # 2. On met à jour l'état
+        # AFFICHER HEADER + NAV (Toujours visible)
+        selected_page = render_header()
         st.session_state.active_tab = selected_page
 
-        # 3. On affiche la page correspondante
+        # ROUTAGE CONTENU
         if selected_page == "📊 Dashboard":
-            st.title("Tableau de bord")
-            st.info("Statistiques globales à venir.")
+            st.info("🚧 Dashboard en construction - Passez à l'onglet Audit")
             
         elif selected_page == "🔍 Audit GEO":
-            # Import dynamique pour éviter les erreurs circulaires
             try:
                 from modules.audit_geo import render_audit_geo
                 render_audit_geo()
             except ImportError:
-                st.error("Module 'modules/audit_geo.py' introuvable.")
+                st.error("⚠️ Fichier 'modules/audit_geo.py' introuvable.")
+                st.code("Vérifie que le dossier 'modules' existe bien.")
             except Exception as e:
-                st.error(f"Erreur dans le module Audit: {e}")
+                st.error(f"Erreur dans le module : {e}")
                 
         elif selected_page == "📄 Rapports":
-            st.title("Mes Rapports")
-            st.info("Historique des audits sauvegardés.")
+            st.write("Historique des rapports (Vide pour l'instant)")
             
-        elif selected_page == "⚙️ Parametres":
-            try:
-                from modules.settings import render_settings
-                render_settings()
-            except:
-                st.warning("Module Paramètres en construction")
+        elif selected_page == "⚙️ Config":
+            # Petit panneau de config rapide
+            st.subheader("Configuration Rapide")
+            
+            # Gestion Clé API simplifiée
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.caption("Clé API Mistral")
+                key_input = st.text_input("Clé", type="password", key="settings_key_input")
+                if st.button("Sauvegarder Clé"):
+                    st.session_state.mistral_api_key = key_input
+                    st.success("Clé enregistrée !")
+            
+            with col_b:
+                st.caption("Compte")
+                if st.button("Déconnexion"):
+                    st.session_state.authenticated = False
+                    st.rerun()
 
 if __name__ == "__main__":
     main()
