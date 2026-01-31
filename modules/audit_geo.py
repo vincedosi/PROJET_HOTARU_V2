@@ -1,11 +1,7 @@
 """
-HOTARU - Audit GEO Module (v0.9.7 - POLISHED)
-Style: Organique & Robuste.
-Améliorations :
-1. Nettoyage intelligent des labels gris (Slug vs Titre).
-2. Les dossiers jaunes sont maintenant cliquables (URL reconstruite).
+HOTARU - Audit GEO Module (v0.9.9 - FULL VERSIONING)
+Sauvegarde l'intégralité des données pour une démo persistante.
 """
-
 import streamlit as st
 import networkx as nx
 from pyvis.network import Network 
@@ -13,254 +9,143 @@ import streamlit.components.v1 as components
 from core.database import AuditDatabase
 from urllib.parse import urlparse
 import re
+import json
 
-try:
-    from core.scraping import SmartScraper
-except ImportError as e:
-    st.error(f"Erreur d'import critique : {e}")
-    st.stop()
+# --- NETTOYAGE LABELS ---
+def get_smart_label(page_title, page_url, domain_name):
+    domain_clean = domain_name.split('.')[0]
+    parts = re.split(r' [-|:] ', page_title)
+    best_candidate = ""
+    for part in parts:
+        part = part.strip()
+        if domain_clean.lower() in part.lower(): continue
+        if len(part) > len(best_candidate): best_candidate = part
+    if len(best_candidate) < 4:
+        path = urlparse(page_url).path.rstrip('/')
+        slug = path.split('/')[-1] if '/' in path else path
+        best_candidate = slug.replace('-', ' ').replace('_', ' ').capitalize()
+    return best_candidate[:25] + "..." if len(best_candidate) > 25 else best_candidate
 
-# --- INIT ---
-def init_session_state():
-    if 'audit_results' not in st.session_state: st.session_state['audit_results'] = None
-    if 'current_graph' not in st.session_state: st.session_state['current_graph'] = None
-    if 'current_stats' not in st.session_state: st.session_state['current_stats'] = None
+# --- SCORE GEO (LOGIQUE DÉMO) ---
+def get_geo_score(page_title, page_url):
+    score = 100
+    reasons = []
+    if len(page_title) < 15: 
+        score -= 20
+        reasons.append("Titre court")
+    if len(page_url) > 70:
+        score -= 15
+        reasons.append("URL profonde")
+    return max(20, score), reasons
 
-# --- RENDU GRAPHIQUE ROBUSTE ---
-def render_interactive_graph(G):
-    if G is None or len(G.nodes) == 0:
-        st.warning("⚠️ Graphe vide.")
-        return
-
-    # Config Full Screen
-    nt = Network(height="800px", width="100%", bgcolor="#ffffff", font_color="#333333")
-    nt.from_nx(G)
-
-    # PHYSIQUE ORGANIQUE (Force Atlas 2)
-    nt.set_options("""
-    var options = {
-      "nodes": {
-        "shape": "dot",
-        "font": { "size": 14, "face": "Roboto" },
-        "borderWidth": 1,
-        "shadow": true
-      },
-      "edges": {
-        "color": { "color": "#cfd8dc", "highlight": "#000000" },
-        "width": 1,
-        "smooth": { "type": "continuous" }
-      },
-      "physics": {
-        "forceAtlas2Based": {
-          "gravitationalConstant": -80,
-          "centralGravity": 0.005,
-          "springLength": 120,
-          "springConstant": 0.08,
-          "damping": 0.4
-        },
-        "maxVelocity": 40,
-        "minVelocity": 0.1,
-        "solver": "forceAtlas2Based"
-      },
-      "interaction": {
-        "hover": true,
-        "navigationButtons": true,
-        "zoomView": true
-      }
-    }
-    """)
-
-    try:
-        path = "temp_graph.html"
-        nt.save_graph(path)
-        with open(path, "r", encoding="utf-8") as f:
-            html_content = f.read()
-
-        # JS : Click Handler Amélioré (Gère aussi les dossiers)
-        js_fix = """
-        <script type="text/javascript">
-            network.once("stabilizationIterationsDone", function() {
-                network.fit();
-            });
-            setTimeout(function() { network.fit(); }, 2000);
-            
-            network.on("click", function (params) {
-                if (params.nodes.length > 0) {
-                    var nodeId = params.nodes[0];
-                    var nodeData = nodes.get(nodeId);
-                    // On ouvre si une URL est attachée (Page ou Dossier)
-                    if (nodeData.url && nodeData.url.startsWith("http")) {
-                        window.open(nodeData.url, '_blank');
-                    }
-                }
-            });
-        </script>
-        </body>
-        """
-        html_content = html_content.replace("</body>", js_fix)
-        components.html(html_content, height=850, scrolling=False)
-        
-    except Exception as e:
-        st.error(f"Erreur d'affichage : {e}")
-
-# --- FONCTION NETTOYAGE LABEL ---
-def get_smart_label(page_title, page_url, site_name):
-    """Choisit le meilleur label entre le Titre et le Slug URL."""
-    
-    # 1. Nettoyage du nom de domaine dans le titre
-    clean_title = page_title.lower().replace(site_name.lower(), "").strip()
-    clean_title = re.sub(r'[-|_]\s*$', '', clean_title).strip() # Retire les tirets de fin
-    
-    # 2. Si le titre est vide ou trop court après nettoyage, on prend le SLUG
-    if len(clean_title) < 3:
-        # On prend le dernier bout de l'URL
-        slug = page_url.rstrip('/').split('/')[-1]
-        slug = slug.replace('-', ' ').replace('_', ' ').capitalize()
-        # Si le slug est un chiffre ou vide (ex: index.php), on garde un truc générique
-        if not slug or slug.isdigit():
-            return "Page Info"
-        return slug[:20]
-
-    return page_title[:20] + ".." if len(page_title) > 20 else page_title
-
-# --- CONSTRUCTION DU GRAPHE ---
-def build_pro_graph(site_url, pages, clusters):
+# --- BUILDER DU GRAPHE ---
+def build_pro_graph(site_url, pages, clusters, mode="structure"):
     G = nx.DiGraph()
     domain = urlparse(site_url).netloc.replace('www.', '')
     base_url_clean = site_url.rstrip('/')
     
-    # 1. RACINE
-    G.add_node("root", 
-               label=domain, 
-               title="Page d'accueil", 
-               url=site_url, # La racine est cliquable
-               color="#212121", 
-               size=35,
-               shape="dot",
-               font={'color': 'black', 'size': 18, 'face': 'Arial', 'vadjust': -40})
+    # RACINE
+    G.add_node("root", label=domain, title="Racine", url=site_url, color="#212121", size=30)
     
-    # 2. DOSSIERS (CLUSTERS)
     for c in clusters:
-        c_name = c['name']
-        c_count = c['count']
-        c_id = f"group_{c_name}"
+        c_id = f"group_{c['name']}"
+        G.add_node(c_id, label=c['name'].capitalize(), color="#FFD700", size=20)
+        G.add_edge("root", c_id)
         
-        # Reconstruction URL Dossier (Tentative)
-        # Ex: site.com + / + metiers
-        folder_url = f"{base_url_clean}/{c_name}"
-        
-        # Label Dossier (Capitalize)
-        folder_label = c_name.capitalize().replace('-', ' ')
-        
-        G.add_node(c_id, 
-                   label=f"{folder_label} ({c_count})", 
-                   title=f"Dossier : {folder_url}", # Tooltip
-                   url=folder_url, # REND LE DOSSIER CLIQUABLE !
-                   color="#FFD700", 
-                   shape="dot", 
-                   size=25,
-                   font={'size': 14, 'face': 'Arial'})
-        
-        G.add_edge("root", c_id, color="#90a4ae", width=1.5)
-        
-        # 3. PAGES (FEUILLES)
-        MAX_LEAVES = 12 # Légère augmentation
-        visible_pages = c['samples'][:MAX_LEAVES]
-        
-        for p in visible_pages:
+        for p in c['samples'][:15]: # Limite pour fluidité
             p_id = p['url']
+            lbl = get_smart_label(p['title'], p['url'], domain)
             
-            # --- LOGIQUE INTELLIGENTE DES LABELS ---
-            smart_lbl = get_smart_label(p['title'], p['url'], domain)
-            
-            G.add_node(p_id, 
-                       label=smart_lbl, 
-                       title=p['title'], # Le titre complet reste au survol
-                       url=p['url'], 
-                       shape="dot", 
-                       size=8, 
-                       color="#78909c") # Gris Bleu
-            
-            G.add_edge(c_id, p_id, color="#eceff1")
-            
-        # Nœud "Autres"
-        if c_count > MAX_LEAVES:
-            more_id = f"{c_id}_more"
-            hidden = c_count - MAX_LEAVES
-            G.add_node(more_id, 
-                       label=f"+ {hidden}", 
-                       shape="dot", 
-                       size=5,
-                       color="#e0e0e0")
-            G.add_edge(c_id, more_id, style="dashed")
+            if mode == "score":
+                score, reasons = get_geo_score(p['title'], p['url'])
+                color = "#4caf50" if score >= 80 else ("#ff9800" if score >= 50 else "#f44336")
+                tooltip = f"GEO Score: {score}/100\n" + "\n".join(reasons)
+            else:
+                color = "#78909c"
+                tooltip = p['title']
 
+            G.add_node(p_id, label=lbl, title=tooltip, url=p['url'], size=10, color=color)
+            G.add_edge(c_id, p_id)
     return G
 
-# --- UI ---
+# --- UI PRINCIPALE ---
 def render_audit_geo():
-    init_session_state()
     st.markdown("## 🔍 Audit & Cartographie")
-    
     db = AuditDatabase()
     user_email = st.session_state.get('user_email', 'demo@hotaru.app')
 
-    # CONTROLES
+    # Barre d'action
     c1, c2 = st.columns([4, 1])
     with c1:
-        url_val = st.session_state.get('audit_url_input', '')
-        url = st.text_input("URL", value=url_val, placeholder="https://exemple.com")
+        url = st.text_input("URL", placeholder="https://exemple.com", key="input_url")
     with c2:
         launch = st.button("🚀 Analyser", use_container_width=True, type="primary")
 
-    # SAUVEGARDE / CHARGEMENT
-    with st.container():
-        cols = st.columns([2, 1, 1])
+    # SECTION HISTORIQUE / VERSIONNING
+    st.markdown("### 🕒 Historique des versions")
+    audits = db.load_user_audits(user_email)
+    if audits:
+        cols = st.columns([3, 1])
         with cols[0]:
-            audits = db.load_user_audits(user_email)
-            if audits:
-                opts = {f"{a['date']} - {a['site_url']}": a for a in audits}
-                sel = st.selectbox("Historique", list(opts.keys()), label_visibility="collapsed")
-                if st.button("📂 Ouvrir"):
-                    st.session_state.audit_url_input = opts[sel]['site_url']
-                    st.rerun()
-            else:
-                st.info("Connectez Google Sheets pour l'historique.")
+            # On affiche la date et l'URL pour choisir la version
+            options = {f"{a['date']} - {a['site_url']}": a for a in audits}
+            selected_ver = st.selectbox("Choisir une version", list(options.keys()))
+        with cols[1]:
+            if st.button("📂 Restaurer", use_container_width=True):
+                data = options[selected_ver]
+                # On restaure TOUTE la data sauvegardée
+                raw_data = json.loads(data['json_data'])
+                st.session_state.audit_results = raw_data['results']
+                st.session_state.current_clusters = raw_data['clusters']
+                st.session_state.restored_url = data['site_url']
+                # On force la reconstruction du graphe
+                G = build_pro_graph(data['site_url'], raw_data['results'], raw_data['clusters'])
+                st.session_state.current_graph = G
+                st.rerun()
+    else:
+        st.caption("Aucun historique disponible.")
 
-    # LOGIQUE
+    # LOGIQUE SCRAPING
     if launch and url:
-        status = st.empty()
-        progress = st.progress(0)
-        try:
-            status.info("🕷️ Scraping Intelligent (Max 300)...")
-            scraper = SmartScraper(base_url=url, max_urls=300)
-            results, stats = scraper.run_analysis(lambda m, v: progress.progress(v, text=m))
-            
-            status.info("🎨 Optimisation Smart Labels...")
+        from core.scraping import SmartScraper
+        with st.spinner("Analyse en cours..."):
+            scraper = SmartScraper(base_url=url, max_urls=100)
+            results, stats = scraper.run_analysis(lambda m, v: None)
             clusters = scraper.get_pattern_summary()
-            G = build_pro_graph(url, results, clusters)
             
-            st.session_state.current_graph = G
+            st.session_state.audit_results = results
+            st.session_state.current_clusters = clusters
             st.session_state.current_stats = stats
-            status.success("Terminé !")
+            st.session_state.current_graph = build_pro_graph(url, results, clusters)
             st.rerun()
-        except Exception as e:
-            st.error(f"Erreur : {e}")
 
-    # RESULTATS
-    if st.session_state.current_graph:
-        G = st.session_state.current_graph
-        stats = st.session_state.current_stats
-        
+    # AFFICHAGE DU GRAPHE ET BOUTON SAUVEGARDE
+    if "current_graph" in st.session_state:
         st.markdown("---")
-        k1, k2, k3 = st.columns(3)
-        k1.metric("Pages", stats.get('total_urls', 0))
-        k2.metric("Sections", stats.get('patterns', 0))
-        
-        with k3:
-            if st.button("💾 Sauvegarder sur Drive"):
-                success = db.save_audit(user_email, url, {"nodes": len(G.nodes)}, stats)
-                if success:
-                    st.toast("Sauvegardé !", icon="✅")
+        m1, m2 = st.columns([3, 1])
+        with m1:
+            mode_geo = st.toggle("✨ Activer GEO Score (IA)", key="geo_toggle")
+            view_mode = "score" if mode_geo else "structure"
+        with m2:
+            if st.button("💾 Sauvegarder cette version", type="primary", use_container_width=True):
+                # ICI LE SECRET : On sauve tout le dictionnaire de données !
+                payload = {
+                    "results": st.session_state.audit_results,
+                    "clusters": st.session_state.current_clusters
+                }
+                site_url = st.session_state.get('restored_url', url)
+                if db.save_audit(user_email, site_url, payload, {"total_urls": len(st.session_state.audit_results)}):
+                    st.toast("Version sauvegardée !", icon="✅")
+                    st.rerun()
 
-        st.markdown("### 🗺️ Vue Sémantique")
+        # Rendu (Appel de ta fonction render_interactive_graph existante...)
+        # Note: On reconstruit le graphe selon le mode (Score ou Structure)
+        G = build_pro_graph(
+            st.session_state.get('restored_url', url), 
+            st.session_state.audit_results, 
+            st.session_state.current_clusters,
+            mode=view_mode
+        )
+        # Importe ici ta fonction render_interactive_graph (voir message précédent)
+        from modules.audit_geo_utils import render_interactive_graph 
         render_interactive_graph(G)
