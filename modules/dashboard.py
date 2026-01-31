@@ -1,81 +1,54 @@
-"""
-MODULE: DASHBOARD
-Affiche la version actuelle, le changelog et un résumé de l'activité.
-"""
 import streamlit as st
+import json, zlib, base64
 from datetime import datetime
+import gspread
+from google.oauth2.service_account import Credentials
 
-def render_dashboard():
-    # En-tête avec Version
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.title("Tableau de Bord")
-        st.caption("Vue d'ensemble et mises à jour du système.")
-    with col2:
-        # Badge de version stylé
-        st.markdown("""
-            <div style="text-align: right; padding: 10px;">
-                <span style="
-                    background-color: #000; 
-                    color: #fff; 
-                    padding: 5px 12px; 
-                    border-radius: 20px; 
-                    font-size: 0.9rem; 
-                    font-weight: bold;
-                ">v0.9.0 Beta</span>
-            </div>
-        """, unsafe_allow_html=True)
+class AuditDatabase:
+    def __init__(self):
+        self.scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        try:
+            creds = Credentials.from_service_account_info(dict(st.secrets["gcp_service_account"]), scopes=self.scopes)
+            self.client = gspread.authorize(creds)
+            url = st.secrets.get("sheet_url") or st.secrets.get("url")
+            self.sheet = self.client.open_by_url(url)
+        except Exception as e: st.error(f"Erreur GSheets: {e}")
 
-    st.markdown("---")
+    def get_or_create_worksheet(self, name="audits"):
+        if not self.sheet: return None
+        try: return self.sheet.worksheet(name)
+        except:
+            # Création avec 7 colonnes
+            ws = self.sheet.add_worksheet(title=name, rows=1000, cols=7)
+            ws.append_row(["audit_id", "user_email", "workspace", "date", "site_url", "nb_pages", "data_compressed"])
+            return ws
 
-    # --- SECTION 1 : STATUT SYSTEME ---
-    # On récupère les infos de session s'il y a un audit en cours
-    if 'current_stats' in st.session_state and st.session_state.current_stats:
-        stats = st.session_state.current_stats
-        url = st.session_state.get('audit_url_input', 'Inconnu')
-        
-        st.subheader("📊 Dernier Audit Actif")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Cible", url.replace("https://", "").replace("http://", "")[:20]+"...")
-        c2.metric("Pages Scannées", stats.get('total_urls', 0))
-        c3.metric("Stacks Identifiées", stats.get('patterns', 0))
-        
-        st.info("💡 Pour sauvegarder ces données, allez dans l'onglet 'Audit GEO' > Sauvegarder.")
-        st.markdown("---")
-
-    # --- SECTION 2 : JOURNAL DES VERSIONS (CHANGELOG) ---
-    st.subheader("📜 Journal de Version")
-    
-    with st.container():
-        # VERSION ACTUELLE
-        with st.expander("v0.9.0 - La Mise à Jour 'Deep Dive' (Actuelle)", expanded=True):
-            st.markdown("""
-            **Date :** 31 Janvier 2026
+    def save_audit(self, user_email, workspace, site_url, full_payload):
+        if not self.sheet: return False
+        try:
+            ws = self.get_or_create_worksheet("audits")
+            json_data = json.dumps(full_payload)
+            compressed = zlib.compress(json_data.encode('utf-8'))
+            safe_string = base64.b64encode(compressed).decode('utf-8')
             
-            Cette version majeure transforme la capacité d'analyse de l'outil.
-            
-            * **🕷️ Nouveau Crawler Hybride :** HOTARU ne dépend plus uniquement des Sitemaps. Il est désormais capable de suivre les liens internes (Crawl Récursif) pour cartographier des sites complexes comme `sengager.fr` ou `ikea.com`.
-            * **📚 Graphe 'Stacks' :** Finis les nuages de points illisibles. Les groupes de plus de 5 pages sont automatiquement empilés en "Stacks" pour une visualisation claire.
-            * **💾 Sauvegarde Cloud :** Vos audits sont maintenant sauvegardés dans Google Sheets et peuvent être rechargés à tout moment.
-            * **🏷️ Naming IA Avancé :** L'IA utilise désormais les vrais `<title>` et `<h1>` des pages pour nommer les dossiers, et plus seulement les URLs.
-            """)
+            ws.append_row([
+                datetime.now().strftime('%Y%m%d%H%M%S'),
+                user_email.strip().lower(),
+                workspace.strip(), # Nouvelle colonne Workspace
+                datetime.now().strftime("%Y-%m-%d %H:%M"),
+                site_url,
+                len(full_payload.get('results', [])),
+                safe_string
+            ])
+            return True
+        except Exception as e:
+            st.error(f"Erreur Save: {e}")
+            return False
 
-        # VERSIONS PRECEDENTES
-        with st.expander("v0.8.5 - Refonte UX/UI"):
-            st.markdown("""
-            **Date :** 30 Janvier 2026
-            * **🎨 Design Zen :** Nouvelle interface noir & blanc épurée.
-            * **🧭 Top Navigation :** Suppression de la sidebar latérale instable au profit d'une barre de navigation horizontale robuste.
-            * **⚡ Fix PyVis :** Résolution du bug de clic sur le graphe (ouverture des liens dans un nouvel onglet).
-            """)
-            
-        with st.expander("v0.1.0 - Alpha"):
-            st.markdown("""
-            * Lancement initial du prototype.
-            * Analyse basique via Sitemap.
-            * Connexion API Mistral.
-            """)
-
-    # --- SECTION 3 : ROADMAP ---
-    st.markdown("---")
-    st.caption("🚀 Prochainement : Export PDF, Analyse de Contenu Sémantique, Multi-agents.")
+    def load_user_audits(self, user_email, is_admin=False):
+        if not self.sheet: return []
+        try:
+            ws = self.get_or_create_worksheet("audits")
+            records = ws.get_all_records()
+            return records if is_admin else [r for r in records if r.get('user_email') == user_email]
+        except: return []
