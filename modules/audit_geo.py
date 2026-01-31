@@ -1,7 +1,7 @@
 """
-HOTARU - Audit GEO Module (v0.9.5 - DATA VIZ PREMIUM)
-Style: Compact, Iconique & Intelligent.
-Correction: Gestion des gros volumes via "Smart Grouping".
+HOTARU - Audit GEO Module (v0.9.6 - FIX DISPLAY)
+Style: Organique & Robuste (Force Directed).
+Correction: Graphique invisible corrigé (suppression hierarchy strict).
 """
 
 import streamlit as st
@@ -23,47 +23,46 @@ def init_session_state():
     if 'current_graph' not in st.session_state: st.session_state['current_graph'] = None
     if 'current_stats' not in st.session_state: st.session_state['current_stats'] = None
 
-# --- RENDU GRAPHIQUE HAUT DE GAMME ---
+# --- RENDU GRAPHIQUE ROBUSTE ---
 def render_interactive_graph(G):
     if G is None or len(G.nodes) == 0:
         st.warning("⚠️ Graphe vide.")
         return
 
-    # Configuration PyVis "Premium"
-    nt = Network(height="850px", width="100%", bgcolor="#ffffff", font_color="#333333")
+    # Configuration PyVis "Full Screen"
+    nt = Network(height="800px", width="100%", bgcolor="#ffffff", font_color="#333333")
     nt.from_nx(G)
 
-    # OPTIONS DE PHYSIQUE & DESIGN (Le secret du rendu)
+    # OPTIONS PHYSIQUES ROBUSTES (Force Atlas 2)
+    # Cela force les noeuds à rester au centre et à ne pas s'envoler
     nt.set_options("""
     var options = {
-      "layout": {
-        "hierarchical": {
-          "enabled": true,
-          "direction": "UD",
-          "sortMethod": "hubsize", 
-          "nodeSpacing": 150,
-          "levelSeparation": 250,
-          "treeSpacing": 200,
-          "blockShifting": true,
-          "edgeMinimization": true,
-          "parentCentralization": true
-        }
-      },
       "nodes": {
         "shape": "dot",
-        "font": { "face": "Roboto", "size": 14, "color": "#333" },
-        "borderWidth": 2,
+        "font": { "size": 14, "face": "Roboto" },
+        "borderWidth": 1,
         "shadow": true
       },
       "edges": {
-        "color": { "color": "#b0bec5", "highlight": "#000000" },
-        "width": 1.5,
-        "smooth": { "type": "cubicBezier", "roundness": 0.4 }
+        "color": { "color": "#cfd8dc", "highlight": "#000000" },
+        "width": 1,
+        "smooth": { "type": "continuous" }
+      },
+      "physics": {
+        "forceAtlas2Based": {
+          "gravitationalConstant": -100,
+          "centralGravity": 0.01,
+          "springLength": 100,
+          "springConstant": 0.08,
+          "damping": 0.4
+        },
+        "maxVelocity": 50,
+        "minVelocity": 0.1,
+        "solver": "forceAtlas2Based"
       },
       "interaction": {
         "hover": true,
         "navigationButtons": true,
-        "keyboard": true,
         "zoomView": true
       }
     }
@@ -75,14 +74,14 @@ def render_interactive_graph(G):
         with open(path, "r", encoding="utf-8") as f:
             html_content = f.read()
 
-        # Script JS : Zoom Fit automatique + Ouverture Liens
+        # Fix JS : Centrage forcé après 2 secondes
         js_fix = """
         <script type="text/javascript">
             network.once("stabilizationIterationsDone", function() {
-                network.fit({
-                    animation: { duration: 1000, easingFunction: "easeInOutQuad" }
-                });
+                network.fit();
             });
+            // Double sécurité pour le centrage
+            setTimeout(function() { network.fit(); }, 2000);
             
             network.on("click", function (params) {
                 if (params.nodes.length > 0) {
@@ -97,23 +96,24 @@ def render_interactive_graph(G):
         </body>
         """
         html_content = html_content.replace("</body>", js_fix)
-        components.html(html_content, height=900, scrolling=False)
+        components.html(html_content, height=850, scrolling=False)
         
     except Exception as e:
         st.error(f"Erreur d'affichage : {e}")
 
-# --- INTELLIGENCE DE CONSTRUCTION (SMART GROUPING) ---
+# --- INTELLIGENCE DE CONSTRUCTION ---
 def build_pro_graph(site_url, pages, clusters):
     G = nx.DiGraph()
     root_label = urlparse(site_url).netloc.replace('www.', '')
     
-    # 1. RACINE (Style "Serveur Central")
+    # 1. RACINE
     G.add_node("root", 
-               label=f"🌐 {root_label}", 
-               title="Page d'accueil", 
-               color="#212121", # Noir profond
-               shape="box",
-               font={'color': 'white', 'size': 22})
+               label=root_label, 
+               title="Accueil", 
+               color="#212121", # Noir
+               size=40,
+               shape="dot",
+               font={'color': 'black', 'size': 20, 'face': 'Arial', 'vadjust': -50})
     
     # 2. TRAITEMENT DES DOSSIERS
     for c in clusters:
@@ -121,53 +121,47 @@ def build_pro_graph(site_url, pages, clusters):
         c_count = c['count']
         c_id = f"group_{c_name}"
         
-        # Style du dossier (Jaune Or)
+        # COULEUR : Jaune Or pour les dossiers
         G.add_node(c_id, 
-                   label=f"📂 {c_name}\n({c_count})", 
+                   label=f"{c_name} ({c_count})", 
                    color="#FFD700", 
-                   shape="box", 
-                   font={'size': 18, 'face': 'Arial', 'weight': 'bold'},
-                   level=1) # Force le niveau hiérarchique
+                   shape="dot", 
+                   size=25,
+                   font={'size': 16, 'face': 'Arial'})
         
-        G.add_edge("root", c_id, color="#424242", width=3)
+        G.add_edge("root", c_id, color="#90a4ae", width=2)
         
-        # 3. SMART GROUPING (C'est ici que la magie opère)
-        # On n'affiche que les 8 premières pages pour éviter l'effet "Ligne Plate"
-        MAX_VISIBLE_PAGES = 8
-        
-        visible_pages = c['samples'][:MAX_VISIBLE_PAGES]
-        hidden_count = c_count - MAX_VISIBLE_PAGES
+        # 3. SMART GROUPING (Limiter l'affichage des feuilles)
+        # On limite à 10 feuilles par branche pour éviter l'explosion
+        MAX_LEAVES = 10
+        visible_pages = c['samples'][:MAX_LEAVES]
         
         for p in visible_pages:
             p_id = p['url']
-            p_title = p['title'][:25] + ".." if len(p['title']) > 25 else p['title']
+            p_title = p['title'][:20] + ".." if len(p['title']) > 20 else p['title']
             
-            # Style Page (Point blanc cerclé)
+            # COULEUR : Gris Bleu (Visible sur blanc !)
+            # AVANT c'était #ffffff (blanc) -> Invisible
             G.add_node(p_id, 
                        label=p_title, 
                        title=p['title'], 
                        url=p['url'], 
                        shape="dot", 
                        size=10, 
-                       color="#ffffff",
-                       borderWidth=1,
-                       shapeProperties={'borderDashes': False},
-                       font={'size': 12, 'color': '#666'},
-                       level=2)
+                       color="#78909c") # Gris bleu visible
             
-            G.add_edge(c_id, p_id, color="#cfd8dc")
+            G.add_edge(c_id, p_id, color="#eceff1")
             
-        # Si trop de pages, on crée un nœud "Groupe"
-        if hidden_count > 0:
+        # Nœud "Autres..."
+        if c_count > MAX_LEAVES:
             more_id = f"{c_id}_more"
+            hidden = c_count - MAX_LEAVES
             G.add_node(more_id, 
-                       label=f"+ {hidden_count} autres pages", 
-                       title="Pages masquées pour la clarté", 
-                       shape="ellipse", 
-                       color="#e0e0e0", 
-                       font={'size': 12, 'color': '#666'},
-                       level=2)
-            G.add_edge(c_id, more_id, color="#cfd8dc", style="dashed")
+                       label=f"+ {hidden}", 
+                       shape="dot", 
+                       size=8,
+                       color="#e0e0e0")
+            G.add_edge(c_id, more_id, style="dashed")
 
     return G
 
@@ -187,15 +181,14 @@ def render_audit_geo():
     with c2:
         launch = st.button("🚀 Analyser", use_container_width=True, type="primary")
 
-    # ZONE DE CHARGEMENT / SAUVEGARDE
+    # SAUVEGARDE / CHARGEMENT
     with st.container():
         cols = st.columns([2, 1, 1])
         with cols[0]:
-            # Charger
             audits = db.load_user_audits(user_email)
             if audits:
                 opts = {f"{a['date']} - {a['site_url']}": a for a in audits}
-                sel = st.selectbox("Historique", list(opts.keys()), label_visibility="collapsed", placeholder="Charger un audit...")
+                sel = st.selectbox("Historique", list(opts.keys()), label_visibility="collapsed")
                 if st.button("📂 Ouvrir"):
                     st.session_state.audit_url_input = opts[sel]['site_url']
                     st.rerun()
@@ -207,11 +200,11 @@ def render_audit_geo():
         status = st.empty()
         progress = st.progress(0)
         try:
-            status.info("🕷️ Scraping Intelligent...")
+            status.info("🕷️ Scraping Intelligent (Max 300)...")
             scraper = SmartScraper(base_url=url, max_urls=300)
             results, stats = scraper.run_analysis(lambda m, v: progress.progress(v, text=m))
             
-            status.info("🎨 Optimisation Data Viz...")
+            status.info("🎨 Génération Graphe...")
             clusters = scraper.get_pattern_summary()
             G = build_pro_graph(url, results, clusters)
             
@@ -228,23 +221,17 @@ def render_audit_geo():
         stats = st.session_state.current_stats
         
         st.markdown("---")
-        
-        # Barre d'info stylée
         k1, k2, k3 = st.columns(3)
-        k1.metric("Pages Analysées", stats.get('total_urls', 0))
-        k2.metric("Sections Clés", stats.get('patterns', 0))
+        k1.metric("Pages", stats.get('total_urls', 0))
+        k2.metric("Sections", stats.get('patterns', 0))
         
         with k3:
-            # Bouton SAUVEGARDE (Rouge si erreur, Vert si OK)
-            if st.button("💾 Sauvegarder sur Drive", type="secondary"):
-                try:
-                    success = db.save_audit(user_email, url, {"nodes": len(G.nodes)}, stats)
-                    if success:
-                        st.toast("Sauvegardé avec succès !", icon="✅")
-                    else:
-                        st.error("Échec sauvegarde. Vérifiez le partage du Google Sheet.")
-                except Exception as ex:
-                    st.error(f"Erreur technique : {ex}")
+            if st.button("💾 Sauvegarder sur Drive"):
+                success = db.save_audit(user_email, url, {"nodes": len(G.nodes)}, stats)
+                if success:
+                    st.toast("Sauvegardé !", icon="✅")
+                else:
+                    st.error("Échec sauvegarde (Vérifiez partage GSheet)")
 
         st.markdown("### 🗺️ Vue Sémantique")
         render_interactive_graph(G)
