@@ -1,318 +1,81 @@
 """
-HOTARU - Dashboard Module
-Overview page with statistics and recent activity.
+MODULE: DASHBOARD
+Affiche la version actuelle, le changelog et un résumé de l'activité.
 """
-
 import streamlit as st
 from datetime import datetime
-from core.database import get_db
-
 
 def render_dashboard():
-    """Render the main dashboard page."""
-    # Header
-    st.markdown("""
-        <h1 style="
-            font-size: 1.75rem;
-            font-weight: 600;
-            color: #000000;
-            margin-bottom: 0.5rem;
-        ">
-            Dashboard
-        </h1>
-        <p style="
-            font-size: 0.9rem;
-            color: #000000;
-            opacity: 0.6;
-            margin-bottom: 2rem;
-        ">
-            Vue d'ensemble de votre activité
-        </p>
-    """, unsafe_allow_html=True)
-
-    # Spacer
-    st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
-
-    # Stats cards
-    col1, col2, col3, col4 = st.columns(4)
-
+    # En-tête avec Version
+    col1, col2 = st.columns([3, 1])
     with col1:
-        render_stat_card("Audits", get_audit_count(), "ce mois")
-
+        st.title("Tableau de Bord")
+        st.caption("Vue d'ensemble et mises à jour du système.")
     with col2:
-        render_stat_card("Pages analysées", get_pages_count(), "total")
-
-    with col3:
-        render_stat_card("Score moyen", get_average_score(), "GEO")
-
-    with col4:
-        render_stat_card("Dernière activité", get_last_activity(), "")
-
-    # Spacer
-    st.markdown("<div style='height: 3rem;'></div>", unsafe_allow_html=True)
-
-    # Two columns layout
-    col_left, col_right = st.columns([1.5, 1])
-
-    with col_left:
-        render_recent_audits()
-
-    with col_right:
-        render_quick_actions()
-
-    # Spacer
-    st.markdown("<div style='height: 2rem;'></div>", unsafe_allow_html=True)
-
-    # Activity chart placeholder
-    render_activity_chart()
-
-
-def render_stat_card(title: str, value: str, subtitle: str):
-    """Render a statistics card."""
-    st.markdown(f"""
-        <div style="
-            border: 1px solid #000000;
-            padding: 1.5rem;
-            background-color: #FFFFFF;
-        ">
-            <div style="
-                font-size: 0.75rem;
-                color: #000000;
-                opacity: 0.6;
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                margin-bottom: 0.5rem;
-            ">
-                {title}
-            </div>
-            <div style="
-                font-size: 2rem;
-                font-weight: 600;
-                color: #000000;
-                line-height: 1;
-            ">
-                {value}
-            </div>
-            <div style="
-                font-size: 0.7rem;
-                color: #000000;
-                opacity: 0.5;
-                margin-top: 0.25rem;
-            ">
-                {subtitle}
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-
-
-def render_recent_audits():
-    """Render the recent audits section."""
-    st.markdown("""
-        <h2 style="
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: #000000;
-            margin-bottom: 1rem;
-        ">
-            Audits récents
-        </h2>
-    """, unsafe_allow_html=True)
-
-    # Get recent audits from database
-    audits = get_recent_audits()
-
-    if not audits:
+        # Badge de version stylé
         st.markdown("""
-            <div style="
-                border: 1px solid #000000;
-                padding: 2rem;
-                text-align: center;
-                color: #000000;
-                opacity: 0.5;
-            ">
-                Aucun audit récent
+            <div style="text-align: right; padding: 10px;">
+                <span style="
+                    background-color: #000; 
+                    color: #fff; 
+                    padding: 5px 12px; 
+                    border-radius: 20px; 
+                    font-size: 0.9rem; 
+                    font-weight: bold;
+                ">v0.9.0 Beta</span>
             </div>
         """, unsafe_allow_html=True)
-        return
 
-    for audit in audits:
-        render_audit_row(audit)
+    st.markdown("---")
 
+    # --- SECTION 1 : STATUT SYSTEME ---
+    # On récupère les infos de session s'il y a un audit en cours
+    if 'current_stats' in st.session_state and st.session_state.current_stats:
+        stats = st.session_state.current_stats
+        url = st.session_state.get('audit_url_input', 'Inconnu')
+        
+        st.subheader("📊 Dernier Audit Actif")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Cible", url.replace("https://", "").replace("http://", "")[:20]+"...")
+        c2.metric("Pages Scannées", stats.get('total_urls', 0))
+        c3.metric("Stacks Identifiées", stats.get('patterns', 0))
+        
+        st.info("💡 Pour sauvegarder ces données, allez dans l'onglet 'Audit GEO' > Sauvegarder.")
+        st.markdown("---")
 
-def render_audit_row(audit: dict):
-    """Render a single audit row."""
-    score_color = get_score_color(audit.get('score', 0))
+    # --- SECTION 2 : JOURNAL DES VERSIONS (CHANGELOG) ---
+    st.subheader("📜 Journal de Version")
+    
+    with st.container():
+        # VERSION ACTUELLE
+        with st.expander("v0.9.0 - La Mise à Jour 'Deep Dive' (Actuelle)", expanded=True):
+            st.markdown("""
+            **Date :** 31 Janvier 2026
+            
+            Cette version majeure transforme la capacité d'analyse de l'outil.
+            
+            * **🕷️ Nouveau Crawler Hybride :** HOTARU ne dépend plus uniquement des Sitemaps. Il est désormais capable de suivre les liens internes (Crawl Récursif) pour cartographier des sites complexes comme `sengager.fr` ou `ikea.com`.
+            * **📚 Graphe 'Stacks' :** Finis les nuages de points illisibles. Les groupes de plus de 5 pages sont automatiquement empilés en "Stacks" pour une visualisation claire.
+            * **💾 Sauvegarde Cloud :** Vos audits sont maintenant sauvegardés dans Google Sheets et peuvent être rechargés à tout moment.
+            * **🏷️ Naming IA Avancé :** L'IA utilise désormais les vrais `<title>` et `<h1>` des pages pour nommer les dossiers, et plus seulement les URLs.
+            """)
 
-    st.markdown(f"""
-        <div style="
-            border: 1px solid #000000;
-            padding: 1rem;
-            margin-bottom: 0.5rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        ">
-            <div>
-                <div style="
-                    font-size: 0.9rem;
-                    font-weight: 500;
-                    color: #000000;
-                ">
-                    {audit.get('url', 'N/A')}
-                </div>
-                <div style="
-                    font-size: 0.75rem;
-                    color: #000000;
-                    opacity: 0.5;
-                ">
-                    {audit.get('date', 'N/A')}
-                </div>
-            </div>
-            <div style="
-                width: 12px;
-                height: 12px;
-                border-radius: 50%;
-                background-color: {score_color};
-            "></div>
-        </div>
-    """, unsafe_allow_html=True)
+        # VERSIONS PRECEDENTES
+        with st.expander("v0.8.5 - Refonte UX/UI"):
+            st.markdown("""
+            **Date :** 30 Janvier 2026
+            * **🎨 Design Zen :** Nouvelle interface noir & blanc épurée.
+            * **🧭 Top Navigation :** Suppression de la sidebar latérale instable au profit d'une barre de navigation horizontale robuste.
+            * **⚡ Fix PyVis :** Résolution du bug de clic sur le graphe (ouverture des liens dans un nouvel onglet).
+            """)
+            
+        with st.expander("v0.1.0 - Alpha"):
+            st.markdown("""
+            * Lancement initial du prototype.
+            * Analyse basique via Sitemap.
+            * Connexion API Mistral.
+            """)
 
-
-def render_quick_actions():
-    """Render quick action buttons."""
-    st.markdown("""
-        <h2 style="
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: #000000;
-            margin-bottom: 1rem;
-        ">
-            Actions rapides
-        </h2>
-    """, unsafe_allow_html=True)
-
-    if st.button("🔍  Nouvel Audit GEO", key="quick_audit", use_container_width=True):
-        st.session_state.current_page = 'audit_geo'
-        st.rerun()
-
-    st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
-
-    if st.button("📊  Voir les rapports", key="quick_reports", use_container_width=True):
-        st.info("Fonctionnalité à venir")
-
-    st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
-
-    if st.button("⚙️  Paramètres", key="quick_settings", use_container_width=True):
-        st.session_state.current_page = 'settings'
-        st.rerun()
-
-
-def render_activity_chart():
-    """Render activity chart placeholder."""
-    st.markdown("""
-        <h2 style="
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: #000000;
-            margin-bottom: 1rem;
-        ">
-            Activité
-        </h2>
-    """, unsafe_allow_html=True)
-
-    st.markdown("""
-        <div style="
-            border: 1px solid #000000;
-            padding: 3rem;
-            text-align: center;
-            color: #000000;
-            opacity: 0.5;
-        ">
-            <div style="font-size: 2rem; margin-bottom: 0.5rem;">📈</div>
-            <div>Graphique d'activité (données insuffisantes)</div>
-        </div>
-    """, unsafe_allow_html=True)
-
-
-# Helper functions
-
-def get_audit_count() -> str:
-    """Get the number of audits this month."""
-    try:
-        db = get_db()
-        audits = db.read_sheet('audits')
-        if audits is None or audits.empty:
-            return "0"
-
-        # Filter by current month
-        current_month = datetime.now().strftime('%Y-%m')
-        count = len(audits[audits['created_at'].str.startswith(current_month)])
-        return str(count)
-    except Exception:
-        return "0"
-
-
-def get_pages_count() -> str:
-    """Get total pages analyzed."""
-    try:
-        db = get_db()
-        audits = db.read_sheet('audits')
-        if audits is None or audits.empty:
-            return "0"
-
-        # This would need actual page count tracking
-        return str(len(audits) * 50)  # Estimate
-    except Exception:
-        return "0"
-
-
-def get_average_score() -> str:
-    """Get average GEO score."""
-    try:
-        db = get_db()
-        audits = db.read_sheet('audits')
-        if audits is None or audits.empty:
-            return "—"
-
-        # Would need actual score data
-        return "—"
-    except Exception:
-        return "—"
-
-
-def get_last_activity() -> str:
-    """Get time since last activity."""
-    try:
-        db = get_db()
-        audits = db.read_sheet('audits')
-        if audits is None or audits.empty:
-            return "—"
-
-        # Get most recent audit
-        return "Récent"
-    except Exception:
-        return "—"
-
-
-def get_recent_audits() -> list:
-    """Get list of recent audits."""
-    try:
-        db = get_db()
-        audits = db.read_sheet('audits')
-        if audits is None or audits.empty:
-            return []
-
-        # Return last 5 audits
-        return audits.tail(5).to_dict('records')
-    except Exception:
-        return []
-
-
-def get_score_color(score: float) -> str:
-    """Get color based on score."""
-    if score >= 70:
-        return "#22C55E"  # Green
-    elif score >= 40:
-        return "#F97316"  # Orange
-    else:
-        return "#EF4444"  # Red
+    # --- SECTION 3 : ROADMAP ---
+    st.markdown("---")
+    st.caption("🚀 Prochainement : Export PDF, Analyse de Contenu Sémantique, Multi-agents.")
