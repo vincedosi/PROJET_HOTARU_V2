@@ -1,132 +1,88 @@
 """
-HOTARU - Database Module
-Google Sheets connection using gspread directly.
+DATABASE MANAGER
+Gère la sauvegarde et le chargement des audits dans Google Sheets.
 """
-
 import streamlit as st
+import json
+from datetime import datetime
 import pandas as pd
-import gspread
-from google.oauth2.service_account import Credentials
-from typing import Optional, Any, List, Dict
 
+# On essaie d'importer gspread, sinon on gère l'erreur
+try:
+    import gspread
+    from oauth2client.service_account import ServiceAccountCredentials
+except ImportError:
+    st.error("Il manque les librairies gspread. Ajoutez 'gspread' et 'oauth2client' dans requirements.txt")
 
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-]
-
-
-class DatabaseManager:
-    """
-    Database manager using Google Sheets as backend.
-    Uses gspread directly for Streamlit Cloud compatibility.
-    """
-
+class AuditDatabase:
     def __init__(self):
-        """Initialize the database manager."""
-        self._client = None
-        self._spreadsheet = None
-
-    @property
-    def client(self):
-        """Get or create the gspread client."""
-        if self._client is None:
+        self.scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+        self.creds = None
+        self.client = None
+        self.sheet = None
+        
+        # Connexion via st.secrets
+        if "gcp_service_account" in st.secrets:
             try:
-                credentials_dict = dict(st.secrets.get("gcp_service_account", {}))
-
-                if not credentials_dict:
-                    st.error("Configuration manquante: gcp_service_account dans secrets")
-                    return None
-
-                credentials = Credentials.from_service_account_info(
-                    credentials_dict,
-                    scopes=SCOPES
+                self.creds = ServiceAccountCredentials.from_json_keyfile_dict(
+                    dict(st.secrets["gcp_service_account"]), self.scope
                 )
-                self._client = gspread.authorize(credentials)
-
+                self.client = gspread.authorize(self.creds)
+                # Ouvre le sheet défini dans secrets ou par défaut
+                sheet_name = st.secrets.get("sheet_name", "HOTARU_DB")
+                self.sheet = self.client.open(sheet_name)
             except Exception as e:
-                st.error(f"Erreur connexion: {str(e)}")
-                return None
-        return self._client
+                print(f"Erreur connexion GSheets: {e}")
 
-    @property
-    def spreadsheet(self):
-        """Get or open the spreadsheet."""
-        if self._spreadsheet is None:
-            try:
-                client = self.client
-                if client is None:
-                    return None
-
-                spreadsheet_url = st.secrets.get("spreadsheet", {}).get("url", "")
-
-                if spreadsheet_url:
-                    self._spreadsheet = client.open_by_url(spreadsheet_url)
-                else:
-                    st.error("URL du spreadsheet non configurée")
-                    return None
-
-            except Exception as e:
-                st.error(f"Erreur ouverture spreadsheet: {str(e)}")
-                return None
-        return self._spreadsheet
-
-    def read_sheet(self, worksheet: str) -> Optional[pd.DataFrame]:
-        """Read data from a worksheet."""
+    def get_or_create_worksheet(self, name="audits"):
+        """Vérifie si l'onglet existe, sinon le crée."""
+        if not self.sheet: return None
         try:
-            sheet = self.spreadsheet
-            if sheet is None:
-                return None
+            return self.sheet.worksheet(name)
+        except:
+            # Création avec les headers
+            ws = self.sheet.add_worksheet(title=name, rows=100, cols=10)
+            ws.append_row(["audit_id", "user_email", "date", "site_url", "nb_pages", "json_data"])
+            return ws
 
-            ws = sheet.worksheet(worksheet)
-            data = ws.get_all_records()
-            return pd.DataFrame(data)
+    def save_audit(self, user_email, site_url, graph_data, stats):
+        """Sauvegarde un audit complet."""
+        if not self.sheet:
+            st.warning("Base de données non connectée.")
+            return False
 
-        except gspread.exceptions.WorksheetNotFound:
-            return pd.DataFrame()
+        try:
+            ws = self.get_or_create_worksheet("audits")
+            
+            # Création d'un ID unique
+            audit_id = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{site_url[:10]}"
+            
+            # Sérialisation du graphe en JSON
+            json_str = json.dumps(graph_data)
+            
+            # Ajout de la ligne
+            ws.append_row([
+                audit_id,
+                user_email,
+                datetime.now().strftime("%Y-%m-%d %H:%M"),
+                site_url,
+                stats.get('total_urls', 0),
+                json_str
+            ])
+            return True
         except Exception as e:
-            st.error(f"Erreur lecture '{worksheet}': {str(e)}")
-            return None
+            st.error(f"Erreur sauvegarde: {e}")
+            return False
 
-    def get_user(self, email: str) -> Optional[Dict]:
-        """Get a user by email."""
+    def load_user_audits(self, user_email):
+        """Récupère la liste des audits d'un utilisateur."""
+        if not self.sheet: return []
+        
         try:
-            df = self.read_sheet("users")
-            if df is None or df.empty:
-                return None
-
-            user_row = df[df['email'] == email]
-            if user_row.empty:
-                return None
-
-            return user_row.iloc[0].to_dict()
-        except Exception:
-            return None
-
-    def create_user(self, email: str, password_hash: str) -> bool:
-        """
-        Create a new user.
-
-        Args:
-            email: User email
-            password_hash: Hashed password
-
-        Returns:
-            True if successful
-        """
-        from datetime import datetime
-
-        return self.append_row("users", {
-            "email": email,
-            "password_hash": password_hash,
-            "created_at": datetime.now().isoformat(),
-            "last_login": "",
-            "role": "user"
-        })
-
-
-def get_db() -> DatabaseManager:
-    """Get a database manager instance."""
-    if 'db_manager' not in st.session_state:
-        st.session_state.db_manager = DatabaseManager()
-    return st.session_state.db_manager
+            ws = self.get_or_create_worksheet("audits")
+            records = ws.get_all_records()
+            # Filtrer par email
+            return [r for r in records if r['user_email'] == user_email]
+        except Exception as e:
+            st.error(f"Erreur chargement: {e}")
+            return []
