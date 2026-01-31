@@ -12,20 +12,25 @@ class AuditDatabase:
             self.client = gspread.authorize(creds)
             url = st.secrets.get("sheet_url") or st.secrets.get("url")
             self.sheet = self.client.open_by_url(url)
-        except Exception as e: st.error(f"Erreur GSheets: {e}")
+        except Exception as e: 
+            st.error(f"Erreur GSheets: {e}")
 
     def get_or_create_worksheet(self, name="audits"):
         if not self.sheet: return None
-        try: return self.sheet.worksheet(name)
+        try: 
+            return self.sheet.worksheet(name)
         except:
             ws = self.sheet.add_worksheet(title=name, rows=1000, cols=7)
             ws.append_row(["audit_id", "user_email", "workspace", "date", "site_url", "nb_pages", "data_compressed"])
             return ws
 
-    def save_audit(self, user_email, site_url, workspace, full_payload, stats):
+    def save_audit(self, user_email, workspace, site_url, full_payload):
+        """Sauvegarde avec les 4 arguments requis par audit_geo."""
         if not self.sheet: return False
         try:
             ws = self.get_or_create_worksheet("audits")
+            
+            # Compression
             json_data = json.dumps(full_payload)
             compressed = zlib.compress(json_data.encode('utf-8'))
             safe_string = base64.b64encode(compressed).decode('utf-8')
@@ -33,10 +38,10 @@ class AuditDatabase:
             ws.append_row([
                 datetime.now().strftime('%Y%m%d%H%M%S'),
                 user_email.strip().lower(),
-                workspace, # Nouvelle colonne Workspace
+                workspace.strip(),
                 datetime.now().strftime("%Y-%m-%d %H:%M"),
                 site_url,
-                stats.get('total_urls', 0),
+                len(full_payload.get('results', [])),
                 safe_string
             ])
             return True
@@ -50,4 +55,5 @@ class AuditDatabase:
             ws = self.get_or_create_worksheet("audits")
             records = ws.get_all_records()
             return records if is_admin else [r for r in records if r.get('user_email') == user_email]
-        except: return []
+        except: 
+            return []
