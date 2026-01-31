@@ -1,7 +1,5 @@
 import streamlit as st
-import json
-import zlib
-import base64
+import json, zlib, base64
 from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
@@ -9,33 +7,22 @@ from google.oauth2.service_account import Credentials
 class AuditDatabase:
     def __init__(self):
         self.scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        self.sheet = None
-        
-        if "gcp_service_account" not in st.secrets:
-            st.error("❌ Secrets [gcp_service_account] manquants.")
-            return
-
         try:
             creds = Credentials.from_service_account_info(dict(st.secrets["gcp_service_account"]), scopes=self.scopes)
             self.client = gspread.authorize(creds)
             url = st.secrets.get("sheet_url") or st.secrets.get("url")
-            if url:
-                self.sheet = self.client.open_by_url(url)
-            else:
-                st.error("❌ 'sheet_url' non trouvé dans les secrets.")
-        except Exception as e:
-            st.error(f"❌ Erreur connexion GSheets : {e}")
+            self.sheet = self.client.open_by_url(url)
+        except Exception as e: st.error(f"Erreur GSheets: {e}")
 
     def get_or_create_worksheet(self, name="audits"):
         if not self.sheet: return None
-        try:
-            return self.sheet.worksheet(name)
+        try: return self.sheet.worksheet(name)
         except:
-            ws = self.sheet.add_worksheet(title=name, rows=1000, cols=6)
-            ws.append_row(["audit_id", "user_email", "date", "site_url", "nb_pages", "data_compressed"])
+            ws = self.sheet.add_worksheet(title=name, rows=1000, cols=7)
+            ws.append_row(["audit_id", "user_email", "workspace", "date", "site_url", "nb_pages", "data_compressed"])
             return ws
 
-    def save_audit(self, user_email, site_url, full_payload, stats):
+    def save_audit(self, user_email, site_url, workspace, full_payload, stats):
         if not self.sheet: return False
         try:
             ws = self.get_or_create_worksheet("audits")
@@ -46,6 +33,7 @@ class AuditDatabase:
             ws.append_row([
                 datetime.now().strftime('%Y%m%d%H%M%S'),
                 user_email.strip().lower(),
+                workspace, # Nouvelle colonne Workspace
                 datetime.now().strftime("%Y-%m-%d %H:%M"),
                 site_url,
                 stats.get('total_urls', 0),
@@ -53,44 +41,13 @@ class AuditDatabase:
             ])
             return True
         except Exception as e:
-            st.error(f"Erreur Sauvegarde: {e}")
+            st.error(f"Erreur Save: {e}")
             return False
 
     def load_user_audits(self, user_email, is_admin=False):
-        """Récupère les audits avec messages de debug visuels."""
         if not self.sheet: return []
         try:
             ws = self.get_or_create_worksheet("audits")
             records = ws.get_all_records()
-            
-            # --- DEBUG VISUEL ---
-            if not records:
-                st.sidebar.warning("⚠️ L'onglet 'audits' semble vide.")
-                return []
-            
-            filtered = []
-            for r in records:
-                # Si admin on prend tout, sinon on compare l'email
-                if is_admin:
-                    filtered.append(r)
-                else:
-                    db_email = str(r.get('user_email', '')).strip().lower()
-                    if user_email.strip().lower() in db_email or db_email in user_email.strip().lower():
-                        filtered.append(r)
-            
-            # Décompression
-            for r in filtered:
-                try:
-                    raw_val = r.get('data_compressed') or r.get('json_data')
-                    if not raw_val: continue
-                    if str(raw_val).startswith('{'):
-                        r['json_data'] = json.loads(raw_val)
-                    else:
-                        decoded = base64.b64decode(raw_val)
-                        decompressed = zlib.decompress(decoded).decode('utf-8')
-                        r['json_data'] = json.loads(decompressed)
-                except: continue
-            return filtered
-        except Exception as e:
-            st.sidebar.error(f"Erreur Load: {e}")
-            return []
+            return records if is_admin else [r for r in records if r.get('user_email') == user_email]
+        except: return []
