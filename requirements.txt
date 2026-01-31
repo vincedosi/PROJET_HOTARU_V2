@@ -1,36 +1,11 @@
-# HOTARU - SaaS Application (v0.9.0)
-
-# Core Framework
-streamlit>=1.28.0
-
-# --- CRITIQUE POUR LE GRAPHE (FIX) ---
-st-pyvis>=0.0.17
-pyvis>=0.3.2
-networkx>=3.2
-
-# --- CRITIQUE POUR GOOGLE SHEETS (FIX) ---
-gspread>=5.12.0
-oauth2client>=4.1.3
-google-auth>=2.23.0
-
-# Web Scraping & Parsing
-requests>=2.31.0
-beautifulsoup4>=4.12.0
-lxml>=4.9.0
-urllib3>=2.0.0
-
-# Data Processing
-pandas>=2.1.0
-numpy>=1.26.0
-
-# Clustering & IA Tools
-scikit-learn>=1.3.0
-
-# Utilities
-python-dotenv>=1.0.0
-
-
-
-
-
-
+streamlit
+pyvis
+networkx
+requests
+beautifulsoup4
+lxml
+pandas
+gspread
+google-auth
+scikit-learn
+python-dotenv
