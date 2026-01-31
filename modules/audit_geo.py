@@ -21,17 +21,34 @@ def render_interactive_graph(G):
     nt = Network(height="750px", width="100%", bgcolor="#ffffff", font_color="#333333")
     nt.from_nx(G)
     
+    # CORRECTION : Utilisation de True (Majuscule) pour Python
     options = {
-        "physics": {"forceAtlas2Based": {"gravitationalConstant": -100}, "solver": "forceAtlas2Based"},
-        "interaction": {"hover": true, "navigationButtons": true, "keyboard": true},
-        "nodes": {"font": {"size": 14, "strokeWidth": 2, "strokeColor": "#ffffff"}}
+        "physics": {
+            "forceAtlas2Based": {"gravitationalConstant": -100}, 
+            "solver": "forceAtlas2Based"
+        },
+        "interaction": {
+            "hover": True, 
+            "navigationButtons": True, 
+            "keyboard": True,
+            "multiselect": True
+        },
+        "nodes": {
+            "font": {"size": 14, "strokeWidth": 2, "strokeColor": "#ffffff"}
+        },
+        "edges": {
+            "smooth": {"type": "continuous"}
+        }
     }
+    
     nt.set_options(json.dumps(options))
     
     path = "temp_graph.html"
     nt.save_graph(path)
-    with open(path, "r", encoding="utf-8") as f: html = f.read()
+    with open(path, "r", encoding="utf-8") as f: 
+        html = f.read()
     
+    # Injection JS pour les liens cliquables
     click_js = """<script>network.on("click", function (params) { 
         if (params.nodes.length > 0) { 
             var nodeId = params.nodes[0]; 
@@ -57,7 +74,7 @@ def render_audit_geo():
         selected_ws = st.sidebar.selectbox("Choisir un Client", ws_list)
         filtered = [a for a in audits if str(a.get('workspace')) == selected_ws]
         options = {f"📅 {a['date']} | 🌐 {a['site_url']}": a for a in filtered}
-        choice = st.sidebar.selectbox("Historique", list(options.keys()))
+        choice = st.sidebar.selectbox("Historique des audits", list(options.keys()))
         
         if st.sidebar.button("📂 Restaurer cet audit", use_container_width=True):
             row = options[choice]
@@ -71,20 +88,23 @@ def render_audit_geo():
                     "current_ws": row['workspace']
                 })
                 st.rerun()
-            except Exception as e: st.error(f"Erreur décodage: {e}")
+            except Exception as e: 
+                st.error(f"Erreur décodage: {e}")
+    else:
+        st.sidebar.info("Aucun audit sauvegardé.")
 
     # --- FORMULAIRE D'AUDIT ---
     with st.container(border=True):
         c1, c2, c3 = st.columns([2, 1, 1])
         with c1: url_in = st.text_input("URL du site", placeholder="https://...")
         with c2: ws_in = st.text_input("Nom Client (Workspace)", placeholder="Ex: Marine Nationale")
-        with c3: limit_in = st.select_slider("Profondeur", options=[50, 100, 200, 500], value=100)
+        with c3: limit_in = st.select_slider("Pages", options=[50, 100, 200, 500], value=100)
 
         if st.button("🚀 Lancer l'analyse complète", type="primary", use_container_width=True):
             if not ws_in or not url_in:
-                st.error("URL et Nom Client requis.")
+                st.error("L'URL et le Workspace sont requis.")
             else:
-                p_bar = st.progress(0, text="Démarrage...")
+                p_bar = st.progress(0, text="Initialisation...")
                 def p_cb(msg, val): p_bar.progress(val, text=msg)
                 
                 scraper = SmartScraper(url_in, max_urls=limit_in)
@@ -99,24 +119,24 @@ def render_audit_geo():
                 p_bar.empty()
                 st.rerun()
 
-    # --- RÉSULTATS ---
+    # --- AFFICHAGE DES RÉSULTATS ---
     if "results" in st.session_state:
         st.divider()
         
-        # Dashboard Technique (Metrics)
+        # Dashboard Technique
         total = len(st.session_state.results)
         slow_pages = len([p for p in st.session_state.results if p.get('response_time', 0) > 1.2])
         missing_meta = len([p for p in st.session_state.results if not p.get('description')])
         
         m1, m2, m3 = st.columns(3)
         m1.metric("Pages", total)
-        m2.metric("Qualité Meta", f"{total-missing_meta}/{total}", delta=f"-{missing_meta}" if missing_meta > 0 else None)
-        m3.metric("Lenteur (>1.2s)", slow_pages, delta_color="inverse")
+        m2.metric("Qualité SEO", f"{total-missing_meta}/{total}")
+        m3.metric("Lenteur (>1.2s)", slow_pages)
 
         if st.button("💾 Sauvegarder dans cet Espace Client", use_container_width=True):
             payload = {"results": st.session_state.results, "clusters": st.session_state.clusters}
             if db.save_audit(user_email, st.session_state.current_ws, st.session_state.target_url, payload):
-                st.toast("Sauvegarde réussie !")
+                st.toast("✅ Sauvegardé avec succès !")
 
         # CONSTRUCTION DU GRAPHE
         G = nx.DiGraph()
@@ -131,12 +151,12 @@ def render_audit_geo():
             for p in c['samples'][:15]:
                 lbl = get_clean_label(p.get('title', 'N/A'), p['url'], domain)
                 
-                # Tooltip Technique (Audit simple intégré)
+                # Diagnostic technique dans le tooltip (bulle)
                 status = "✅ SEO OK" if p.get('description') else "⚠️ Meta Description Manquante"
                 perf = f"⏱️ {p.get('response_time', 0):.2f}s"
-                tooltip = f"URL: {p['url']}\n{status}\nPerformance: {perf}\nH1: {p.get('h1', 'Inconnu')[:50]}"
+                tooltip = f"URL: {p['url']}\nStatut: {status}\nPerformance: {perf}"
                 
-                # Couleur dynamique selon erreur
+                # Rouge si erreur SEO
                 color = "#f44336" if not p.get('description') else "#78909c"
                 
                 G.add_node(p['url'], label=lbl, size=12, color=color, title=tooltip)
