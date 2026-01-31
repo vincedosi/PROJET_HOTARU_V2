@@ -1,7 +1,8 @@
 """
-SMART SCRAPER HYBRIDE (V2 - Deep & Clean)
-- Nettoyage intelligent des titres
-- Capture du maillage interne (Internal Linking)
+SMART SCRAPER HYBRIDE (V3 - Deep & Smart)
+- Limite augmentée (500 URLs)
+- Filtres anti-bruit (login, admin, etc.)
+- Priorité au contenu
 """
 import requests
 from bs4 import BeautifulSoup
@@ -11,7 +12,7 @@ import random
 import re
 
 class SmartScraper:
-    def __init__(self, base_url, max_urls=300): # Augmenté à 300
+    def __init__(self, base_url, max_urls=500): # On pousse à 500
         self.base_url = base_url.rstrip('/')
         self.domain = urlparse(base_url).netloc
         self.max_urls = max_urls
@@ -20,52 +21,58 @@ class SmartScraper:
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
+        # On ignore ces patterns qui n'apportent pas de valeur SEO
+        self.exclude_patterns = [
+            'login', 'signin', 'signup', 'register', 'cart', 'checkout', 
+            'account', 'admin', 'wp-', 'feed', '.pdf', '.jpg', '.png', 
+            'tel:', 'mailto:', 'javascript:', '#'
+        ]
 
-    def clean_title(self, title, h1, domain):
-        """Choisit le meilleur titre et le nettoie."""
-        # 1. Candidat principal
+    def is_valid_url(self, url):
+        """Vérifie si l'URL est pertinente."""
+        if any(ex in url.lower() for ex in self.exclude_patterns):
+            return False
+        return True
+
+    def clean_title(self, title, h1):
+        """Nettoie le titre pour l'affichage."""
         text = h1 if h1 and len(h1) > 5 else title
-        if not text: return "Sans titre"
-
-        # 2. Nettoyage (Enlever le nom du site souvent à la fin)
-        # Ex: "Devenir Marin - La Marine Recrute" -> "Devenir Marin"
-        site_name = domain.split('.')[0]
-        text = re.split(r' [-|] ', text)[0] # Coupe au premier tiret ou pipe
+        if not text: return "Page sans titre"
         
-        # 3. Si le titre est juste le nom de domaine, c'est nul
-        if site_name in text.lower() and len(text) < len(site_name) + 5:
-            return h1 if h1 else "Page Accueil"
-            
-        return text.strip()
+        # Nettoyage classique (Enlever le nom du site à la fin)
+        separators = [' - ', ' | ', ' : ', ' — ']
+        for sep in separators:
+            if sep in text:
+                text = text.split(sep)[0]
+                
+        return text.strip()[:40] # On coupe si trop long
 
     def get_page_details(self, url):
         try:
-            resp = requests.get(url, headers=self.headers, timeout=5)
+            resp = requests.get(url, headers=self.headers, timeout=4)
             if resp.status_code != 200: return None
             
             soup = BeautifulSoup(resp.content, 'html.parser')
             
-            # Extraction Raw
             raw_title = soup.title.string.strip() if soup.title else ""
             h1 = soup.find('h1').get_text().strip() if soup.find('h1') else ""
+            final_title = self.clean_title(raw_title, h1)
             
-            # Nettoyage Intelligent
-            final_name = self.clean_title(raw_title, h1, self.domain)
-            
-            # Extraction Liens Internes (Pour le maillage)
-            internal_links = []
+            links = []
             for a in soup.find_all('a', href=True):
                 href = a['href']
                 full_url = urljoin(url, href)
-                # On garde seulement les liens vers le même domaine
-                if urlparse(full_url).netloc == self.domain:
-                    internal_links.append(full_url.split('#')[0]) # Retire les ancres
+                
+                # On ne garde que les liens du domaine et valides
+                if urlparse(full_url).netloc == self.domain and self.is_valid_url(full_url):
+                    clean_link = full_url.split('#')[0].split('?')[0] # Retire ancres et params
+                    if clean_link != url: # Pas de lien vers soi-même
+                        links.append(clean_link)
                     
             return {
                 "url": url,
-                "title": final_name, # Titre propre
-                "depth": 0, # Sera calculé dans la boucle
-                "links": list(set(internal_links)) # Liens uniques sortants
+                "title": final_title,
+                "links": list(set(links))
             }
         except:
             return None
@@ -78,8 +85,10 @@ class SmartScraper:
         while queue and crawled_count < self.max_urls:
             current_url = queue.pop(0)
             
-            if progress_callback and crawled_count % 5 == 0:
-                progress_callback(f"Exploration ({crawled_count}): {current_url.split('/')[-1][:30]}...", crawled_count / self.max_urls)
+            # Feedback visuel tous les 10 items
+            if progress_callback and crawled_count % 10 == 0:
+                percent = min(crawled_count / self.max_urls, 0.95)
+                progress_callback(f"Exploration ({crawled_count}): {current_url.split('/')[-1]}", percent)
             
             data = self.get_page_details(current_url)
             
@@ -87,14 +96,15 @@ class SmartScraper:
                 self.results.append(data)
                 crawled_count += 1
                 
-                # Ajout des enfants à la queue
+                # Ajout des liens à la file d'attente
                 for link in data['links']:
                     if link not in self.visited:
                         self.visited.add(link)
                         queue.append(link)
             
-            time.sleep(0.1) 
+            time.sleep(0.05) # Très rapide
 
+        # Analyse des clusters
         patterns = self.analyze_patterns(self.results)
         return self.results, {"total_urls": len(self.results), "patterns": len(patterns)}
 
@@ -104,9 +114,11 @@ class SmartScraper:
             path = urlparse(p['url']).path
             segments = [s for s in path.split('/') if s]
             
+            # Logique de dossier intelligent
             if len(segments) > 0:
                 group_key = segments[0]
-                if len(segments) > 1 and group_key in ['fr', 'en']: # Ignorer /fr/
+                # Si le premier segment est une langue (fr, en), on prend le suivant
+                if group_key in ['fr', 'en', 'de', 'es'] and len(segments) > 1:
                     group_key = segments[1]
             else:
                 group_key = "Accueil"
