@@ -1,9 +1,3 @@
-"""
-DATABASE MANAGER (v1.1.0 - SUPER ADMIN MODE)
-- Supporte la compression zlib/base64.
-- Bypass le filtrage email pour le rôle 'admin'.
-- Gestion robuste des erreurs de décompression.
-"""
 import streamlit as st
 import json
 import zlib
@@ -14,37 +8,25 @@ from google.oauth2.service_account import Credentials
 
 class AuditDatabase:
     def __init__(self):
-        self.scopes = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
-        self.creds = None
-        self.client = None
+        self.scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         self.sheet = None
         
         if "gcp_service_account" not in st.secrets:
-            st.error("❌ Erreur : Section [gcp_service_account] introuvable dans les secrets.")
+            st.error("❌ Secrets [gcp_service_account] manquants.")
             return
 
         try:
-            # Authentification via les secrets Streamlit
-            self.creds = Credentials.from_service_account_info(
-                dict(st.secrets["gcp_service_account"]),
-                scopes=self.scopes
-            )
-            self.client = gspread.authorize(self.creds)
-            
-            # Récupération de l'URL du Google Sheet
+            creds = Credentials.from_service_account_info(dict(st.secrets["gcp_service_account"]), scopes=self.scopes)
+            self.client = gspread.authorize(creds)
             url = st.secrets.get("sheet_url") or st.secrets.get("url")
             if url:
                 self.sheet = self.client.open_by_url(url)
             else:
-                st.error("❌ Erreur : URL du Google Sheet (sheet_url) manquante dans les secrets.")
+                st.error("❌ 'sheet_url' non trouvé dans les secrets.")
         except Exception as e:
-            st.error(f"❌ Erreur de connexion GSheets : {e}")
+            st.error(f"❌ Erreur connexion GSheets : {e}")
 
     def get_or_create_worksheet(self, name="audits"):
-        """Récupère l'onglet 'audits' ou le crée s'il est absent."""
         if not self.sheet: return None
         try:
             return self.sheet.worksheet(name)
@@ -54,22 +36,13 @@ class AuditDatabase:
             return ws
 
     def save_audit(self, user_email, site_url, full_payload, stats):
-        """Compresse et sauvegarde l'audit complet dans Google Sheets."""
         if not self.sheet: return False
         try:
             ws = self.get_or_create_worksheet("audits")
-            
-            # Compression JSON pour passer sous la limite des 50k caractères
             json_data = json.dumps(full_payload)
             compressed = zlib.compress(json_data.encode('utf-8'))
             safe_string = base64.b64encode(compressed).decode('utf-8')
             
-            # Sécurité anti-débordement
-            if len(safe_string) > 49500:
-                st.warning("⚠️ Audit trop lourd. Sauvegarde partielle (Top 50 pages).")
-                full_payload['results'] = full_payload['results'][:50]
-                return self.save_audit(user_email, site_url, full_payload, stats)
-
             ws.append_row([
                 datetime.now().strftime('%Y%m%d%H%M%S'),
                 user_email.strip().lower(),
@@ -80,50 +53,44 @@ class AuditDatabase:
             ])
             return True
         except Exception as e:
-            st.error(f"❌ Erreur lors de la sauvegarde : {e}")
+            st.error(f"Erreur Sauvegarde: {e}")
             return False
 
     def load_user_audits(self, user_email, is_admin=False):
-        """
-        Charge les audits. 
-        Si is_admin est True, récupère TOUTES les lignes sans exception.
-        """
+        """Récupère les audits avec messages de debug visuels."""
         if not self.sheet: return []
         try:
             ws = self.get_or_create_worksheet("audits")
             records = ws.get_all_records()
             
+            # --- DEBUG VISUEL ---
+            if not records:
+                st.sidebar.warning("⚠️ L'onglet 'audits' semble vide.")
+                return []
+            
             filtered = []
             for r in records:
-                # --- LOGIQUE DE FILTRAGE ---
+                # Si admin on prend tout, sinon on compare l'email
                 if is_admin:
-                    # En mode admin, on ne pose pas de question, on prend tout
                     filtered.append(r)
                 else:
-                    # En mode user, comparaison flexible (gère les emails tronqués)
                     db_email = str(r.get('user_email', '')).strip().lower()
-                    current_user = user_email.strip().lower()
-                    if current_user in db_email or db_email in current_user:
+                    if user_email.strip().lower() in db_email or db_email in user_email.strip().lower():
                         filtered.append(r)
             
-            # --- DÉCOMPRESSION DES DONNÉES ---
+            # Décompression
             for r in filtered:
                 try:
                     raw_val = r.get('data_compressed') or r.get('json_data')
                     if not raw_val: continue
-                    
                     if str(raw_val).startswith('{'):
-                        # Cas des anciennes données non compressées
                         r['json_data'] = json.loads(raw_val)
                     else:
-                        # Nouveau format compressé
                         decoded = base64.b64decode(raw_val)
                         decompressed = zlib.decompress(decoded).decode('utf-8')
                         r['json_data'] = json.loads(decompressed)
-                except Exception:
-                    # On ignore les lignes corrompues
-                    continue
+                except: continue
             return filtered
         except Exception as e:
-            st.error(f"❌ Erreur de chargement de l'historique : {e}")
+            st.sidebar.error(f"Erreur Load: {e}")
             return []
