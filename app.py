@@ -1,77 +1,110 @@
+"""
+HOTARU V3 - APPLICATION SAAS (v0.9.8 - DEMO READY)
+Navigation: Top Bar
+Feature: Structure Zen + Switch GEO Score IA
+"""
+
 import streamlit as st
-import gspread
-from google.oauth2.service_account import Credentials
-import json
+import os
 
-st.set_page_config(layout="wide", page_title="HOTARU DIAGNOSTIC")
+# --- 1. CONFIGURATION GLOBALE ---
+st.set_page_config(
+    page_title="HOTARU",
+    page_icon="✨",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
-def test_connection():
-    st.title("🕵️‍♂️ DIAGNOSTIC DE CONNEXION")
-    
-    # 1. TEST DE LECTURE DES SECRETS
-    st.subheader("1. Lecture du fichier secrets.toml")
-    
-    # Test URL
-    if "sheet_url" in st.secrets:
-        url = st.secrets["sheet_url"]
-        st.success(f"✅ URL trouvée : {url}")
-    elif "url" in st.secrets:
-        url = st.secrets["url"]
-        st.warning(f"⚠️ URL trouvée sous le nom 'url' (au lieu de 'sheet_url') : {url}")
-    else:
-        st.error("❌ AUCUNE URL TROUVÉE à la racine des secrets.")
-        url = None
+# --- 2. CSS ---
+def load_css(file_name):
+    try:
+        with open(file_name, "r") as f:
+            st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+    except FileNotFoundError:
+        pass
 
-    # Test JSON Robot
-    if "gcp_service_account" in st.secrets:
-        st.success("✅ Section [gcp_service_account] détectée.")
-        email = st.secrets["gcp_service_account"].get("client_email")
-        st.info(f"🤖 Email du robot : {email}")
+# --- 3. HEADER ---
+def render_header():
+    col_logo, col_nav = st.columns([1, 4])
+    with col_logo:
+        st.markdown("""
+            <div style="padding-top: 10px;">
+                <h2 style="margin:0; font-size:1.8rem; color:black; font-weight:700;">
+                    <span style="color:#FFD700;">●</span> HOTARU
+                </h2>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with col_nav:
+        options = ["📊 Dashboard", "🔍 Audit GEO", "📄 Rapports", "⚙️ Config"]
+        current_index = 0
+        if "active_tab" in st.session_state and st.session_state.active_tab in options:
+            current_index = options.index(st.session_state.active_tab)
+
+        selected = st.radio(
+            "Navigation",
+            options,
+            index=current_index,
+            horizontal=True,
+            label_visibility="collapsed",
+            key="top_nav_bar"
+        )
+    st.markdown("---") 
+    return selected
+
+# --- 4. LOGIN ---
+def render_login():
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        st.markdown("<br><br><br>", unsafe_allow_html=True)
+        st.markdown("<h1 style='text-align: center;'>Connexion</h1>", unsafe_allow_html=True)
         
-        if email:
-            st.markdown(f"""
-            ### 👉 ACTION REQUISE :
-            Assurez-vous que cet email est bien **ÉDITEUR** du fichier Google Sheet :
-            **`{email}`**
-            """)
+        with st.form("login_form"):
+            email = st.text_input("Email", value="demo@hotaru.app")
+            password = st.text_input("Mot de passe", type="password", value="demo")
+            submit = st.form_submit_button("Entrer", use_container_width=True)
+            
+            if submit:
+                if email and password:
+                    st.session_state.authenticated = True
+                    st.session_state.user_email = email
+                    st.session_state.active_tab = "🔍 Audit GEO"
+                    st.rerun()
+                else:
+                    st.error("Veuillez remplir les champs.")
+
+# --- 5. MAIN ---
+def main():
+    load_css("assets/style.css")
+
+    if 'authenticated' not in st.session_state:
+        st.session_state.authenticated = False
+    if 'active_tab' not in st.session_state:
+        st.session_state.active_tab = "🔍 Audit GEO"
+
+    if not st.session_state.authenticated:
+        render_login()
     else:
-        st.error("❌ Section [gcp_service_account] INTROUVABLE.")
-        return
+        selected_page = render_header()
+        st.session_state.active_tab = selected_page
 
-    # 2. TEST DE CONNEXION REEL
-    st.subheader("2. Tentative de Connexion Google")
-    
-    if st.button("Lancer le test de connexion"):
-        try:
-            scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-            creds = Credentials.from_service_account_info(dict(st.secrets["gcp_service_account"]), scopes=scope)
-            client = gspread.authorize(creds)
-            
-            st.write("🔑 Authentification réussie...")
-            
-            if url:
-                st.write(f"📂 Tentative d'ouverture du fichier...")
-                sh = client.open_by_url(url)
-                st.success(f"✅ VICTOIRE ! Connecté au fichier : '{sh.title}'")
-                
-                ws = sh.sheet1
-                st.write(f"📄 Premier onglet : '{ws.title}'")
-                st.balloons()
-            else:
-                st.error("Pas d'URL à tester.")
+        if selected_page == "📊 Dashboard":
+            from modules.dashboard import render_dashboard
+            render_dashboard()
 
-        except gspread.exceptions.APIError as e:
-            st.error("❌ ERREUR API GOOGLE (Problème de droits ou API désactivée)")
-            st.code(e)
-            st.warning("Conseil : Vérifiez que 'Google Drive API' et 'Google Sheets API' sont activées dans la console Google Cloud.")
-            
-        except gspread.exceptions.SpreadsheetNotFound:
-            st.error("❌ FICHIER NON TROUVÉ")
-            st.warning("Le robot est connecté, mais il ne voit pas le fichier. Avez-vous bien partagé le fichier avec lui ?")
-            
-        except Exception as e:
-            st.error("❌ ERREUR TECHNIQUE")
-            st.code(f"{type(e).__name__}: {e}")
+        elif selected_page == "🔍 Audit GEO":
+            from modules.audit_geo import render_audit_geo
+            render_audit_geo()
+
+        elif selected_page == "📄 Rapports":
+            st.title("Mes Rapports")
+            st.info("Historique complet des audits sauvegardés.")
+
+        elif selected_page == "⚙️ Config":
+            st.subheader("Configuration")
+            if st.button("Se déconnecter"):
+                st.session_state.authenticated = False
+                st.rerun()
 
 if __name__ == "__main__":
-    test_connection()
+    main()
