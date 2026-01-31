@@ -1,29 +1,57 @@
 """
-HOTARU V3 - APPLICATION SAAS (v0.9.8 - DEMO READY)
-Navigation: Top Bar
-Feature: Structure Zen + Switch GEO Score IA
+HOTARU - Main Application (v0.9.9)
+Système de Navigation SaaS avec Gestion des Rôles
 """
 
 import streamlit as st
-import os
+from modules.audit_geo import render_audit_geo
 
-# --- 1. CONFIGURATION GLOBALE ---
+# --- 1. CONFIGURATION DE LA PAGE ---
 st.set_page_config(
-    page_title="HOTARU",
+    page_title="HOTARU | Stratégie GEO",
     page_icon="✨",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. CSS ---
-def load_css(file_name):
-    try:
-        with open(file_name, "r") as f:
-            st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
-    except FileNotFoundError:
-        pass
+# --- 2. GESTION DU LOGIN & DES RÔLES ---
+def check_auth():
+    if 'authenticated' not in st.session_state:
+        st.session_state.authenticated = False
+        st.session_state.user_email = None
+        st.session_state.user_role = "user"
 
-# --- 3. HEADER ---
+    if not st.session_state.authenticated:
+        render_login()
+        st.stop()
+
+def render_login():
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        st.markdown("<br><br><br>", unsafe_allow_html=True)
+        st.markdown("<h1 style='text-align: center;'>Connexion HOTARU</h1>", unsafe_allow_html=True)
+        
+        with st.form("login_form"):
+            email = st.text_input("Email Professionnel", value="admin@hotaru.app")
+            password = st.text_input("Mot de passe", type="password", value="demo")
+            submit = st.form_submit_button("Se connecter", use_container_width=True)
+            
+            if submit:
+                # --- LOGIQUE ADMIN ---
+                # Ajoute ton email ici pour avoir les droits Admin
+                admins = ["admin@hotaru.app", "vincent.sidoli@gmail.com"]
+                
+                st.session_state.authenticated = True
+                st.session_state.user_email = email
+                
+                if email in admins:
+                    st.session_state.user_role = "admin"
+                else:
+                    st.session_state.user_role = "user"
+                
+                st.rerun()
+
+# --- 3. HEADER DE NAVIGATION ---
 def render_header():
     col_logo, col_nav = st.columns([1, 4])
     with col_logo:
@@ -36,75 +64,57 @@ def render_header():
         """, unsafe_allow_html=True)
 
     with col_nav:
-        options = ["📊 Dashboard", "🔍 Audit GEO", "📄 Rapports", "⚙️ Config"]
-        current_index = 0
-        if "active_tab" in st.session_state and st.session_state.active_tab in options:
-            current_index = options.index(st.session_state.active_tab)
+        # On définit les onglets disponibles
+        tabs = ["📊 Dashboard", "🔍 Audit GEO", "📄 Rapports", "⚙️ Config"]
+        
+        # On récupère l'onglet actif ou on met l'Audit par défaut
+        if "active_tab" not in st.session_state:
+            st.session_state.active_tab = "🔍 Audit GEO"
+            
+        current_index = tabs.index(st.session_state.active_tab)
 
         selected = st.radio(
             "Navigation",
-            options,
+            tabs,
             index=current_index,
             horizontal=True,
             label_visibility="collapsed",
-            key="top_nav_bar"
+            key="main_nav"
         )
-    st.markdown("---") 
-    return selected
+        st.session_state.active_tab = selected
+    
+    st.markdown("---")
 
-# --- 4. LOGIN ---
-def render_login():
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        st.markdown("<br><br><br>", unsafe_allow_html=True)
-        st.markdown("<h1 style='text-align: center;'>Connexion</h1>", unsafe_allow_html=True)
-        
-        with st.form("login_form"):
-            email = st.text_input("Email", value="demo@hotaru.app")
-            password = st.text_input("Mot de passe", type="password", value="demo")
-            submit = st.form_submit_button("Entrer", use_container_width=True)
-            
-            if submit:
-                if email and password:
-                    st.session_state.authenticated = True
-                    st.session_state.user_email = email
-                    st.session_state.active_tab = "🔍 Audit GEO"
-                    st.rerun()
-                else:
-                    st.error("Veuillez remplir les champs.")
-
-# --- 5. MAIN ---
+# --- 4. CORPS DE L'APPLICATION ---
 def main():
-    load_css("assets/style.css")
+    check_auth()
+    render_header()
+    
+    # Navigation vers les modules
+    page = st.session_state.active_tab
 
-    if 'authenticated' not in st.session_state:
-        st.session_state.authenticated = False
-    if 'active_tab' not in st.session_state:
-        st.session_state.active_tab = "🔍 Audit GEO"
+    if page == "📊 Dashboard":
+        st.title("Tableau de bord")
+        st.info("Statistiques globales des audits en cours.")
+        # Futur : from modules.dashboard import render_dashboard
 
-    if not st.session_state.authenticated:
-        render_login()
-    else:
-        selected_page = render_header()
-        st.session_state.active_tab = selected_page
+    elif page == "🔍 Audit GEO":
+        # On appelle le module d'audit que nous avons mis à jour
+        render_audit_geo()
 
-        if selected_page == "📊 Dashboard":
-            from modules.dashboard import render_dashboard
-            render_dashboard()
+    elif page == "📄 Rapports":
+        st.title("Rapports & Exports")
+        st.write(f"Connecté en tant que : **{st.session_state.user_role.upper()}**")
+        st.info("Génération de rapports PDF et exports CSV.")
 
-        elif selected_page == "🔍 Audit GEO":
-            from modules.audit_geo import render_audit_geo
-            render_audit_geo()
-
-        elif selected_page == "📄 Rapports":
-            st.title("Mes Rapports")
-            st.info("Historique complet des audits sauvegardés.")
-
-        elif selected_page == "⚙️ Config":
-            st.subheader("Configuration")
-            if st.button("Se déconnecter"):
-                st.session_state.authenticated = False
-                st.rerun()
+    elif page == "⚙️ Config":
+        st.subheader("Paramètres du compte")
+        st.write(f"Email : {st.session_state.user_email}")
+        st.write(f"Droits : {st.session_state.user_role}")
+        
+        if st.button("Se déconnecter", type="secondary"):
+            st.session_state.authenticated = False
+            st.rerun()
 
 if __name__ == "__main__":
     main()
