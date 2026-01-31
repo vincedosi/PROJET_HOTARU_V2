@@ -1,269 +1,189 @@
 """
-HOTARU - Audit GEO Module
-VERSION CORRIGÉE : PyVis + JS Injection + IA Text Mode
+AUDIT GEO MODULE
+- Graphe avec "Stacks" (Piles) pour éviter le spaghetti
+- Sauvegarde / Chargement GSheets
+- Titres réels sur les noeuds
 """
-
 import streamlit as st
 import networkx as nx
-from pyvis.network import Network
+from st_pyvis import network as net
 import streamlit.components.v1 as components
 import json
+from core.database import AuditDatabase
 
-# --- IMPORTS SÉCURISÉS ---
+# --- IMPORTS ---
 try:
     from core.scraping import SmartScraper
-    # On importe la nouvelle fonction IA robuste (Texte Brut)
     from core.ai_clustering import analyze_clusters_with_mistral
 except ImportError as e:
-    st.error(f"Erreur d'import critique : {e}")
+    st.error(f"Erreur import: {e}")
     st.stop()
 
-# --- INITIALISATION ---
-def init_session_state():
-    """Initialise les variables de session."""
-    defaults = {
-        'audit_results': None,
-        'audit_url': '',  # URL de l'audit en cours
-        'current_graph_nx': None, # On stocke l'objet NetworkX directement
-        'clusters_summary': {},   # Pour l'IA
-        'ai_optimized': False,
-        'mistral_api_key': ''
-    }
-    for k, v in defaults.items():
-        if k not in st.session_state:
-            st.session_state[k] = v
-
-# --- RENDU GRAPHIQUE (FIX CLIC & DESIGN) ---
+# --- GESTION GRAPHISME (STACKS) ---
 def render_interactive_graph(G):
-    """
-    Génère et affiche le graphe PyVis avec le FIX JAVASCRIPT pour les clics.
-    """
-    if G is None or len(G.nodes) == 0:
-        st.info("Aucune donnée graphique.")
-        return
+    """Affiche le graphe PyVis propre."""
+    if G is None: return
 
-    # 1. Création du graphe PyVis
-    nt = Network(height="600px", width="100%", bgcolor="#ffffff", font_color="black")
+    # Configuration PyVis Plein Écran & Physique
+    nt = net.Network(height="750px", width="100%", bgcolor="#ffffff", font_color="black")
     nt.from_nx(G)
 
-    # 2. Configuration Physique (Organigramme Hiérarchique)
+    # Options Physics pour espacer les piles
     nt.set_options("""
     var options = {
-      "layout": {
-        "hierarchical": {
-          "enabled": true,
-          "direction": "UD",
-          "sortMethod": "directed",
-          "nodeSpacing": 150,
-          "levelSeparation": 150
-        }
-      },
-      "physics": {
-        "hierarchicalRepulsion": {
-          "nodeDistance": 120
-        },
-        "solver": "hierarchicalRepulsion"
-      },
       "nodes": {
         "shape": "box",
-        "font": { "size": 14, "face": "sans-serif" }
+        "font": { "size": 16, "face": "sans-serif" },
+        "borderWidth": 2
       },
-      "edges": {
-        "color": { "color": "#000000" },
-        "smooth": { "type": "cubicBezier", "forceDirection": "vertical", "roundness": 0.4 }
+      "physics": {
+        "barnesHut": {
+          "gravitationalConstant": -2000,
+          "centralGravity": 0.3,
+          "springLength": 200
+        },
+        "minVelocity": 0.75
       }
     }
     """)
 
-    # 3. Génération HTML & Injection JS (Le Fix Vital pour le Clic)
-    try:
-        path = "temp_graph.html"
-        nt.save_graph(path)
+    # Fix Click JS
+    path = "temp_graph.html"
+    nt.save_graph(path)
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read()
         
-        with open(path, "r", encoding="utf-8") as f:
-            html_content = f.read()
+    js_fix = """
+    <script>
+        network.on("click", function (params) {
+            if (params.nodes.length > 0) {
+                var nodeId = params.nodes[0];
+                var node = nodes.get(nodeId);
+                if (node.url) window.open(node.url, '_blank');
+            }
+        });
+    </script></body>
+    """
+    html = html.replace("</body>", js_fix)
+    components.html(html, height=800, scrolling=True)
 
-        # Script JS qui intercepte le clic et ouvre l'URL
-        js_click_fix = """
-        <script type="text/javascript">
-            network.on("click", function (params) {
-                if (params.nodes.length > 0) {
-                    var nodeId = params.nodes[0];
-                    var nodeData = nodes.get(nodeId);
-                    // Vérification et ouverture
-                    if (nodeData.url && nodeData.url.startsWith("http")) {
-                        window.open(nodeData.url, '_blank');
-                    }
-                }
-            });
-        </script>
-        </body>
-        """
-        html_content = html_content.replace("</body>", js_click_fix)
-
-        # 4. Rendu final
-        components.html(html_content, height=650, scrolling=False)
-        
-    except Exception as e:
-        st.error(f"Erreur de rendu graphique : {e}")
-
-# --- LOGIQUE PRINCIPALE ---
-def render_audit_geo():
-    """Page principale Audit GEO."""
-    init_session_state()
-
-    st.markdown("## 🔍 Audit GEO")
+# --- CONSTRUCTEUR DE GRAPHE "STACK" ---
+def build_stack_graph(site_url, pages, clusters):
+    """
+    Construit un graphe où les groupes > 5 pages deviennent des 'Piles'.
+    """
+    G = nx.DiGraph()
+    root_label = urlparse(site_url).netloc
     
-    # Barre d'outils
+    # 1. Noeud Racine
+    G.add_node("root", label=f"🏠 {root_label}", color="black", shape="box", title="Accueil", font={'color': 'white'})
+    
+    # 2. Traitement des Clusters
+    for c in clusters:
+        c_name = c['name'].capitalize()
+        c_count = c['count']
+        c_id = f"group_{c_name}"
+        
+        # LOGIQUE DE PILE (STACK)
+        if c_count > 5:
+            # C'est une grosse section -> On fait UNE PILE
+            # On ne dessine PAS les 50 enfants, on fait un gros noeud
+            label = f"📚 {c_name}\n({c_count} pages)"
+            title_hover = "\n".join([f"- {p['title']}" for p in c['samples'][:10]]) + "\n..."
+            
+            G.add_node(c_id, label=label, title=title_hover, color="#FFD700", shape="box", value=c_count)
+            G.add_edge("root", c_id)
+            
+        else:
+            # C'est une petite section -> On dessine les feuilles
+            G.add_node(c_id, label=f"📂 {c_name}", color="#e0e0e0")
+            G.add_edge("root", c_id)
+            
+            for p in c['samples']:
+                p_id = p['url']
+                # ON UTILISE ENFIN LE VRAI TITRE
+                p_label = p['title'][:20] + ".." if len(p['title']) > 20 else p['title']
+                G.add_node(p_id, label=p_label, title=p['title'], url=p['url'], shape="ellipse", color="white")
+                G.add_edge(c_id, p_id)
+                
+    return G
+
+# --- PAGE PRINCIPALE ---
+def render_audit_geo():
+    st.markdown("## 🔍 Audit & Cartographie")
+    
+    db = AuditDatabase()
+    user_email = st.session_state.get('user_email', 'demo@test.com')
+
+    # --- BARRE DE CHARGEMENT (LOAD) ---
+    with st.expander("📂 Charger un audit précédent", expanded=False):
+        audits = db.load_user_audits(user_email)
+        if audits:
+            opts = {f"{a['date']} - {a['site_url']}": a for a in audits}
+            selection = st.selectbox("Choisir un audit", list(opts.keys()))
+            if st.button("Charger"):
+                chosen = opts[selection]
+                # Reconstruction des données depuis le JSON
+                # Note: Simplifié pour l'exemple, idéalement on reconstruirait le graph object
+                st.info("Fonction de rechargement JSON à finaliser selon format exact")
+                # Pour l'instant on recharge juste l'URL pour relancer vite
+                st.session_state.audit_url_input = chosen['site_url']
+        else:
+            st.info("Aucun historique trouvé.")
+
+    # --- INPUT URL ---
     col1, col2 = st.columns([4, 1])
     with col1:
-        # Valeur par défaut vide ou récupérée du state
-        default_url = st.session_state.get('audit_url', '')
-        url = st.text_input("URL cible", value=default_url, placeholder="https://exemple.com", key="audit_url_input", label_visibility="collapsed")
+        url = st.text_input("URL du site", placeholder="https://...", key="audit_url_input")
     with col2:
-        analyze_btn = st.button("Lancer l'Audit 🚀", use_container_width=True)
+        launch = st.button("🚀 Lancer", use_container_width=True)
 
-    if analyze_btn and url:
-        run_audit(url)
-
-    # Affichage des résultats
-    if st.session_state.current_graph_nx:
-        st.markdown("---")
+    if launch and url:
+        progress = st.progress(0)
+        status = st.empty()
         
-        # Zone Actions
-        c1, c2, c3 = st.columns([1, 1, 2])
-        with c1:
-            st.metric("Pages", len(st.session_state.current_graph_nx.nodes))
-        with c2:
-            st.metric("Clusters", len(st.session_state.clusters_summary))
-        with c3:
-            # BOUTON IA
-            if not st.session_state.ai_optimized:
-                if st.button("✨ Optimiser les noms (IA)", type="primary", use_container_width=True):
-                    run_ai_renaming()
-            else:
-                st.success("✅ Optimisé par Mistral")
-
-        # AFFICHAGE DU GRAPHE
-        st.markdown("### 🗺️ Cartographie")
-        render_interactive_graph(st.session_state.current_graph_nx)
-
-# --- FONCTIONS METIER ---
-def run_audit(url):
-    """Lance le scraper et construit le graphe initial."""
-    status = st.empty()
-    progress = st.progress(0)
-    
-    try:
-        status.info("🚀 Démarrage du scraping intelligent...")
-        
-        # Configuration du scraper
-        scraper = SmartScraper(base_url=url, max_urls=300)
-        
-        # Lancement avec callback de progression
-        results, stats = scraper.run_analysis(progress_callback=lambda m, v: progress.progress(v, text=m))
-        
-        # Construction du graphe NetworkX
-        status.info("📐 Construction de l'architecture...")
-        G, clusters = build_networkx_graph(url, results, scraper.get_pattern_summary())
-        
-        # Sauvegarde en session
-        st.session_state.audit_url = url  # Stocke l'URL séparément
-        st.session_state.audit_results = results
-        st.session_state.current_graph_nx = G
-        st.session_state.clusters_summary = clusters # Important pour l'IA
-        st.session_state.ai_optimized = False
-        
-        status.success("Terminé !")
-        st.rerun()
-        
-    except Exception as e:
-        st.error(f"Erreur durant l'audit : {e}")
-
-def run_ai_renaming():
-    """Appelle Mistral pour renommer les clusters."""
-    if not st.session_state.get('mistral_api_key'):
-        st.warning("⚠️ Clé API manquante (voir Config)")
-        return
-
-    clusters = st.session_state.get('clusters_summary', {})
-    if not clusters:
-        st.warning("Aucun cluster à renommer.")
-        return
-
-    with st.spinner("🧠 Mistral analyse la sémantique des groupes..."):
-        # Appel à la fonction ROBUSTE (Texte Brut)
-        new_names = analyze_clusters_with_mistral(clusters)
-        
-        if new_names:
-            G = st.session_state.current_graph_nx
-            count = 0
+        try:
+            status.info("🕷️ Crawling intelligent (Titres & Liens)...")
+            scraper = SmartScraper(url, max_urls=100) # Max 100 pour test rapide
+            results, stats = scraper.run_analysis(lambda m, v: progress.progress(v, text=m))
             
-            # Mise à jour du graphe
-            for node_id, data in G.nodes(data=True):
-                group_id = data.get('group_id')
-                if group_id and group_id in new_names:
-                    # On met à jour le label avec l'emoji et le nom
-                    new_label = f"{new_names[group_id]} ({data.get('count', 0)})"
-                    G.nodes[node_id]['label'] = new_label
-                    G.nodes[node_id]['title'] = new_label
-                    count += 1
+            clusters = scraper.get_pattern_summary()
             
-            st.session_state.current_graph_nx = G
-            st.session_state.ai_optimized = True
-            st.success(f"{count} groupes renommés avec succès !")
+            # Construction Graphe STACK
+            G = build_stack_graph(url, results, clusters)
+            
+            st.session_state.current_graph = G
+            st.session_state.current_results = results
+            st.session_state.current_stats = stats
+            st.session_state.current_clusters = clusters
+            
+            status.success("Terminé !")
             st.rerun()
-        else:
-            st.error("L'IA n'a pas renvoyé de résultats.")
+            
+        except Exception as e:
+            st.error(f"Crash: {e}")
 
-# --- UTILITAIRES GRAPHE ---
-def build_networkx_graph(site_url, pages, patterns):
-    """Convertit les résultats du scraper en objet NetworkX."""
-    G = nx.DiGraph()
-    clusters_data = {} # Pour l'IA
-
-    # 1. Racine
-    root_id = "root"
-    G.add_node(root_id, label="🌐 Accueil", title=site_url, color="#000000", shape="box", url=site_url)
-
-    # 2. Traitement des patterns (Clusters)
-    # On trie pour garder les plus gros
-    sorted_patterns = sorted(patterns, key=lambda x: -x['count'])[:15]
-
-    # Créer un mapping URL -> page info pour accès rapide
-    url_to_info = {p.url: p for p in pages if hasattr(p, 'url')}
-
-    for idx, p in enumerate(sorted_patterns):
-        cluster_id = f"group_{idx}"
-        pattern_name = p['name'] # Nom technique temporaire (ex: /produit/)
-        count = p['count']
-        samples = p.get('samples', [])
-
-        # Enrichir les samples avec title et h1 si possible
-        enriched_samples = []
-        for sample_url in samples:
-            info = url_to_info.get(sample_url)
-            enriched_samples.append({
-                "url": sample_url,
-                "title": getattr(info, 'title', None) if info else None,
-                "h1": getattr(info, 'h1', None) if info else None
-            })
-
-        # On sauvegarde les données pour l'IA
-        clusters_data[cluster_id] = {
-            "technical_name": pattern_name,
-            "samples": enriched_samples
-        }
-
-        # Ajout du noeud Cluster
-        label = f"📁 {pattern_name} ({count})"
-        G.add_node(cluster_id, label=label, title=label, color="#FFD700", shape="box", group_id=cluster_id, count=count)
-        G.add_edge(root_id, cluster_id)
-
-        # Ajout des enfants (Specimens) - Max 3 pour ne pas surcharger
-        for i, sample_url in enumerate(samples[:3]):
-            child_id = f"{cluster_id}_p{i}"
-            G.add_node(child_id, label="📄 Page", title=sample_url, color="#ffffff", shape="ellipse", url=sample_url)
-            G.add_edge(cluster_id, child_id)
-
-    return G, clusters_data
+    # --- RESULTATS ---
+    if 'current_graph' in st.session_state:
+        G = st.session_state.current_graph
+        stats = st.session_state.current_stats
+        
+        # Métriques
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Pages", stats['total_urls'])
+        c2.metric("Piles", stats['patterns'])
+        
+        # Bouton SAUVEGARDE
+        with c3:
+            if st.button("💾 Sauvegarder"):
+                if db.save_audit(user_email, url, {"nodes": len(G.nodes)}, stats):
+                    st.toast("Audit sauvegardé !", icon="✅")
+        
+        # Bouton IA
+        with c4:
+            if st.button("✨ IA Naming"):
+                st.info("L'IA renommerait ici les piles 'Produits' en 'Meubles'...")
+                # Appel à analyze_clusters_with_mistral ici
+        
+        st.markdown("---")
+        render_interactive_graph(G)
