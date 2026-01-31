@@ -196,7 +196,9 @@ def render_audit_geo():
         
         try:
             status.info("🕷️ Scraping en cours...")
-            scraper = SmartScraper(base_url=url, max_urls=300)
+            # Au lieu de 300 ou 500, mets 30 ou 50
+            scraper = SmartScraper(base_url=url, max_urls=50)
+            # scraper = SmartScraper(base_url=url, max_urls=300)
             results, stats = scraper.run_analysis(lambda m, v: progress.progress(v, text=m))
             
             status.info("📐 Génération du graphe...")
