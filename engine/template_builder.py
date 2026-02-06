@@ -1,255 +1,705 @@
-"""
-TEMPLATE BUILDER
-Handles placeholder replacement and JSON-LD generation from template
-"""
+# =============================================================================
+# MASTER TAB - NOUVELLE UX PROFESSIONNELLE
+# =============================================================================
+# Remplace la fonction render_master_tab() dans app.py
 
-import json
-import re
-from typing import Dict, Any
-from pathlib import Path
-
-
-class TemplateBuilder:
-    """Builds final JSON-LD by replacing placeholders in template"""
+def render_master_tab():
+    """Onglet MASTER - Interface Pro Minimaliste"""
     
-    def __init__(self, template_path: str):
-        """Initialize with path to JSON-LD template"""
-        self.template_path = template_path
-        self.template_content = self._load_template()
-    
-    def _load_template(self) -> str:
-        """Load template file as string"""
-        try:
-            with open(self.template_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            return content
-        except Exception as e:
-            raise Exception(f"Failed to load template: {str(e)}")
-    
-    def _clean_json_comments(self, json_str: str) -> str:
-        """Remove JavaScript-style comments from JSON string"""
-        # Remove single-line comments
-        json_str = re.sub(r'//.*?$', '', json_str, flags=re.MULTILINE)
-        # Remove multi-line comments
-        json_str = re.sub(r'/\*.*?\*/', '', json_str, flags=re.DOTALL)
-        return json_str
-    
-    def build_placeholder_map(self, master_data: Any, dynamic_data: Any, page_data: Dict = None) -> Dict[str, str]:
-        """Build complete placeholder mapping from all data sources"""
-        
-        placeholder_map = {}
-        
-        # MASTER DATA PLACEHOLDERS
-        if master_data:
-            # Identité
-            placeholder_map["{{MASTER_BRAND_NAME}}"] = master_data.brand_name
-            placeholder_map["{{MASTER_LEGAL_NAME}}"] = master_data.legal_name or master_data.brand_name
-            placeholder_map["{{MASTER_ALT_1}}"] = master_data.alt_name_1
-            placeholder_map["{{MASTER_ALT_2}}"] = master_data.alt_name_2
-            placeholder_map["{{MASTER_DESCRIPTION}}"] = master_data.description
-            placeholder_map["{{MASTER_SLOGAN}}"] = master_data.slogan
-            placeholder_map["{{MASTER_SITE_URL}}"] = master_data.site_url
-            placeholder_map["{{MASTER_ORG_TYPE}}"] = master_data.org_type
-            
-            # Identifiants légaux
-            placeholder_map["{{MASTER_SIREN}}"] = master_data.siren
-            placeholder_map["{{MASTER_SIRET}}"] = master_data.siret or master_data.siren
-            placeholder_map["{{MASTER_LEI}}"] = master_data.lei
-            placeholder_map["{{MASTER_DUNS}}"] = master_data.duns
-            placeholder_map["{{MASTER_GLN}}"] = master_data.gln
-            placeholder_map["{{MASTER_QID}}"] = master_data.qid
-            
-            # Visuel
-            placeholder_map["{{MASTER_LOGO_URL}}"] = master_data.logo_url
-            placeholder_map["{{MASTER_LOGO_W}}"] = master_data.logo_width
-            placeholder_map["{{MASTER_LOGO_H}}"] = master_data.logo_height
-            placeholder_map["{{MASTER_IMAGE}}"] = master_data.image_url
-            
-            # Knowledge Graph
-            placeholder_map["{{MASTER_WIKIPEDIA}}"] = master_data.wikipedia_url
-            placeholder_map["{{MASTER_LINKEDIN}}"] = master_data.linkedin_url
-            placeholder_map["{{MASTER_TWITTER}}"] = master_data.twitter_url
-            placeholder_map["{{MASTER_FACEBOOK}}"] = master_data.facebook_url
-            placeholder_map["{{MASTER_INSTAGRAM}}"] = master_data.instagram_url
-            placeholder_map["{{MASTER_YOUTUBE}}"] = master_data.youtube_url
-            placeholder_map["{{MASTER_TIKTOK}}"] = master_data.tiktok_url
-            
-            # Expertise
-            placeholder_map["{{MASTER_EXPERTISE_1}}"] = master_data.expertise_1
-            placeholder_map["{{MASTER_EXP_1_WIKI}}"] = master_data.expertise_1_wiki
-            placeholder_map["{{MASTER_EXPERTISE_2}}"] = master_data.expertise_2
-            placeholder_map["{{MASTER_EXP_2_WIKI}}"] = master_data.expertise_2_wiki
-            
-            # Adresse
-            placeholder_map["{{MASTER_STREET}}"] = master_data.street
-            placeholder_map["{{MASTER_CITY}}"] = master_data.city
-            placeholder_map["{{MASTER_REGION}}"] = master_data.region
-            placeholder_map["{{MASTER_ZIP}}"] = master_data.zip_code
-            placeholder_map["{{MASTER_COUNTRY}}"] = master_data.country
-            placeholder_map["{{MASTER_LAT}}"] = master_data.latitude
-            placeholder_map["{{MASTER_LONG}}"] = master_data.longitude
-            placeholder_map["{{MASTER_GOOGLE_MAPS}}"] = master_data.google_maps_url
-            
-            # Contact
-            placeholder_map["{{MASTER_PHONE}}"] = master_data.phone
-            placeholder_map["{{MASTER_EMAIL}}"] = master_data.email
-            placeholder_map["{{MASTER_FAX}}"] = master_data.fax
-            placeholder_map["{{MASTER_PHONE_CS}}"] = master_data.phone_cs or master_data.phone
-            placeholder_map["{{MASTER_EMAIL_CS}}"] = master_data.email_cs or master_data.email
-            placeholder_map["{{MASTER_PHONE_SALES}}"] = master_data.phone_sales or master_data.phone
-            placeholder_map["{{MASTER_EMAIL_SALES}}"] = master_data.email_sales or master_data.email
-            placeholder_map["{{MASTER_PHONE_TECH}}"] = master_data.phone_tech or master_data.phone
-            placeholder_map["{{MASTER_EMAIL_TECH}}"] = master_data.email_tech or master_data.email
-            
-            # Structure corporate
-            placeholder_map["{{MASTER_FOUNDER_NAME}}"] = master_data.founder_name
-            placeholder_map["{{MASTER_FOUNDER_URL}}"] = master_data.founder_url
-            placeholder_map["{{MASTER_FOUNDING_DATE}}"] = master_data.founding_date
-            placeholder_map["{{MASTER_PARENT_ORG}}"] = master_data.parent_org
-            placeholder_map["{{MASTER_NUM_EMPLOYEES}}"] = master_data.num_employees
-            
-            # Social proof
-            placeholder_map["{{MASTER_RATING_VALUE}}"] = master_data.rating_value
-            placeholder_map["{{MASTER_RATING_COUNT}}"] = master_data.rating_count
-            placeholder_map["{{MASTER_REVIEW_COUNT}}"] = master_data.review_count
-            
-            # Financier
-            placeholder_map["{{MASTER_TICKER}}"] = master_data.ticker_symbol
-            placeholder_map["{{MASTER_STOCK_EXCHANGE}}"] = master_data.stock_exchange
-            placeholder_map["{{MASTER_REVENUE}}"] = master_data.annual_revenue
-        
-        # DYNAMIC DATA PLACEHOLDERS
-        if dynamic_data and dynamic_data.fields:
-            for field in dynamic_data.fields:
-                # Only include fields with "keep" decision
-                if field.decision == "keep" and field.value:
-                    placeholder_map[f"{{{{{field.key}}}}}"] = field.value
-        
-        # PAGE DATA PLACEHOLDERS
-        if page_data:
-            for key, value in page_data.items():
-                placeholder_map[f"{{{{PAGE_{key.upper()}}}}}"] = str(value)
-        
-        return placeholder_map
-    
-    def replace_placeholders(self, content: str, placeholder_map: Dict[str, str]) -> str:
-        """Replace all placeholders in content with values"""
-        
-        result = content
-        
-        for placeholder, value in placeholder_map.items():
-            # Only replace if value is not empty
-            if value:
-                result = result.replace(placeholder, value)
-        
-        return result
-    
-    def remove_empty_placeholders(self, content: str) -> str:
-        """Remove lines containing unreplaced placeholders"""
-        
-        lines = content.split('\n')
-        cleaned_lines = []
-        
-        for line in lines:
-            # Check if line contains any unreplaced placeholder
-            if not re.search(r'\{\{[A-Z_]+\}\}', line):
-                cleaned_lines.append(line)
-            # Keep structural lines even if they have placeholders
-            elif any(marker in line for marker in ['{', '}', '[', ']', '@context', '@type', '@id']):
-                # Remove the placeholder but keep the line structure
-                cleaned_line = re.sub(r'"[^"]*\{\{[A-Z_]+\}\}[^"]*"', '""', line)
-                cleaned_line = re.sub(r'\{\{[A-Z_]+\}\}', '', cleaned_line)
-                if cleaned_line.strip() and cleaned_line.strip() not in [',', '']:
-                    cleaned_lines.append(cleaned_line)
-        
-        return '\n'.join(cleaned_lines)
-    
-    def generate_jsonld(
-        self,
-        master_data: Any,
-        dynamic_data: Any = None,
-        page_data: Dict = None,
-        clean_empty: bool = True
-    ) -> str:
-        """Generate final JSON-LD content"""
-        
-        # Build placeholder map
-        placeholder_map = self.build_placeholder_map(master_data, dynamic_data, page_data)
-        
-        # Replace placeholders
-        content = self.replace_placeholders(self.template_content, placeholder_map)
-        
-        # Clean empty placeholders
-        if clean_empty:
-            content = self.remove_empty_placeholders(content)
-        
-        # Clean comments
-        content = self._clean_json_comments(content)
-        
-        return content
-    
-    def validate_json(self, json_str: str) -> tuple[bool, str]:
-        """Validate if generated content is valid JSON"""
-        try:
-            json.loads(json_str)
-            return True, "Valid JSON"
-        except json.JSONDecodeError as e:
-            return False, f"Invalid JSON: {str(e)}"
-    
-    def generate_and_validate(
-        self,
-        master_data: Any,
-        dynamic_data: Any = None,
-        page_data: Dict = None
-    ) -> tuple[str, bool, str]:
-        """Generate JSON-LD and validate it"""
-        
-        # Generate content
-        content = self.generate_jsonld(master_data, dynamic_data, page_data)
-        
-        # Validate
-        is_valid, message = self.validate_json(content)
-        
-        return content, is_valid, message
-    
-    def save_to_file(self, content: str, output_path: str) -> bool:
-        """Save generated JSON-LD to file"""
-        try:
-            with open(output_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            return True
-        except Exception as e:
-            print(f"Error saving file: {str(e)}")
-            return False
-    
-    def get_sector_specific_section(self, sector: str) -> str:
-        """Extract sector-specific section from template (for preview)"""
-        
-        # Define sector line ranges (from template analysis)
-        sector_ranges = {
-            "A": (251, 350),   # Article/BlogPosting
-            "B": (351, 450),   # Product
-            "C": (451, 550),   # Recipe
-            "D": (551, 650),   # Event
-            "E": (651, 750),   # Course
-            "F": (751, 850),   # JobPosting
-            "G": (851, 950),   # LocalBusiness
-            "H": (951, 1000),  # Service
-            "I": (1001, 1050), # SoftwareApplication
-            "J": (1051, 1100), # Book
-            "K": (1101, 1150), # Movie
-            "L": (1151, 1200), # MusicAlbum
-            "M": (1201, 1250), # MedicalEntity
-            "N": (1251, 1300), # Vehicle
-            "O": (1301, 1350), # Podcast
-            "P": (1351, 1370), # VideoGame
-            "Q": (1371, 1378), # Dataset
+    # CSS Pro Design
+    st.markdown("""
+    <style>
+        /* Reset & Base */
+        .master-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 0 20px;
         }
         
-        if sector not in sector_ranges:
-            return ""
+        /* Header */
+        .master-header {
+            margin-bottom: 48px;
+        }
         
-        start_line, end_line = sector_ranges[sector]
-        lines = self.template_content.split('\n')
+        .master-title {
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: 3rem;
+            font-weight: 900;
+            font-style: italic;
+            letter-spacing: -0.03em;
+            color: #000;
+            margin: 0;
+            line-height: 1;
+        }
         
-        return '\n'.join(lines[start_line:end_line])
+        .master-subtitle {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 500;
+            letter-spacing: 0.25em;
+            text-transform: uppercase;
+            color: #888;
+            margin-top: 8px;
+        }
+        
+        /* Section Numbers */
+        .section-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            background: #000;
+            color: #fff;
+            font-size: 0.65rem;
+            font-weight: 700;
+            border-radius: 4px;
+            margin-right: 12px;
+        }
+        
+        .section-label {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: #000;
+        }
+        
+        .section-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 24px;
+            margin-top: 48px;
+        }
+        
+        /* Cards */
+        .pro-card {
+            background: #fff;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 16px;
+        }
+        
+        .pro-card-header {
+            background: #1a1a1a;
+            color: #fff;
+            padding: 12px 20px;
+            border-radius: 6px;
+            margin: -24px -24px 24px -24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .pro-card-header-icon {
+            font-size: 1rem;
+        }
+        
+        .pro-card-header-text {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+        }
+        
+        /* Status Badge */
+        .status-box {
+            background: #f8f8f8;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+        }
+        
+        .status-label {
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: #666;
+            margin-bottom: 4px;
+        }
+        
+        .status-value {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #000;
+        }
+        
+        .status-partial { color: #f59e0b; }
+        .status-complete { color: #10b981; }
+        .status-failed { color: #ef4444; }
+        
+        /* Metrics */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        
+        .metric-box {
+            background: #fff;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .metric-value {
+            font-family: 'Inter', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: #000;
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+        
+        .metric-label {
+            font-size: 0.6rem;
+            font-weight: 700;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: #888;
+        }
+        
+        /* Errors Box */
+        .errors-box {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 6px;
+            padding: 12px 16px;
+            margin-top: 12px;
+        }
+        
+        .errors-title {
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: #dc2626;
+            margin-bottom: 4px;
+        }
+        
+        .errors-text {
+            font-size: 0.75rem;
+            color: #991b1b;
+            font-family: 'SF Mono', 'Monaco', monospace;
+        }
+        
+        /* Input Fields */
+        .field-label {
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: #666;
+            margin-bottom: 6px;
+        }
+        
+        /* Buttons */
+        .btn-search {
+            background: #fff !important;
+            color: #000 !important;
+            border: 1px solid #000 !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.1em !important;
+            text-transform: uppercase !important;
+            font-size: 0.75rem !important;
+        }
+        
+        .btn-primary {
+            background: #000 !important;
+            color: #fff !important;
+            border: none !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.1em !important;
+            text-transform: uppercase !important;
+            font-size: 0.75rem !important;
+        }
+        
+        .btn-generate {
+            background: #000 !important;
+            color: #fff !important;
+            border: none !important;
+            padding: 16px 48px !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.1em !important;
+            text-transform: uppercase !important;
+            font-size: 0.8rem !important;
+            border-radius: 6px !important;
+        }
+        
+        /* Preview Button */
+        .preview-btn {
+            background: #f5f5f5;
+            border: 1px solid #e5e5e5;
+            border-radius: 4px;
+            padding: 8px 16px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #333;
+            cursor: pointer;
+        }
+        
+        /* Social Icons */
+        .social-icon {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f5f5f5;
+            border-radius: 6px;
+            margin-right: 12px;
+        }
+        
+        /* Collapsible */
+        .collapse-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            background: #fafafa;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        
+        .collapse-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: #333;
+        }
+        
+        /* Divider */
+        .section-divider {
+            height: 1px;
+            background: #e5e5e5;
+            margin: 48px 0;
+        }
+        
+        /* Footer */
+        .app-footer {
+            text-align: center;
+            padding: 32px 0;
+            border-top: 1px solid #e5e5e5;
+            margin-top: 64px;
+        }
+        
+        .footer-text {
+            font-size: 0.7rem;
+            font-weight: 500;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: #999;
+        }
+        
+        /* Hide Streamlit elements */
+        .stTextInput > label,
+        .stTextArea > label,
+        .stSelectbox > label {
+            font-size: 0.65rem !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.1em !important;
+            text-transform: uppercase !important;
+            color: #666 !important;
+        }
+        
+        .stTextInput > div > div > input,
+        .stTextArea > div > div > textarea {
+            border: 1px solid #e5e5e5 !important;
+            border-radius: 6px !important;
+            font-size: 0.9rem !important;
+            padding: 12px 16px !important;
+        }
+        
+        .stTextInput > div > div > input:focus,
+        .stTextArea > div > div > textarea:focus {
+            border-color: #000 !important;
+            box-shadow: none !important;
+        }
+        
+        .stSelectbox > div > div {
+            border: 1px solid #e5e5e5 !important;
+            border-radius: 6px !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Container
+    st.markdown('<div class="master-container">', unsafe_allow_html=True)
+    
+    # =========================================================================
+    # HEADER
+    # =========================================================================
+    st.markdown('''
+        <div class="master-header">
+            <h1 class="master-title">MASTER DATA</h1>
+            <p class="master-subtitle">Permanent Entity Data // JSON-LD Foundation</p>
+        </div>
+    ''', unsafe_allow_html=True)
+    
+    # Init session state
+    if "master_data" not in st.session_state:
+        st.session_state.master_data = None
+    
+    # =========================================================================
+    # SECTION 01: IDENTIFICATION & ENRICHMENT
+    # =========================================================================
+    st.markdown('''
+        <div class="section-header">
+            <span class="section-number">01</span>
+            <span class="section-label">Identification & Enrichment</span>
+        </div>
+    ''', unsafe_allow_html=True)
+    
+    # Search inputs
+    col1, col2, col3 = st.columns([2, 1.5, 1.5])
+    
+    with col1:
+        entity_name = st.text_input(
+            "ENTITY NAME",
+            placeholder="Entity name",
+            key="search_entity"
+        )
+    
+    with col2:
+        wikidata_qid = st.text_input(
+            "WIKIDATA QID",
+            placeholder="Q-Identifier",
+            key="search_qid"
+        )
+    
+    with col3:
+        siret_input = st.text_input(
+            "SIRET",
+            placeholder="ID Number",
+            key="search_siret"
+        )
+    
+    # Buttons
+    col_btn1, col_btn2, col_spacer = st.columns([1, 1.2, 2])
+    
+    with col_btn1:
+        search_clicked = st.button("🔍  SEARCH", use_container_width=True, key="btn_search")
+    
+    with col_btn2:
+        enrich_clicked = st.button("⚡ MISTRAL ENRICH", use_container_width=True, type="primary", key="btn_enrich")
+    
+    # Handle search
+    if search_clicked:
+        if entity_name or wikidata_qid or siret_input:
+            with st.spinner("Searching Wikidata..."):
+                handler = MasterDataHandler()
+                st.session_state.master_data = handler.auto_enrich(
+                    search_query=entity_name if entity_name else None,
+                    qid=wikidata_qid if wikidata_qid else None,
+                    siren=siret_input[:9] if siret_input else None  # SIREN = first 9 digits of SIRET
+                )
+                st.rerun()
+        else:
+            st.error("Please enter at least one search criteria")
+    
+    # Handle Mistral enrichment
+    if enrich_clicked:
+        if st.session_state.master_data:
+            mistral_key = get_mistral_key()
+            if mistral_key:
+                with st.spinner("Mistral AI is enriching data..."):
+                    handler = MasterDataHandler()
+                    st.session_state.master_data = handler.auto_complete_with_mistral(
+                        st.session_state.master_data,
+                        mistral_key
+                    )
+                    st.rerun()
+            else:
+                st.error("Mistral API key not found in secrets.toml")
+        else:
+            st.warning("Please search for an entity first")
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # =========================================================================
+    # STATUS & METRICS
+    # =========================================================================
+    if st.session_state.master_data:
+        master = st.session_state.master_data
+        
+        # Status row
+        col_status, col_m1, col_m2, col_m3, col_m4 = st.columns([1.5, 1, 1, 1, 1])
+        
+        with col_status:
+            status_class = {
+                "complete": "status-complete",
+                "partial": "status-partial", 
+                "failed": "status-failed"
+            }.get(master.status, "status-partial")
+            
+            status_icon = {
+                "complete": "✓",
+                "partial": "⚠",
+                "failed": "✕"
+            }.get(master.status, "⚠")
+            
+            st.markdown(f'''
+                <div class="status-box">
+                    <div class="status-label">{status_icon} Status: {master.status.upper()}</div>
+                </div>
+            ''', unsafe_allow_html=True)
+            
+            # Errors
+            if master.errors:
+                st.markdown(f'''
+                    <div class="errors-box">
+                        <div class="errors-title">⚠ LOGS / ERRORS</div>
+                        <div class="errors-text">{master.errors[0] if master.errors else ''}</div>
+                    </div>
+                ''', unsafe_allow_html=True)
+        
+        # Metrics
+        key_fields = len([f for f in [master.brand_name, master.qid, master.site_url, master.description] if f])
+        social_nets = len([f for f in [master.wikipedia_url, master.linkedin_url, master.twitter_url, 
+                                        master.facebook_url, master.instagram_url, master.youtube_url] if f])
+        contact_data = len([f for f in [master.phone, master.email, master.street, master.city] if f])
+        
+        with col_m1:
+            st.metric("KEY FIELDS", f"{key_fields:02d}")
+        with col_m2:
+            st.metric("SOCIAL NETS", f"{social_nets:02d}")
+        with col_m3:
+            st.metric("CONTACT DATA", f"{contact_data:02d}")
+        with col_m4:
+            total = master.count_filled_fields()
+            st.metric("TOTAL", f"{total:02d}")
+        
+        st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
+        
+        # =====================================================================
+        # SECTION 02: FIELD MANAGEMENT
+        # =====================================================================
+        st.markdown('''
+            <div class="section-header">
+                <span class="section-number">02</span>
+                <span class="section-label">Field Management</span>
+            </div>
+        ''', unsafe_allow_html=True)
+        
+        # ----- IDENTITY CARD -----
+        st.markdown('''
+            <div class="pro-card">
+                <div class="pro-card-header">
+                    <span class="pro-card-header-icon">🏢</span>
+                    <span class="pro-card-header-text">Identity</span>
+                </div>
+            </div>
+        ''', unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            master.brand_name = st.text_input("TRADE NAME", value=master.brand_name, key="f_brand")
+            master.legal_name = st.text_input("LEGAL NAME", value=master.legal_name, key="f_legal")
+            master.org_type = st.selectbox(
+                "ORGANIZATION TYPE",
+                ["Corporation", "LocalBusiness", "EducationalOrganization", "GovernmentOrganization", "NGO"],
+                index=["Corporation", "LocalBusiness", "EducationalOrganization", "GovernmentOrganization", "NGO"].index(master.org_type) if master.org_type in ["Corporation", "LocalBusiness", "EducationalOrganization", "GovernmentOrganization", "NGO"] else 0,
+                key="f_orgtype"
+            )
+        
+        with col2:
+            master.description = st.text_area("DESCRIPTION", value=master.description, height=100, key="f_desc")
+            master.slogan = st.text_input("SLOGAN", value=master.slogan, key="f_slogan")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # ----- IDENTIFIERS CARD -----
+        st.markdown('''
+            <div class="pro-card">
+                <div class="pro-card-header">
+                    <span class="pro-card-header-icon">🔖</span>
+                    <span class="pro-card-header-text">Identifiers</span>
+                </div>
+            </div>
+        ''', unsafe_allow_html=True)
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.text_input("WIKIDATA", value=master.qid, disabled=True, key="f_qid")
+        with col2:
+            master.siret = st.text_input("SIRET", value=master.siret, key="f_siret")
+        with col3:
+            master.site_url = st.text_input("WEBSITE", value=master.site_url, key="f_website")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # ----- SOCIAL PRESENCE CARD -----
+        st.markdown('''
+            <div class="pro-card">
+                <div class="pro-card-header">
+                    <span class="pro-card-header-icon">🔗</span>
+                    <span class="pro-card-header-text">Social Presence</span>
+                </div>
+            </div>
+        ''', unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            master.linkedin_url = st.text_input("🔗 LINKEDIN", value=master.linkedin_url, key="f_linkedin")
+            master.twitter_url = st.text_input("🐦 X / TWITTER", value=master.twitter_url, key="f_twitter")
+            master.facebook_url = st.text_input("📘 FACEBOOK", value=master.facebook_url, key="f_facebook")
+        
+        with col2:
+            master.youtube_url = st.text_input("▶️ YOUTUBE", value=master.youtube_url, key="f_youtube")
+            master.tiktok_url = st.text_input("🎵 TIKTOK", value=master.tiktok_url, key="f_tiktok")
+            master.instagram_url = st.text_input("📷 INSTAGRAM", value=master.instagram_url, key="f_instagram")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # ----- VISUAL ASSETS CARD -----
+        st.markdown('''
+            <div class="pro-card">
+                <div class="pro-card-header">
+                    <span class="pro-card-header-icon">🖼️</span>
+                    <span class="pro-card-header-text">Visual Assets</span>
+                </div>
+            </div>
+        ''', unsafe_allow_html=True)
+        
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            master.logo_url = st.text_input("LOGO URL", value=master.logo_url, key="f_logo")
+        
+        with col2:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("PREVIEW", use_container_width=True, key="btn_preview"):
+                if master.logo_url:
+                    try:
+                        st.image(master.logo_url, width=150)
+                    except:
+                        st.error("Cannot load image")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # ----- OPTIONAL CORPORATE DATA -----
+        with st.expander("📊 OPTIONAL CORPORATE DATA", expanded=False):
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                master.founding_date = st.text_input("FOUNDING DATE", value=master.founding_date, placeholder="YYYY-MM-DD", key="f_founding")
+                master.num_employees = st.text_input("EMPLOYEES", value=master.num_employees, key="f_employees")
+            
+            with col2:
+                master.founder_name = st.text_input("FOUNDER", value=master.founder_name, key="f_founder")
+                master.parent_org = st.text_input("PARENT ORG", value=master.parent_org, key="f_parent")
+            
+            with col3:
+                master.annual_revenue = st.text_input("REVENUE", value=master.annual_revenue, key="f_revenue")
+                master.ticker_symbol = st.text_input("TICKER", value=master.ticker_symbol, key="f_ticker")
+                master.stock_exchange = st.text_input("EXCHANGE", value=master.stock_exchange, key="f_exchange")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Address
+            st.markdown("**📍 ADDRESS**")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                master.street = st.text_input("STREET", value=master.street, key="f_street")
+                master.city = st.text_input("CITY", value=master.city, key="f_city")
+                master.zip_code = st.text_input("ZIP CODE", value=master.zip_code, key="f_zip")
+            
+            with col2:
+                master.region = st.text_input("REGION", value=master.region, key="f_region")
+                master.country = st.text_input("COUNTRY", value=master.country, key="f_country")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Contact
+            st.markdown("**📞 CONTACT**")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                master.phone = st.text_input("PHONE", value=master.phone, placeholder="+33 1 23 45 67 89", key="f_phone")
+            
+            with col2:
+                master.email = st.text_input("EMAIL", value=master.email, placeholder="contact@example.com", key="f_email")
+        
+        st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
+        
+        # =====================================================================
+        # SECTION 03: COMPILATION
+        # =====================================================================
+        st.markdown('''
+            <div class="section-header" style="justify-content: center; text-align: center;">
+                <span class="section-number">03</span>
+                <span class="section-label">Compilation</span>
+            </div>
+        ''', unsafe_allow_html=True)
+        
+        # Center the generate button
+        col_spacer1, col_btn, col_spacer2 = st.columns([1, 2, 1])
+        
+        with col_btn:
+            if st.button("{ }  GÉNÉRER LE JSON-LD", use_container_width=True, type="primary", key="btn_generate"):
+                template_path = "template.json"
+                if os.path.exists(template_path):
+                    with st.spinner("Generating JSON-LD..."):
+                        builder = TemplateBuilder(template_path)
+                        jsonld_master = builder.generate_jsonld(
+                            master_data=master,
+                            dynamic_data=None,
+                            page_data=None
+                        )
+                        st.session_state.jsonld_master = jsonld_master
+                        st.success("✅ JSON-LD Master generated!")
+                        st.rerun()
+                else:
+                    st.error("❌ Template not found")
+        
+        # Display generated JSON-LD
+        if "jsonld_master" in st.session_state and st.session_state.jsonld_master:
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                st.code(st.session_state.jsonld_master, language="json", line_numbers=True)
+            
+            with col2:
+                st.download_button(
+                    label="💾 DOWNLOAD",
+                    data=st.session_state.jsonld_master,
+                    file_name=f"master_{master.brand_name.lower().replace(' ', '_')}.json",
+                    mime="application/ld+json",
+                    use_container_width=True
+                )
+                
+                st.metric("Lines", len(st.session_state.jsonld_master.split('\n')))
+                st.metric("Size", f"{len(st.session_state.jsonld_master)} chars")
+                
+                if st.button("🔄 NEW", use_container_width=True, key="btn_reset"):
+                    st.session_state.master_data = None
+                    if "jsonld_master" in st.session_state:
+                        del st.session_state.jsonld_master
+                    st.rerun()
+    
+    else:
+        # Empty state
+        st.markdown("""
+            <div style="text-align: center; padding: 60px 20px; color: #999;">
+                <p style="font-size: 3rem; margin-bottom: 16px;">🔍</p>
+                <p style="font-size: 0.85rem; font-weight: 500;">Search for an entity to start building your Master Data</p>
+            </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)  # Close master-container
