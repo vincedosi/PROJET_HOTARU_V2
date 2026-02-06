@@ -1,343 +1,658 @@
-"""
-SMART SCRAPER HYBRIDE (V7 - LOGS STREAMLIT + COMPTEUR + VITESSE)
-- Logs visibles dans l'interface Streamlit
-- Compteur de pages en temps réel
-- Optimisation vitesse (threading + requests session)
-- Support React/SPA
-"""
-import requests
-from bs4 import BeautifulSoup
-from urllib.parse import urlparse, urljoin
-import time
+# =============================================================================
+# AUDIT GEO - VERSION AVEC LOGS EN TEMPS RÉEL
+# =============================================================================
+
+
+import streamlit as st
+import json
 import re
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import requests
+import zlib
+import base64
+from urllib.parse import urlparse
+import networkx as nx
+from pyvis.network import Network
+import streamlit.components.v1 as components
+from bs4 import BeautifulSoup
+from core.database import AuditDatabase
+from core.scraping import SmartScraper
 
-class SmartScraper:
-    def __init__(self, base_url, max_urls=500, use_selenium=False):
-        self.base_url = base_url.rstrip('/')
-        self.domain = urlparse(base_url).netloc
-        self.max_urls = max_urls
-        self.visited = set()
-        self.results = []
-        self.use_selenium = use_selenium
-        self.driver = None
-        self.log_callback = None
-        
-        # Session requests pour réutiliser la connexion (+ rapide)
-        self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        })
-        
-        # Compteurs de debug
-        self.stats = {
-            'pages_crawled': 0,
-            'pages_skipped': 0,
-            'links_discovered': 0,
-            'links_filtered': 0,
-            'links_duplicate': 0,
-            'errors': 0,
-            'queue_full_blocks': 0
-        }
-        
-        # Filtres anti-bruit réduits (seulement les vrais parasites)
-        self.exclude_patterns = [
-            '.pdf', '.jpg', '.jpeg', '.png', '.gif', '.zip', '.doc', '.docx',
-            'tel:', 'mailto:', 'javascript:', 'void(0)'
-        ]
-        
-        # Détecter si le site est en React/SPA
-        if self._is_spa_site():
-            self.use_selenium = True
-            self._init_selenium()
+# =============================================================================
+# VERSION 2.7.0 - LOGS + COMPTEURS + STATS DÉTAILLÉES
+# =============================================================================
 
-    def _log(self, message):
-        """Log visible dans Streamlit"""
-        if self.log_callback:
-            self.log_callback(message)
+# =============================================================================
+# 1. STYLE & CONFIGURATION
+# =============================================================================
+def inject_hotaru_css():
+    st.markdown("""
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+        html, body, [class*="css"] { font-family: 'Inter', sans-serif; color: #1a1a1a; }
+        .stDeployButton, header {display:none;}
+        .infra-box { padding: 15px; border-left: 3px solid #eee; margin-bottom: 10px; background: #f9f9f9; border-radius: 0 4px 4px 0; }
+        .status-ok { color: #2e7d32; font-weight: 600; font-size: 0.9em; }
+        .status-err { color: #c62828; font-weight: 600; font-size: 0.9em; }
+        .infra-desc { font-size: 0.85em; color: #666; margin-top: 5px; line-height: 1.4; }
+    </style>
+    """, unsafe_allow_html=True)
 
-    def _is_spa_site(self):
-        """Détecte si le site utilise un framework JS"""
+# =============================================================================
+# 2. FONCTIONS TECHNIQUES (SCORING & INFRA)
+# =============================================================================
+
+def check_geo_infrastructure(base_url):
+    domain = base_url.rstrip('/')
+    assets = {
+        "robots.txt": {"url": f"{domain}/robots.txt", "desc": "Autorise GPTBot et les crawlers IA."},
+        "sitemap.xml": {"url": f"{domain}/sitemap.xml", "desc": "Guide d'indexation pour les moteurs de réponse."},
+        "llms.txt": {"url": f"{domain}/llms.txt", "desc": "Standard 2025 pour la consommation LLM."},
+        "JSON-LD": {"url": domain, "desc": "Données structurées (Entités de marque)."}
+    }
+    results = {}; score = 0
+    for name, data in list(assets.items())[:3]:
         try:
-            resp = self.session.get(self.base_url, timeout=5)
-            html = resp.text.lower()
-            spa_patterns = ['react', 'vue', 'angular', 'ng-app', 'data-reactroot', '<div id="root">', '<div id="app">', '__next']
-            detected = any(pattern in html for pattern in spa_patterns)
-            return detected
-        except:
-            return False
+            r = requests.get(data['url'], timeout=3)
+            found = (r.status_code == 200)
+            results[name] = {"status": found, "meta": data}
+            if found: score += 25
+        except: results[name] = {"status": False, "meta": data}
+    try:
+        r = requests.get(domain, timeout=5); soup = BeautifulSoup(r.text, 'html.parser')
+        has_json = bool(soup.find('script', type='application/ld+json'))
+        results["JSON-LD"] = {"status": has_json, "meta": assets["JSON-LD"]}
+        if has_json: score += 25
+    except: results["JSON-LD"] = {"status": False, "meta": assets["JSON-LD"]}
+    return results, score
 
-    def _init_selenium(self):
-        """Initialise Selenium"""
-        try:
-            from selenium.webdriver.chrome.service import Service
-            from webdriver_manager.chrome import ChromeDriverManager
-            
-            chrome_options = Options()
-            chrome_options.add_argument('--headless')
-            chrome_options.add_argument('--no-sandbox')
-            chrome_options.add_argument('--disable-dev-shm-usage')
-            chrome_options.add_argument('--disable-gpu')
-            chrome_options.add_argument(f'user-agent={self.session.headers["User-Agent"]}')
-            
-            service = Service(ChromeDriverManager().install())
-            self.driver = webdriver.Chrome(service=service, options=chrome_options)
-            self._log("✅ Mode Selenium activé (React/SPA détecté)")
-        except Exception as e:
-            self._log(f"⚠️ Selenium non disponible: {e}")
-            self.use_selenium = False
+def calculate_page_score(page):
+    """
+    Calcule le score GEO avancé d'une page
+    Utilise le nouveau système de scoring multicritère
+    """
+    try:
+        from geo_scoring import GEOScorer
+        scorer = GEOScorer()
+        result = scorer.calculate_score(page)
+        return result['total_score'], result['grade'], result['breakdown'], result['recommendations']
+    except:
+        # Fallback si geo_scoring n'existe pas
+        score = 70  # Score par défaut
+        grade = 'B'
+        breakdown = {}
+        recommendations = []
+        return score, grade, breakdown, recommendations
 
-    def is_valid_url(self, url):
-        """Vérifie si l'URL est pertinente"""
-        for pattern in self.exclude_patterns:
-            if pattern in url.lower():
-                # Debug: voir ce qui est filtré
-                if self.stats['links_filtered'] < 10:  # Log les 10 premiers seulement
-                    print(f"   🚫 Filtré: {url[:60]}... (motif: {pattern})")
-                return False
-        return True
+def get_clean_label(title, url, domain):
+    try:
+        clean = re.split(r' [-|:|•] ', title)[0]
+        if len(clean) < 4: clean = url.rstrip('/').split('/')[-1].replace('-', ' ').capitalize()
+        return clean[:20] + ".." if len(clean) > 22 else clean
+    except: return "Page"
 
-    def clean_title(self, title, h1, url):
-        """Nettoie le titre"""
-        domain_name = urlparse(url).netloc.split('.')[0].lower()
-        
-        def is_useful(text):
-            if not text or len(text) < 3:
-                return False
-            text_clean = text.lower().replace(' ', '').replace('-', '')
-            if domain_name in text_clean and len(text_clean) < len(domain_name) + 5:
-                return False
-            return True
-        
-        if h1 and len(h1) > 10:
-            text = h1
-        elif title and len(title) > 5:
-            text = title
-        else:
-            text = ""
-        
-        if text:
-            separators = [' - ', ' | ', ' : ', ' — ', ' – ', ' · ']
-            for sep in separators:
-                if sep in text:
-                    parts = [p.strip() for p in text.split(sep)]
-                    useful_parts = [p for p in parts if is_useful(p)]
-                    if useful_parts:
-                        text = max(useful_parts, key=len)
-                    break
-        
-        if not is_useful(text):
-            path = urlparse(url).path
-            segments = [s for s in path.split('/') if s and s not in ['fr', 'en', 'de', 'es', 'www']]
-            if segments:
-                text = segments[-1].replace('-', ' ').replace('_', ' ').title()
-            else:
-                return "Accueil"
-        
-        text = text.strip()
-        return text[:40] + ".." if len(text) > 40 else text
+# =============================================================================
+# 3. RENDU DU GRAPHE (FIX VRAI PLEIN ÉCRAN + LÉGENDE)
+# =============================================================================
 
-    def get_page_details(self, url):
-        """Scrape une page"""
-        try:
-            start_time = time.time()
-            
-            if self.use_selenium and self.driver:
-                self.driver.get(url)
-                WebDriverWait(self.driver, 5).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-                time.sleep(0.5)  # Réduit de 1s à 0.5s
-                html_content = self.driver.page_source
-                soup = BeautifulSoup(html_content, 'html.parser')
-                response_time = time.time() - start_time
-            else:
-                resp = self.session.get(url, timeout=3)  # Réduit de 4s à 3s
-                response_time = time.time() - start_time
-                
-                if resp.status_code != 200:
-                    self.stats['errors'] += 1
-                    return None
-                
-                soup = BeautifulSoup(resp.content, 'html.parser')
-                html_content = str(soup)
-            
-            raw_title = soup.title.string.strip() if soup.title else ""
-            h1 = soup.find('h1').get_text().strip() if soup.find('h1') else ""
-            final_title = self.clean_title(raw_title, h1, url)
-            
-            meta_desc = ""
-            meta_tag = soup.find('meta', attrs={'name': 'description'})
-            if meta_tag and meta_tag.get('content'):
-                meta_desc = meta_tag['content'].strip()
-            
-            links = []
-            for a in soup.find_all('a', href=True):
-                href = a['href']
-                full_url = urljoin(url, href)
-                
-                if urlparse(full_url).netloc == self.domain and self.is_valid_url(full_url):
-                    clean_link = full_url.split('#')[0].split('?')[0]
-                    if clean_link != url:
-                        links.append(clean_link)
-                else:
-                    self.stats['links_filtered'] += 1
-            
-            self.stats['links_discovered'] += len(links)
-            
-            has_structured_data = bool(soup.find('script', type='application/ld+json'))
-            h2_count = len(soup.find_all('h2'))
-            lists_count = len(soup.find_all(['ul', 'ol']))
-            
-            return {
-                "url": url,
-                "title": final_title,
-                "links": list(set(links)),
-                "description": meta_desc,
-                "h1": h1,
-                "response_time": response_time,
-                "html_content": html_content,
-                "last_modified": "",
-                "has_structured_data": has_structured_data,
-                "h2_count": h2_count,
-                "lists_count": lists_count
-            }
-        except Exception as e:
-            self.stats['errors'] += 1
-            return None
-
-    def run_analysis(self, progress_callback=None, log_callback=None):
-        """Lance l'analyse avec logs Streamlit"""
-        self.log_callback = log_callback
-        queue = [self.base_url]
-        self.visited.add(self.base_url)
-        crawled_count = 0
-        
-        print(f"\n{'='*80}")
-        print(f"🚀 DÉBUT DU CRAWL: {self.max_urls} pages demandées")
-        print(f"URL: {self.base_url}")
-        print(f"{'='*80}\n")
-        
-        try:
-            while queue and crawled_count < self.max_urls:
-                current_url = queue.pop(0)
-                
-                # ✅ MISE À JOUR EN TEMPS RÉEL (chaque page)
-                percent = min(crawled_count / self.max_urls, 0.99)
-                
-                if progress_callback:
-                    progress_callback(
-                        f"🔍 {crawled_count}/{self.max_urls} pages | Queue: {len(queue)} | Liens: {self.stats['links_discovered']}", 
-                        percent
-                    )
-                
-                # Log console tous les 10 crawls
-                if crawled_count % 10 == 0:
-                    print(f"📊 {crawled_count}/{self.max_urls} | Queue: {len(queue)} | Visitées: {len(self.visited)} | Liens: {self.stats['links_discovered']}")
-                
-                data = self.get_page_details(current_url)
-                
-                if data:
-                    self.results.append(data)
-                    crawled_count += 1
-                    self.stats['pages_crawled'] += 1
-                    
-                    # Ajout des liens avec comptage détaillé
-                    links_added = 0
-                    for link in data['links']:
-                        if link in self.visited:
-                            self.stats['links_duplicate'] += 1
-                        elif len(queue) >= 5000:
-                            self.stats['queue_full_blocks'] += 1
-                        else:
-                            self.visited.add(link)
-                            queue.append(link)
-                            links_added += 1
-                    
-                    # Debug si problème de liens
-                    if crawled_count % 50 == 0:
-                        print(f"   → Page #{crawled_count}: {len(data['links'])} liens trouvés, {links_added} ajoutés")
-                    
-                    # DEBUG CRITIQUE: Si peu de liens découverts
-                    if crawled_count == 5 and self.stats['links_discovered'] < 20:
-                        print(f"\n⚠️ ALERTE: Seulement {self.stats['links_discovered']} liens découverts après 5 pages!")
-                        print(f"   Exemples de liens sur la dernière page:")
-                        for link in data['links'][:5]:
-                            print(f"      • {link}")
-                        print()
-                else:
-                    self.stats['pages_skipped'] += 1
-                
-                # Pause ultra-rapide
-                time.sleep(0.005)  # 5ms seulement
-        
-        finally:
-            if self.driver:
-                self.driver.quit()
-        
-        # RAPPORT FINAL CONSOLE
-        print(f"\n{'='*80}")
-        print(f"✅ CRAWL TERMINÉ")
-        print(f"{'='*80}")
-        print(f"📈 RÉSULTATS:")
-        print(f"   ├─ Pages crawlées: {self.stats['pages_crawled']} / {self.max_urls}")
-        print(f"   ├─ Pages ignorées: {self.stats['pages_skipped']}")
-        print(f"   ├─ URLs visitées: {len(self.visited)}")
-        print(f"   ├─ Queue finale: {len(queue)} URLs restantes")
-        print(f"   └─ Erreurs: {self.stats['errors']}")
-        print(f"\n🔗 LIENS:")
-        print(f"   ├─ Découverts: {self.stats['links_discovered']}")
-        print(f"   ├─ Filtrés: {self.stats['links_filtered']}")
-        print(f"   ├─ Doublons: {self.stats['links_duplicate']}")
-        print(f"   └─ Blocages queue: {self.stats['queue_full_blocks']}")
-        
-        # Diagnostic si arrêt anticipé
-        if crawled_count < self.max_urls:
-            print(f"\n⚠️ ARRÊT ANTICIPÉ: {crawled_count}/{self.max_urls} pages")
-            if len(queue) == 0:
-                print(f"   Raison: QUEUE VIDE")
-                print(f"   → Le site a moins de {self.max_urls} pages accessibles")
-                print(f"   → Ou les filtres sont trop stricts (vérifier exclude_patterns)")
-            else:
-                print(f"   Raison: Condition while rompue (bug logique)")
-        
-        print(f"{'='*80}\n")
-        
-        patterns = self.analyze_patterns(self.results)
-        
-        if progress_callback:
-            progress_callback(f"✅ Terminé: {self.stats['pages_crawled']} pages crawlées", 1.0)
-        
-        return self.results, {
-            "total_urls": len(self.results), 
-            "patterns": len(patterns),
-            "stats": self.stats
-        }
-
-    def analyze_patterns(self, pages):
-        """Analyse les patterns d'URL"""
-        groups = {}
-        for p in pages:
-            path = urlparse(p['url']).path
-            segments = [s for s in path.split('/') if s]
-            
-            if len(segments) > 0:
-                group_key = segments[0]
-                if group_key in ['fr', 'en', 'de', 'es'] and len(segments) > 1:
-                    group_key = segments[1]
-            else:
-                group_key = "Accueil"
-                
-            if group_key not in groups:
-                groups[group_key] = {"count": 0, "samples": [], "name": group_key}
-            
-            groups[group_key]["count"] += 1
-            groups[group_key]["samples"].append(p)
-            
-        return list(groups.values())
+def render_interactive_graph(G, show_health=False):
+    nt = Network(height="850px", width="100%", bgcolor="#ffffff", font_color="#0f172a")
+    nt.from_nx(G)
     
-    def get_pattern_summary(self):
-        return self.analyze_patterns(self.results)
+    opts = {
+        "nodes": {
+            "font": {
+                "face": "Inter, sans-serif",
+                "size": 14,
+                "strokeWidth": 3,
+                "strokeColor": "#ffffff",
+                "color": "#0f172a"
+            },
+            "borderWidth": 2,
+            "borderWidthSelected": 3
+        },
+        "edges": {
+            "color": "#cbd5e1",
+            "smooth": {
+                "type": "dynamic",
+                "roundness": 0.2
+            },
+            "width": 1.5
+        },
+        "interaction": {
+            "hover": True,
+            "navigationButtons": True,
+            "keyboard": True,
+            "zoomView": True,
+            "dragView": True,
+            "dragNodes": True
+        },
+        "physics": {
+            "forceAtlas2Based": {
+                "gravitationalConstant": -100,
+                "centralGravity": 0.01,
+                "springLength": 200,
+                "springConstant": 0.08,
+                "avoidOverlap": 1
+            },
+            "solver": "forceAtlas2Based",
+            "stabilization": {
+                "enabled": True,
+                "iterations": 200
+            }
+        }
+    }
+
+    nt.set_options(json.dumps(opts))
+    path = "temp_graph.html"
+    nt.save_graph(path)
+    
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read()
+    
+    # LÉGENDE MODE SANTÉ
+    legend_html = ""
+    if show_health:
+        legend_html = """
+        <div id="health-legend" style="
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            font-family: 'Inter', sans-serif;
+            z-index: 9998;
+        ">
+            <div style="font-weight: 600; margin-bottom: 10px; font-size: 13px;">Score GEO</div>
+            <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                <div style="width: 16px; height: 16px; background: #10b981; border-radius: 50%; margin-right: 8px;"></div>
+                <span style="font-size: 12px;">90-100 : Excellent</span>
+            </div>
+            <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                <div style="width: 16px; height: 16px; background: #22c55e; border-radius: 50%; margin-right: 8px;"></div>
+                <span style="font-size: 12px;">80-89 : Très bon</span>
+            </div>
+            <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                <div style="width: 16px; height: 16px; background: #84cc16; border-radius: 50%; margin-right: 8px;"></div>
+                <span style="font-size: 12px;">70-79 : Bon</span>
+            </div>
+            <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                <div style="width: 16px; height: 16px; background: #eab308; border-radius: 50%; margin-right: 8px;"></div>
+                <span style="font-size: 12px;">60-69 : Moyen</span>
+            </div>
+            <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                <div style="width: 16px; height: 16px; background: #f97316; border-radius: 50%; margin-right: 8px;"></div>
+                <span style="font-size: 12px;">50-59 : Faible</span>
+            </div>
+            <div style="display: flex; align-items: center;">
+                <div style="width: 16px; height: 16px; background: #ef4444; border-radius: 50%; margin-right: 8px;"></div>
+                <span style="font-size: 12px;">0-49 : Critique</span>
+            </div>
+        </div>
+        """
+    
+    # CODE JS AMÉLIORÉ
+    custom_code = f"""
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+        
+        * {{
+            font-family: 'Inter', sans-serif !important;
+        }}
+        
+        body, html {{
+            font-family: 'Inter', sans-serif !important;
+            color: #0f172a;
+            margin: 0;
+            padding: 0;
+        }}
+        
+        .vis-network canvas {{
+            font-family: 'Inter', sans-serif !important;
+        }}
+        
+        /* VRAI PLEIN ÉCRAN */
+        #mynetwork:fullscreen {{
+            width: 100vw !important;
+            height: 100vh !important;
+        }}
+        
+        #mynetwork:-webkit-full-screen {{
+            width: 100vw !important;
+            height: 100vh !important;
+        }}
+        
+        #mynetwork:-moz-full-screen {{
+            width: 100vw !important;
+            height: 100vh !important;
+        }}
+        
+        #mynetwork:-ms-fullscreen {{
+            width: 100vw !important;
+            height: 100vh !important;
+        }}
+    </style>
+    <script>
+        // Gestion des clics sur les nœuds
+        network.on("click", function (params) {{
+            if (params.nodes.length > 0) {{
+                var nodeId = params.nodes[0];
+                if (nodeId.startsWith('http')) {{
+                    window.open(nodeId, '_blank');
+                }}
+            }}
+        }});
+        
+        // VRAI PLEIN ÉCRAN sur #mynetwork directement
+        function toggleFullscreen() {{
+            var elem = document.getElementById('mynetwork');
+            if (!document.fullscreenElement && !document.mozFullScreenElement && 
+                !document.webkitFullscreenElement && !document.msFullscreenElement) {{
+                if (elem.requestFullscreen) {{
+                    elem.requestFullscreen();
+                }} else if (elem.msRequestFullscreen) {{
+                    elem.msRequestFullscreen();
+                }} else if (elem.mozRequestFullScreen) {{
+                    elem.mozRequestFullScreen();
+                }} else if (elem.webkitRequestFullscreen) {{
+                    elem.webkitRequestFullscreen();
+                }}
+            }} else {{
+                if (document.exitFullscreen) {{
+                    document.exitFullscreen();
+                }} else if (document.msExitFullscreen) {{
+                    document.msExitFullscreen();
+                }} else if (document.mozCancelFullScreen) {{
+                    document.mozCancelFullScreen();
+                }} else if (document.webkitExitFullscreen) {{
+                    document.webkitExitFullscreen();
+                }}
+            }}
+        }}
+        
+        // Ajout du bouton plein écran
+        var fullscreenBtn = document.createElement('button');
+        fullscreenBtn.innerHTML = '⛶ Plein écran';
+        fullscreenBtn.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            padding: 10px 20px;
+            background: #0f172a;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            transition: all 0.2s ease;
+        `;
+        fullscreenBtn.onmouseover = function() {{
+            this.style.background = '#1e293b';
+            this.style.transform = 'translateY(-1px)';
+            this.style.boxShadow = '0 4px 6px rgba(0,0,0,0.15)';
+        }};
+        fullscreenBtn.onmouseout = function() {{
+            this.style.background = '#0f172a';
+            this.style.transform = 'translateY(0)';
+            this.style.boxShadow = '0 1px 2px rgba(0,0,0,0.1)';
+        }};
+        fullscreenBtn.onclick = toggleFullscreen;
+        document.body.appendChild(fullscreenBtn);
+    </script>
+    {legend_html}
+    """
+    
+    components.html(html.replace("</body>", custom_code + "</body>"), height=900)
+
+# =============================================================================
+# 4. ONGLET MÉTHODOLOGIE
+# =============================================================================
+
+def render_methodologie():
+    st.markdown("""
+    # 🎯 Méthodologie Hotaru
+    
+    ## Qu'est-ce que le GEO (Generative Engine Optimization) ?
+    
+    Le **GEO** est l'optimisation de votre contenu pour les moteurs de réponse IA comme ChatGPT, Perplexity, Claude, et Google AI Overviews. 
+    Contrairement au SEO traditionnel qui vise à apparaître dans les résultats de recherche, le GEO vise à être **cité comme source** 
+    dans les réponses générées par les IA.
+    
+    ## 🔍 Comment fonctionne Hotaru ?
+    
+    ### 1. **Analyse Infrastructure**
+    Hotaru vérifie la présence des fichiers essentiels :
+    - **robots.txt** : Autorise les crawlers IA (GPTBot, ClaudeBot, etc.)
+    - **sitemap.xml** : Guide l'indexation des moteurs de réponse
+    - **llms.txt** : Standard 2025 pour indiquer le contenu consommable par les LLMs
+    - **JSON-LD** : Données structurées pour l'identification des entités
+    
+    ### 2. **Crawling Intelligent**
+    - Exploration automatique de votre site (10 à 10 000 pages)
+    - Identification des patterns d'URL et clustering sémantique
+    - Extraction des métadonnées SEO et contenu structuré
+    
+    ### 3. **Scoring GEO**
+    Chaque page reçoit un score basé sur :
+    - **Clarté sémantique** : Structure H1-H6, paragraphes explicites
+    - **Richesse contextuelle** : Meta descriptions, données structurées
+    - **Autorité** : Liens internes, position dans l'architecture
+    
+    ### 4. **Visualisation Graph**
+    - Architecture du site en graphe interactif
+    - Clustering automatique par type de contenu
+    - Identification des pages piliers et connexions faibles
+    
+    ## 🎨 Modes d'affichage
+    
+    ### Mode Standard
+    Toutes les pages en gris clair, focus sur l'architecture
+    
+    ### Mode Santé
+    Coloration par score GEO avec échelle à 6 niveaux :
+    - 🟢 **90-100** : Excellent
+    - 🟢 **80-89** : Très bon
+    - 🟡 **70-79** : Bon
+    - 🟡 **60-69** : Moyen
+    - 🟠 **50-59** : Faible
+    - 🔴 **0-49** : Critique
+    
+    ## 📊 Interprétation des résultats
+    
+    ### Score Infrastructure < 50
+    ⚠️ **Critique** : Votre site n'est pas optimisé pour les crawlers IA
+    - Ajoutez robots.txt avec autorisation GPTBot
+    - Créez un llms.txt listant votre contenu prioritaire
+    
+    ### Score Infrastructure 50-75
+    ⚡ **Moyen** : Bases présentes mais optimisation incomplète
+    - Ajoutez des données structurées JSON-LD
+    - Vérifiez que sitemap.xml est à jour
+    
+    ### Score Infrastructure > 75
+    ✅ **Bon** : Infrastructure solide pour le GEO
+    - Focus sur l'optimisation du contenu des pages
+    
+    ## 🚀 Prochaines étapes après l'audit
+    
+    1. **Prioriser les pages à forte visibilité** avec score faible
+    2. **Renforcer les clusters** avec peu de pages
+    3. **Créer des ponts** entre clusters isolés
+    4. **Optimiser les métadonnées** des pages stratégiques
+    
+    ## 💡 Ressources
+    
+    - [Guide Anthropic sur le GEO](https://docs.anthropic.com)
+    - [Standard llms.txt](https://llmstxt.org)
+    - [Schema.org pour JSON-LD](https://schema.org)
+    """)
+
+# =============================================================================
+# 5. INTERFACE PRINCIPALE (AVEC SOUS-ONGLETS)
+# =============================================================================
+
+def render_audit_geo():
+    inject_hotaru_css()
+    db = AuditDatabase()
+    user_email = st.session_state.user_email
+    
+    # SOUS-ONGLETS DANS AUDIT
+    tab1, tab2 = st.tabs(["🔍 Audit Site", "📖 Méthodologie"])
+    
+    # ============= TAB 1 : AUDIT SITE =============
+    with tab1:
+        # --- CHARGEMENT SIDEBAR ---
+        all_audits = db.load_user_audits(user_email)
+        
+        # Extraction propre des noms de Workspaces
+        ws_list = []
+        for a in all_audits:
+            ws_name = str(a.get('workspace', '')).strip()
+            if ws_name and ws_name not in ws_list:
+                ws_list.append(ws_name)
+        
+        if not ws_list: ws_list = ["Nouveau"]
+        else: ws_list = sorted(ws_list) + ["+ Créer Nouveau"]
+
+        # Menu Workspace
+        selected_ws = st.sidebar.selectbox("📂 Projets (Workspaces)", ws_list)
+        
+        # Filtrage historique
+        filtered_audits = [a for a in all_audits if str(a.get('workspace', '')).strip() == selected_ws]
+
+        # --- ZONE DE SCAN ---
+        with st.expander("🚀 LANCER UNE NOUVELLE ANALYSE", expanded="results" not in st.session_state):
+            c1, c2 = st.columns([3, 1])
+            url_in = c1.text_input("URL Racine", placeholder="https://...")
+            
+            default_ws = "" if selected_ws == "+ Créer Nouveau" else selected_ws
+            ws_in = c2.text_input("Nom du Projet", value=default_ws)
+            
+            # SLIDER 10 À 10 000 PAGES avec paliers intelligents
+            limit_in = st.select_slider(
+                "Nombre de pages à analyser",
+                options=[10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000],
+                value=100,
+                help="Analyse de 10 à 10 000 pages. Plus le nombre est élevé, plus l'analyse sera longue."
+            )
+            
+            if st.button("Lancer Hotaru", use_container_width=True):
+                if url_in:
+                    bar = st.progress(0, "Analyse infrastructure...")
+                    infra, score = check_geo_infrastructure(url_in)
+                    st.session_state.geo_infra = infra
+                    st.session_state.geo_score = score
+                    
+                    # Lancement du scraper avec compteur en temps réel dans la barre
+                    scr = SmartScraper(url_in, max_urls=limit_in)
+                    res, stats = scr.run_analysis(
+                        progress_callback=lambda m, v: bar.progress(v, m)
+                    )
+                    
+                    st.session_state.update({
+                        "results": res, 
+                        "clusters": scr.get_pattern_summary(), 
+                        "target_url": url_in,
+                        "current_ws": ws_in if ws_in else "Non classé",
+                        "crawl_stats": stats.get('stats', {})
+                    })
+                    st.rerun()
+
+        # --- SECTION ARCHIVES (DANS AUDIT) ---
+        if filtered_audits:
+            st.divider()
+            st.subheader("📋 Archives")
+            
+            audit_labels = {f"{a.get('nom_site') or 'Audit'} ({a.get('date')})": a for a in filtered_audits}
+            
+            col1, col2 = st.columns([3, 1])
+            choice = col1.selectbox("Charger un audit", list(audit_labels.keys()), label_visibility="collapsed")
+            
+            if col2.button("Visualiser", use_container_width=True):
+                r = audit_labels[choice]
+                raw_data = zlib.decompress(base64.b64decode(r['data_compressed'])).decode('utf-8')
+                data = json.loads(raw_data)
+                st.session_state.update({
+                    "results": data['results'], 
+                    "clusters": data['clusters'], 
+                    "target_url": r['site_url'], 
+                    "geo_infra": data.get('geo_infra', {}),
+                    "geo_score": data.get('geo_score', 0),
+                    "current_ws": selected_ws,
+                    "crawl_stats": data.get('stats', {})
+                })
+                st.rerun()
+
+        # --- AFFICHAGE DES RÉSULTATS ---
+        if "results" in st.session_state:
+            st.divider()
+            
+            # 1. Dashboard Infra
+            g_score = st.session_state.get("geo_score", 0)
+            st.markdown(f"### Score Infrastructure IA : **{g_score}/100**")
+            
+            if st.session_state.get("geo_infra"):
+                cols = st.columns(4)
+                for i, (name, d) in enumerate(st.session_state.geo_infra.items()):
+                    with cols[i]:
+                        status = "status-ok" if d['status'] else "status-err"
+                        txt = "OK" if d['status'] else "MISSING"
+                        st.markdown(f"""<div class="infra-box"><b>{name}</b><br><span class="{status}">{txt}</span><div class="infra-desc">{d['meta']['desc']}</div></div>""", unsafe_allow_html=True)
+
+            st.divider()
+            
+            # ✅ NOUVEAU : Stats détaillées du crawl
+            if "crawl_stats" in st.session_state and st.session_state.crawl_stats:
+                with st.expander("📊 Statistiques détaillées du crawl", expanded=True):
+                    stats = st.session_state.crawl_stats
+                    
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        st.metric("✅ Pages crawlées", stats.get('pages_crawled', 0))
+                        st.metric("⚠️ Pages ignorées", stats.get('pages_skipped', 0))
+                    
+                    with col2:
+                        st.metric("🔗 Liens découverts", stats.get('links_discovered', 0))
+                        st.metric("🚫 Liens filtrés", stats.get('links_filtered', 0))
+                    
+                    with col3:
+                        st.metric("🔄 Doublons", stats.get('links_duplicate', 0))
+                        st.metric("⛔ Queue pleine", stats.get('queue_full_blocks', 0))
+                    
+                    with col4:
+                        st.metric("❌ Erreurs", stats.get('errors', 0))
+                        st.metric("📍 URLs visitées", len(st.session_state.visited) if hasattr(st.session_state, 'visited') else len(st.session_state.results))
+                
+                st.divider()
+            
+            # 2. Commandes Graphe
+            c_expert, c_save_name, c_save_btn = st.columns([1, 2, 1])
+            expert_on = c_expert.toggle("Mode Santé", value=False)
+            
+            domain = urlparse(st.session_state.target_url).netloc
+            s_name = c_save_name.text_input("Nom sauvegarde", value=domain.split('.')[0], label_visibility="collapsed")
+            
+            # 3. Sauvegarde Sécurisée (Trimming)
+            if c_save_btn.button("Sauvegarder", use_container_width=True):
+                clean_results = []
+                for r in st.session_state.results:
+                    clean_results.append({
+                        "url": r.get("url"),
+                        "title": r.get("title", "")[:100],
+                        "description": r.get("description", "")[:200],
+                        "h1": r.get("h1", "")[:100],
+                        "response_time": r.get("response_time")
+                    })
+                
+                payload = {
+                    "results": clean_results,
+                    "clusters": st.session_state.clusters,
+                    "geo_infra": st.session_state.get('geo_infra', {}),
+                    "geo_score": st.session_state.get('geo_score', 0),
+                    "stats": st.session_state.get('crawl_stats', {})
+                }
+                db.save_audit(user_email, st.session_state.current_ws, st.session_state.target_url, s_name, payload)
+                st.toast("✅ Audit sauvegardé avec succès")
+
+            # 4. Construction du Graphe NetworkX
+            G = nx.DiGraph()
+            G.add_node(
+                st.session_state.target_url, 
+                label=domain.upper(), 
+                size=35, 
+                color="#0f172a",
+                font={'color': '#ffffff', 'face': 'Inter'}
+            )
+            
+            for c in st.session_state.clusters:
+                c_id = f"group_{c['name']}"
+                G.add_node(
+                    c_id, 
+                    label=c['name'].upper(), 
+                    color="#cbd5e1",
+                    size=25,
+                    font={'color': '#0f172a', 'face': 'Inter'}
+                )
+                G.add_edge(st.session_state.target_url, c_id)
+                
+                for p in c['samples'][:40]:
+                    # Calcul du score GEO avancé
+                    score_data = calculate_page_score(p)
+                    if isinstance(score_data, tuple):
+                        sc, grade, breakdown, recommendations = score_data
+                    else:
+                        sc = score_data
+                        grade = 'N/A'
+                        breakdown = {}
+                        recommendations = []
+                    
+                    # ÉCHELLE DE COULEUR À 6 NIVEAUX
+                    if expert_on:
+                        if sc >= 90:
+                            col = "#10b981"  # Vert foncé - Excellent
+                        elif sc >= 80:
+                            col = "#22c55e"  # Vert - Très bon
+                        elif sc >= 70:
+                            col = "#84cc16"  # Vert clair - Bon
+                        elif sc >= 60:
+                            col = "#eab308"  # Jaune - Moyen
+                        elif sc >= 50:
+                            col = "#f97316"  # Orange - Faible
+                        else:
+                            col = "#ef4444"  # Rouge - Critique
+                    else:
+                        col = "#e2e8f0"  # Gris très clair standard
+                    
+                    # Label avec note si mode expert
+                    label = get_clean_label(p.get('title',''), p['url'], domain)
+                    if expert_on and isinstance(score_data, tuple):
+                        label = f"{label}\\n[{grade}]"
+                    
+                    # TOOLTIP DÉTAILLÉ avec éléments manquants
+                    tooltip_parts = []
+                    if expert_on and isinstance(score_data, tuple):
+                        tooltip_parts.append(f"Score GEO: {sc}/100 - Grade: {grade}")
+                        
+                        # Ajouter les éléments manquants
+                        missing = []
+                        if not p.get('description'):
+                            missing.append("❌ Meta description")
+                        if not p.get('h1'):
+                            missing.append("❌ H1")
+                        if not p.get('has_structured_data'):
+                            missing.append("❌ JSON-LD")
+                        if p.get('h2_count', 0) < 2:
+                            missing.append("⚠️ Peu de H2")
+                        
+                        if missing:
+                            tooltip_parts.append("\\n\\nÉléments manquants:\\n" + "\\n".join(missing))
+                        
+                        # Ajouter les recommandations principales
+                        if recommendations:
+                            top_reco = recommendations[:2]
+                            tooltip_parts.append("\\n\\nRecommandations:\\n" + "\\n".join(f"• {r}" for r in top_reco))
+                    
+                    tooltip = "\\n".join(tooltip_parts) if tooltip_parts else ""
+                    
+                    G.add_node(
+                        p['url'], 
+                        label=label, 
+                        size=12, 
+                        color=col,
+                        font={'color': '#0f172a', 'face': 'Inter'},
+                        title=tooltip
+                    )
+                    G.add_edge(c_id, p['url'])
+            
+            # 5. Rendu du graphe avec légende si mode santé
+            render_interactive_graph(G, show_health=expert_on)
+    
+    # ============= TAB 2 : MÉTHODOLOGIE =============
+    with tab2:
+        render_methodologie()
