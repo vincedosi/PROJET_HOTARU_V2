@@ -443,32 +443,15 @@ def render_audit_geo():
             
             if st.button("Lancer Hotaru", use_container_width=True):
                 if url_in:
-                    # ✅ NOUVEAU : Conteneur pour les logs en temps réel
-                    log_container = st.empty()
-                    log_messages = []
-                    
-                    def log_callback(message):
-                        """Callback pour afficher les logs dans Streamlit"""
-                        log_messages.append(message)
-                        # Limiter à 30 derniers messages pour ne pas surcharger
-                        recent_logs = log_messages[-30:]
-                        log_container.text_area(
-                            "📋 Logs en temps réel", 
-                            "\n".join(recent_logs),
-                            height=400,
-                            key=f"logs_{len(log_messages)}"
-                        )
-                    
                     bar = st.progress(0, "Analyse infrastructure...")
                     infra, score = check_geo_infrastructure(url_in)
                     st.session_state.geo_infra = infra
                     st.session_state.geo_score = score
                     
-                    # ✅ NOUVEAU : Lancement avec log_callback
+                    # Lancement du scraper avec compteur en temps réel dans la barre
                     scr = SmartScraper(url_in, max_urls=limit_in)
                     res, stats = scr.run_analysis(
-                        progress_callback=lambda m, v: bar.progress(v, m),
-                        log_callback=log_callback
+                        progress_callback=lambda m, v: bar.progress(v, m)
                     )
                     
                     st.session_state.update({
@@ -476,7 +459,7 @@ def render_audit_geo():
                         "clusters": scr.get_pattern_summary(), 
                         "target_url": url_in,
                         "current_ws": ws_in if ws_in else "Non classé",
-                        "crawl_stats": stats.get('stats', {})  # ✅ NOUVEAU
+                        "crawl_stats": stats.get('stats', {})
                     })
                     st.rerun()
 
