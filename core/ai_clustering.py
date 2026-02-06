@@ -57,11 +57,13 @@ def analyze_clusters_with_mistral(cluster_data):
     """
     Envoie les clusters à Mistral et récupère les noms via Parsing Texte Simple.
     """
-    api_key = st.session_state.get('mistral_api_key')
-    
+    try:
+        api_key = st.secrets["mistral"]["api_key"]
+    except Exception:
+        api_key = None
+
     if not api_key:
-        st.warning("⚠️ Clé API Mistral manquante. Allez dans l'onglet Config.")
-        # On retourne les clusters tels quels sans renommage
+        st.warning("Clé API Mistral manquante dans les secrets Streamlit.")
         return {k: "Non analysé" for k in cluster_data.keys()}
 
     # Préparation du prompt

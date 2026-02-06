@@ -25,17 +25,8 @@ from core.scraping import SmartScraper
 # 1. STYLE & CONFIGURATION
 # =============================================================================
 def inject_hotaru_css():
-    st.markdown("""
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
-        html, body, [class*="css"] { font-family: 'Inter', sans-serif; color: #1a1a1a; }
-        .stDeployButton, header {display:none;}
-        .infra-box { padding: 15px; border-left: 3px solid #eee; margin-bottom: 10px; background: #f9f9f9; border-radius: 0 4px 4px 0; }
-        .status-ok { color: #2e7d32; font-weight: 600; font-size: 0.9em; }
-        .status-err { color: #c62828; font-weight: 600; font-size: 0.9em; }
-        .infra-desc { font-size: 0.85em; color: #666; margin-top: 5px; line-height: 1.4; }
-    </style>
-    """, unsafe_allow_html=True)
+    """CSS is now centralized in assets/style.css - this is a no-op kept for interface stability."""
+    pass
 
 # =============================================================================
 # 2. FONCTIONS TECHNIQUES (SCORING & INFRA)
@@ -71,7 +62,7 @@ def calculate_page_score(page):
     Utilise le nouveau système de scoring multicritère
     """
     try:
-        from geo_scoring import GEOScorer
+        from modules.geo_scoring import GEOScorer
         scorer = GEOScorer()
         result = scorer.calculate_score(page)
         return result['total_score'], result['grade'], result['breakdown'], result['recommendations']
@@ -314,83 +305,119 @@ def render_interactive_graph(G, show_health=False):
 # =============================================================================
 
 def render_methodologie():
+    """Méthodologie Hotaru - Version modulaire intégrée à l'onglet AUDIT"""
+
     st.markdown("""
-    # 🎯 Méthodologie Hotaru
-    
-    ## Qu'est-ce que le GEO (Generative Engine Optimization) ?
-    
-    Le **GEO** est l'optimisation de votre contenu pour les moteurs de réponse IA comme ChatGPT, Perplexity, Claude, et Google AI Overviews. 
-    Contrairement au SEO traditionnel qui vise à apparaître dans les résultats de recherche, le GEO vise à être **cité comme source** 
-    dans les réponses générées par les IA.
-    
-    ## 🔍 Comment fonctionne Hotaru ?
-    
-    ### 1. **Analyse Infrastructure**
-    Hotaru vérifie la présence des fichiers essentiels :
-    - **robots.txt** : Autorise les crawlers IA (GPTBot, ClaudeBot, etc.)
-    - **sitemap.xml** : Guide l'indexation des moteurs de réponse
-    - **llms.txt** : Standard 2025 pour indiquer le contenu consommable par les LLMs
-    - **JSON-LD** : Données structurées pour l'identification des entités
-    
-    ### 2. **Crawling Intelligent**
-    - Exploration automatique de votre site (10 à 10 000 pages)
-    - Identification des patterns d'URL et clustering sémantique
-    - Extraction des métadonnées SEO et contenu structuré
-    
-    ### 3. **Scoring GEO**
-    Chaque page reçoit un score basé sur :
-    - **Clarté sémantique** : Structure H1-H6, paragraphes explicites
-    - **Richesse contextuelle** : Meta descriptions, données structurées
-    - **Autorité** : Liens internes, position dans l'architecture
-    
-    ### 4. **Visualisation Graph**
-    - Architecture du site en graphe interactif
-    - Clustering automatique par type de contenu
-    - Identification des pages piliers et connexions faibles
-    
-    ## 🎨 Modes d'affichage
-    
-    ### Mode Standard
-    Toutes les pages en gris clair, focus sur l'architecture
-    
-    ### Mode Santé
-    Coloration par score GEO avec échelle à 6 niveaux :
-    - 🟢 **90-100** : Excellent
-    - 🟢 **80-89** : Très bon
-    - 🟡 **70-79** : Bon
-    - 🟡 **60-69** : Moyen
-    - 🟠 **50-59** : Faible
-    - 🔴 **0-49** : Critique
-    
-    ## 📊 Interprétation des résultats
-    
-    ### Score Infrastructure < 50
-    ⚠️ **Critique** : Votre site n'est pas optimisé pour les crawlers IA
-    - Ajoutez robots.txt avec autorisation GPTBot
-    - Créez un llms.txt listant votre contenu prioritaire
-    
-    ### Score Infrastructure 50-75
-    ⚡ **Moyen** : Bases présentes mais optimisation incomplète
-    - Ajoutez des données structurées JSON-LD
-    - Vérifiez que sitemap.xml est à jour
-    
-    ### Score Infrastructure > 75
-    ✅ **Bon** : Infrastructure solide pour le GEO
-    - Focus sur l'optimisation du contenu des pages
-    
-    ## 🚀 Prochaines étapes après l'audit
-    
-    1. **Prioriser les pages à forte visibilité** avec score faible
-    2. **Renforcer les clusters** avec peu de pages
-    3. **Créer des ponts** entre clusters isolés
-    4. **Optimiser les métadonnées** des pages stratégiques
-    
-    ## 💡 Ressources
-    
-    - [Guide Anthropic sur le GEO](https://docs.anthropic.com)
-    - [Standard llms.txt](https://llmstxt.org)
-    - [Schema.org pour JSON-LD](https://schema.org)
-    """)
+    <style>
+        .methodo-container { max-width: 900px; margin: auto; padding: 20px; }
+        .methodo-title { font-size: 2.8rem; font-weight: 800; letter-spacing: -0.04em; margin-bottom: 0.2rem; color: #000; }
+        .methodo-subtitle { font-size: 1.1rem; color: #94a3b8; margin-bottom: 4rem; font-weight: 400; text-transform: uppercase; letter-spacing: 0.1em; }
+        .methodo-header { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.2em; color: #000; margin-bottom: 2rem; border-bottom: 2px solid #000; padding-bottom: 8px; width: fit-content; }
+        .methodo-card { background: #ffffff; border: 1px solid #e2e8f0; padding: 30px; margin-bottom: -1px; transition: all 0.2s ease; }
+        .methodo-card:hover { background: #f8fafc; z-index: 10; position: relative; }
+        .methodo-badge { font-size: 0.65rem; font-weight: 800; color: #64748b; border: 1px solid #e2e8f0; padding: 2px 8px; margin-bottom: 15px; display: inline-block; }
+        .methodo-grade-row { display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid #f1f5f9; }
+        .methodo-grade-letter { font-weight: 800; font-size: 1.2rem; }
+        .methodo-grade-range { font-family: monospace; color: #64748b; }
+        .methodo-health { border: 1px solid #000; padding: 40px; margin: 50px 0; background: #fff; }
+        .methodo-dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; margin-right: 10px; }
+        .methodo-tips { list-style: none; padding: 0; }
+        .methodo-tips li { padding: 15px 0; border-bottom: 1px solid #f1f5f9; color: #000; font-size: 1rem; display: flex; align-items: center; }
+        .methodo-tips li::before { content: ""; width: 12px; height: 1px; background: #000; margin-right: 20px; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="methodo-container">', unsafe_allow_html=True)
+    st.markdown('<div class="methodo-title">MÉTHODOLOGIE HOTARU</div>', unsafe_allow_html=True)
+    st.markdown('<div class="methodo-subtitle">2026 Framework</div>', unsafe_allow_html=True)
+
+    # 01. CONCEPT
+    st.markdown('<div class="methodo-header">01. CONCEPT</div>', unsafe_allow_html=True)
+    st.write(
+        "L'optimisation des actifs sémantiques pour la citation directe par les LLMs. "
+        "Le score Hotaru mesure la capacité d'un contenu à être extrait et validé par les moteurs génératifs."
+    )
+    st.markdown('<div style="margin-bottom:4rem;"></div>', unsafe_allow_html=True)
+
+    # 02. CRITÈRES
+    st.markdown('<div class="methodo-header">02. CRITÈRES D\'ANALYSE</div>', unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("""
+        <div class="methodo-card">
+            <div class="methodo-badge">15 PTS</div>
+            <div style="font-weight:700; font-size:1.1rem; margin-bottom:8px;">Meta Description</div>
+            <div style="font-size:0.9rem; color:#64748b; line-height:1.5;">Précision sémantique du résumé pour le crawling par les agents IA.</div>
+        </div>
+        <div class="methodo-card">
+            <div class="methodo-badge">15 PTS</div>
+            <div style="font-weight:700; font-size:1.1rem; margin-bottom:8px;">Données Structurées</div>
+            <div style="font-size:0.9rem; color:#64748b; line-height:1.5;">Schémas JSON-LD, identification des entités et relations.</div>
+        </div>
+        <div class="methodo-card">
+            <div class="methodo-badge">20 PTS</div>
+            <div style="font-weight:700; font-size:1.1rem; margin-bottom:8px;">Architecture Sémantique</div>
+            <div style="font-size:0.9rem; color:#64748b; line-height:1.5;">Logique de titrage Hn et structuration par listes/tableaux.</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown("""
+        <div class="methodo-card">
+            <div class="methodo-badge">15 PTS</div>
+            <div style="font-weight:700; font-size:1.1rem; margin-bottom:8px;">Profondeur & Sources</div>
+            <div style="font-size:0.9rem; color:#64748b; line-height:1.5;">Richesse textuelle et autorité des maillages externes.</div>
+        </div>
+        <div class="methodo-card">
+            <div class="methodo-badge">10 PTS</div>
+            <div style="font-weight:700; font-size:1.1rem; margin-bottom:8px;">Richesse en Entités</div>
+            <div style="font-size:0.9rem; color:#64748b; line-height:1.5;">Extraction de faits, dates et données propriétaires.</div>
+        </div>
+        <div class="methodo-card">
+            <div class="methodo-badge">25 PTS</div>
+            <div style="font-weight:700; font-size:1.1rem; margin-bottom:8px;">Technique IA-Ready</div>
+            <div style="font-size:0.9rem; color:#64748b; line-height:1.5;">Accessibilité bots et présence du standard llms.txt.</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # 03. SCORING
+    st.markdown('<div style="margin-bottom:4rem;"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="methodo-header">03. SCORING SYSTEM</div>', unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class="methodo-grade-row"><span class="methodo-grade-letter">A+</span><span class="methodo-grade-range">90 - 100</span></div>
+    <div class="methodo-grade-row"><span class="methodo-grade-letter">A</span><span class="methodo-grade-range">80 - 89</span></div>
+    <div class="methodo-grade-row"><span class="methodo-grade-letter">B</span><span class="methodo-grade-range">70 - 79</span></div>
+    <div class="methodo-grade-row"><span class="methodo-grade-letter">C</span><span class="methodo-grade-range">50 - 69</span></div>
+    <div class="methodo-grade-row"><span class="methodo-grade-letter">F</span><span class="methodo-grade-range"> &lt; 50</span></div>
+    """, unsafe_allow_html=True)
+
+    # Health monitoring
+    st.markdown("""
+    <div class="methodo-health">
+        <div style="font-weight:800; text-transform:uppercase; font-size:0.7rem; letter-spacing:0.2em; margin-bottom:2rem;">Health Monitoring</div>
+        <div style="display:flex; gap:30px;">
+            <div><span class="methodo-dot" style="background:#22c55e;"></span><span style="font-size:0.9rem; font-weight:600;">OPTIMAL</span></div>
+            <div><span class="methodo-dot" style="background:#eab308;"></span><span style="font-size:0.9rem; font-weight:600;">AVERAGE</span></div>
+            <div><span class="methodo-dot" style="background:#ef4444;"></span><span style="font-size:0.9rem; font-weight:600;">CRITICAL</span></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 04. DIRECTIVES
+    st.markdown('<div class="methodo-header">04. STRATEGIC DIRECTIVES</div>', unsafe_allow_html=True)
+    st.markdown("""
+    <ul class="methodo-tips">
+        <li>Privilégier les formats factuels (tableaux, data-points).</li>
+        <li>Convertir les paragraphes denses en listes structurées.</li>
+        <li>Implémenter le balisage JSON-LD spécifique.</li>
+        <li>Utiliser des titres sous forme de questions directes.</li>
+        <li>Maintenir une fraîcheur de donnée &lt; 90 jours.</li>
+    </ul>
+    """, unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # =============================================================================
 # 5. INTERFACE PRINCIPALE (AVEC SOUS-ONGLETS)
@@ -559,7 +586,7 @@ def render_audit_geo():
                     
                     with col4:
                         st.metric("❌ Erreurs", stats.get('errors', 0))
-                        st.metric("📍 URLs visitées", len(st.session_state.visited) if hasattr(st.session_state, 'visited') else len(st.session_state.results))
+                        st.metric("📍 URLs visitées", len(st.session_state.results))
                 
                 st.divider()
             
