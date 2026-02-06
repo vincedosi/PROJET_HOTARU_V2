@@ -570,30 +570,51 @@ def render_audit_geo():
             domain = urlparse(st.session_state.target_url).netloc
             s_name = c_save_name.text_input("Nom sauvegarde", value=domain.split('.')[0], label_visibility="collapsed")
             
-            # 3. Sauvegarde Sécurisée (Trimming)
+            # 3. Sauvegarde Sécurisée (Trimming + Limite)
             if c_save_btn.button("Sauvegarder", use_container_width=True):
+                # ✅ LIMITE : Maximum 100 pages sauvegardées pour éviter erreur GSheet
+                max_pages_to_save = 100
+                results_to_save = st.session_state.results[:max_pages_to_save]
+                
                 clean_results = []
-                for r in st.session_state.results:
+                for r in results_to_save:
                     clean_results.append({
                         "url": r.get("url"),
-                        "title": r.get("title", "")[:100],
-                        "description": r.get("description", "")[:200],
-                        "h1": r.get("h1", "")[:100],
-                        "response_time": r.get("response_time"),
+                        "title": r.get("title", "")[:50],  # ✅ Réduit de 100 à 50
+                        "description": r.get("description", "")[:100],  # ✅ Réduit de 200 à 100
+                        "h1": r.get("h1", "")[:50],  # ✅ Réduit de 100 à 50
+                        "response_time": round(r.get("response_time", 0), 2),  # ✅ Arrondi
                         "has_structured_data": r.get("has_structured_data", False),
-                        "h2_count": r.get("h2_count", 0),
-                        "lists_count": r.get("lists_count", 0)
-                        # ✅ html_content SUPPRIMÉ pour éviter erreur 50K chars
+                        "h2_count": r.get("h2_count", 0)
+                        # ✅ Suppression de lists_count et html_content
+                    })
+                
+                # ✅ Limiter aussi les clusters (garder que les 5 premiers samples par cluster)
+                compact_clusters = []
+                for cluster in st.session_state.clusters:
+                    compact_clusters.append({
+                        "name": cluster["name"],
+                        "count": cluster["count"],
+                        "samples": []  # ✅ On ne garde PAS les samples (déjà dans results)
                     })
                 
                 payload = {
                     "results": clean_results,
-                    "clusters": st.session_state.clusters,
+                    "clusters": compact_clusters,
                     "geo_infra": st.session_state.get('geo_infra', {}),
                     "geo_score": st.session_state.get('geo_score', 0),
-                    "stats": st.session_state.get('crawl_stats', {}),
-                    "start_urls": st.session_state.get('start_urls', [st.session_state.target_url])  # ✅ NOUVEAU
+                    "stats": {
+                        "pages_crawled": st.session_state.crawl_stats.get('pages_crawled', 0),
+                        "links_discovered": st.session_state.crawl_stats.get('links_discovered', 0),
+                        "start_urls_count": st.session_state.crawl_stats.get('start_urls_count', 1)
+                    },
+                    "start_urls": st.session_state.get('start_urls', [st.session_state.target_url])[:5]  # ✅ Max 5 URLs
                 }
+                
+                # ✅ Afficher warning si limitation
+                if len(st.session_state.results) > max_pages_to_save:
+                    st.warning(f"⚠️ Seules les {max_pages_to_save} premières pages sur {len(st.session_state.results)} seront sauvegardées (limite Google Sheets)")
+                
                 db.save_audit(user_email, st.session_state.current_ws, st.session_state.target_url, s_name, payload)
                 st.toast("✅ Audit sauvegardé avec succès")
 
