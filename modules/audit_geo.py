@@ -579,7 +579,11 @@ def render_audit_geo():
                         "title": r.get("title", "")[:100],
                         "description": r.get("description", "")[:200],
                         "h1": r.get("h1", "")[:100],
-                        "response_time": r.get("response_time")
+                        "response_time": r.get("response_time"),
+                        "has_structured_data": r.get("has_structured_data", False),
+                        "h2_count": r.get("h2_count", 0),
+                        "lists_count": r.get("lists_count", 0)
+                        # ✅ html_content SUPPRIMÉ pour éviter erreur 50K chars
                     })
                 
                 payload = {
@@ -587,7 +591,8 @@ def render_audit_geo():
                     "clusters": st.session_state.clusters,
                     "geo_infra": st.session_state.get('geo_infra', {}),
                     "geo_score": st.session_state.get('geo_score', 0),
-                    "stats": st.session_state.get('crawl_stats', {})
+                    "stats": st.session_state.get('crawl_stats', {}),
+                    "start_urls": st.session_state.get('start_urls', [st.session_state.target_url])  # ✅ NOUVEAU
                 }
                 db.save_audit(user_email, st.session_state.current_ws, st.session_state.target_url, s_name, payload)
                 st.toast("✅ Audit sauvegardé avec succès")
