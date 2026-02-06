@@ -1,7 +1,8 @@
 """
-SMART SCRAPER HYBRIDE (V5 - Support React + 10K pages)
+SMART SCRAPER HYBRIDE (V6 - FIX 10K PAGES + REACT)
 - Support des SPA React/Vue/Angular
-- Limite 10 000 pages fonctionnelle
+- Limite 10 000 pages FONCTIONNELLE (fix queue bug)
+- Auto-install ChromeDriver
 - Filtres anti-bruit
 - Capture HTML complète pour GEO
 """
@@ -59,17 +60,25 @@ class SmartScraper:
             return False
 
     def _init_selenium(self):
-        """Initialise Selenium pour les sites React"""
+        """Initialise Selenium pour les sites React avec auto-install ChromeDriver"""
         try:
+            from selenium.webdriver.chrome.service import Service
+            from webdriver_manager.chrome import ChromeDriverManager
+            
             chrome_options = Options()
             chrome_options.add_argument('--headless')
             chrome_options.add_argument('--no-sandbox')
             chrome_options.add_argument('--disable-dev-shm-usage')
+            chrome_options.add_argument('--disable-gpu')
             chrome_options.add_argument(f'user-agent={self.headers["User-Agent"]}')
             
-            self.driver = webdriver.Chrome(options=chrome_options)
+            # Auto-install ChromeDriver
+            service = Service(ChromeDriverManager().install())
+            self.driver = webdriver.Chrome(service=service, options=chrome_options)
+            print("✅ Selenium initialisé avec succès (mode React/SPA détecté)")
         except Exception as e:
-            print(f"Impossible d'initialiser Selenium: {e}")
+            print(f"⚠️ Impossible d'initialiser Selenium: {e}")
+            print("→ Installation de webdriver-manager requise: pip install webdriver-manager")
             self.use_selenium = False
 
     def is_valid_url(self, url):
@@ -206,8 +215,10 @@ class SmartScraper:
                     self.results.append(data)
                     crawled_count += 1
                     
+                    # ✅ FIX CRITIQUE : Retrait de la limite artificielle "max_urls * 2"
+                    # ✅ AJOUT : Limite la queue à 5000 URLs pour éviter l'explosion mémoire
                     for link in data['links']:
-                        if link not in self.visited and len(self.visited) < self.max_urls * 2:
+                        if link not in self.visited and len(queue) < 5000:
                             self.visited.add(link)
                             queue.append(link)
                 
