@@ -18,15 +18,25 @@ from selenium.webdriver.support import expected_conditions as EC
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class SmartScraper:
-    def __init__(self, base_url, max_urls=500, use_selenium=False):
-        self.base_url = base_url.rstrip('/')
-        self.domain = urlparse(base_url).netloc
+    def __init__(self, start_urls, max_urls=500, use_selenium=False):
+        # Support ancien format (string unique) et nouveau (liste)
+        if isinstance(start_urls, str):
+            start_urls = [start_urls]
+        
+        self.start_urls = [url.rstrip('/') for url in start_urls]
+        self.base_url = self.start_urls[0]  # Pour compatibilité
+        self.domain = urlparse(self.start_urls[0]).netloc
         self.max_urls = max_urls
         self.visited = set()
         self.results = []
         self.use_selenium = use_selenium
         self.driver = None
         self.log_callback = None
+        
+        # Vérifier que toutes les URLs sont du même domaine
+        for url in self.start_urls:
+            if urlparse(url).netloc != self.domain:
+                raise ValueError(f"❌ Toutes les URLs doivent être du même domaine. Trouvé: {urlparse(url).netloc} au lieu de {self.domain}")
         
         # Session requests pour réutiliser la connexion (+ rapide)
         self.session = requests.Session()
@@ -42,7 +52,8 @@ class SmartScraper:
             'links_filtered': 0,
             'links_duplicate': 0,
             'errors': 0,
-            'queue_full_blocks': 0
+            'queue_full_blocks': 0,
+            'start_urls_count': len(self.start_urls)
         }
         
         # Filtres anti-bruit réduits (seulement les vrais parasites)
@@ -50,6 +61,10 @@ class SmartScraper:
             '.pdf', '.jpg', '.jpeg', '.png', '.gif', '.zip', '.doc', '.docx',
             'tel:', 'mailto:', 'javascript:', 'void(0)'
         ]
+        
+        print(f"🔗 Mode multi-URLs activé: {len(self.start_urls)} point(s) d'entrée")
+        for i, url in enumerate(self.start_urls, 1):
+            print(f"   {i}. {url}")
         
         # Détecter si le site est en React/SPA
         if self._is_spa_site():
@@ -64,7 +79,7 @@ class SmartScraper:
     def _is_spa_site(self):
         """Détecte si le site utilise un framework JS"""
         try:
-            resp = self.session.get(self.base_url, timeout=5)
+            resp = self.session.get(self.start_urls[0], timeout=5)
             html = resp.text.lower()
             spa_patterns = ['react', 'vue', 'angular', 'ng-app', 'data-reactroot', '<div id="root">', '<div id="app">', '__next']
             detected = any(pattern in html for pattern in spa_patterns)
@@ -212,13 +227,18 @@ class SmartScraper:
     def run_analysis(self, progress_callback=None, log_callback=None):
         """Lance l'analyse avec logs Streamlit"""
         self.log_callback = log_callback
-        queue = [self.base_url]
-        self.visited.add(self.base_url)
+        
+        # ✅ CRAWL MULTI-URLs : Commence avec toutes les URLs de départ
+        queue = list(self.start_urls)
+        self.visited.update(self.start_urls)
         crawled_count = 0
         
         print(f"\n{'='*80}")
-        print(f"🚀 DÉBUT DU CRAWL: {self.max_urls} pages demandées")
-        print(f"URL: {self.base_url}")
+        print(f"🚀 DÉBUT DU CRAWL MULTI-URLs: {self.max_urls} pages demandées")
+        print(f"Domaine: {self.domain}")
+        print(f"Points d'entrée: {len(self.start_urls)}")
+        for i, url in enumerate(self.start_urls, 1):
+            print(f"   {i}. {url}")
         print(f"{'='*80}\n")
         
         try:
@@ -280,9 +300,10 @@ class SmartScraper:
         
         # RAPPORT FINAL CONSOLE
         print(f"\n{'='*80}")
-        print(f"✅ CRAWL TERMINÉ")
+        print(f"✅ CRAWL MULTI-URLs TERMINÉ")
         print(f"{'='*80}")
         print(f"📈 RÉSULTATS:")
+        print(f"   ├─ Points d'entrée: {self.stats['start_urls_count']}")
         print(f"   ├─ Pages crawlées: {self.stats['pages_crawled']} / {self.max_urls}")
         print(f"   ├─ Pages ignorées: {self.stats['pages_skipped']}")
         print(f"   ├─ URLs visitées: {len(self.visited)}")
