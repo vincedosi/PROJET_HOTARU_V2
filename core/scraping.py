@@ -45,10 +45,10 @@ class SmartScraper:
             'queue_full_blocks': 0
         }
         
+        # Filtres anti-bruit réduits (seulement les vrais parasites)
         self.exclude_patterns = [
-            'login', 'signin', 'signup', 'register', 'cart', 'checkout', 
-            'account', 'admin', 'wp-', 'feed', '.pdf', '.jpg', '.png', 
-            'tel:', 'mailto:', 'javascript:', '#'
+            '.pdf', '.jpg', '.jpeg', '.png', '.gif', '.zip', '.doc', '.docx',
+            'tel:', 'mailto:', 'javascript:', 'void(0)'
         ]
         
         # Détecter si le site est en React/SPA
@@ -94,8 +94,12 @@ class SmartScraper:
 
     def is_valid_url(self, url):
         """Vérifie si l'URL est pertinente"""
-        if any(ex in url.lower() for ex in self.exclude_patterns):
-            return False
+        for pattern in self.exclude_patterns:
+            if pattern in url.lower():
+                # Debug: voir ce qui est filtré
+                if self.stats['links_filtered'] < 10:  # Log les 10 premiers seulement
+                    print(f"   🚫 Filtré: {url[:60]}... (motif: {pattern})")
+                return False
         return True
 
     def clean_title(self, title, h1, url):
@@ -255,7 +259,15 @@ class SmartScraper:
                     
                     # Debug si problème de liens
                     if crawled_count % 50 == 0:
-                        print(f"   → Dernière page: {len(data['links'])} liens trouvés, {links_added} ajoutés")
+                        print(f"   → Page #{crawled_count}: {len(data['links'])} liens trouvés, {links_added} ajoutés")
+                    
+                    # DEBUG CRITIQUE: Si peu de liens découverts
+                    if crawled_count == 5 and self.stats['links_discovered'] < 20:
+                        print(f"\n⚠️ ALERTE: Seulement {self.stats['links_discovered']} liens découverts après 5 pages!")
+                        print(f"   Exemples de liens sur la dernière page:")
+                        for link in data['links'][:5]:
+                            print(f"      • {link}")
+                        print()
                 else:
                     self.stats['pages_skipped'] += 1
                 
