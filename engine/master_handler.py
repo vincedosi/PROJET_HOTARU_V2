@@ -1,521 +1,531 @@
-# =============================================================================
-# MASTER TAB - VERSION UX ZEN MINIMALISTE
-# =============================================================================
+"""
+MASTER DATA HANDLER
+Handles fixed, factual data from external APIs (Wikidata, INSEE)
+"""
 
-def render_master_tab():
-    """Onglet MASTER - Interface Zen avec champs éditables"""
+import requests
+from typing import Dict, Optional, List
+from dataclasses import dataclass, field
+import re
+
+
+def log(msg: str):
+    """Simple logging helper"""
+    print(f"[WikidataAPI] {msg}")
+
+
+@dataclass
+class MasterData:
+    """Master data structure for organization entity"""
+    # IDENTITÉ
+    brand_name: str = ""
+    legal_name: str = ""
+    alt_name_1: str = ""
+    alt_name_2: str = ""
+    description: str = ""
+    slogan: str = ""
+    site_url: str = ""
+    org_type: str = "Corporation"
     
-    # CSS Zen Minimaliste
-    st.markdown("""
-    <style>
-        /* Layout principal */
-        .master-container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-        
-        /* Cards élégantes */
-        .zen-card {
-            background: #ffffff;
-            border: 1px solid #e5e5e5;
-            padding: 32px;
-            margin-bottom: 24px;
-            transition: all 0.2s ease;
-        }
-        
-        .dark .zen-card {
-            background: #1a1a1a;
-            border: 1px solid #333333;
-        }
-        
-        .zen-card:hover {
-            border-color: #000000;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-        }
-        
-        /* Headers */
-        .zen-title {
-            font-size: 3rem;
-            font-weight: 900;
-            letter-spacing: -0.02em;
-            text-transform: uppercase;
-            line-height: 1;
-            margin-bottom: 8px;
-        }
-        
-        .zen-subtitle {
-            font-size: 0.75rem;
-            font-weight: 700;
-            letter-spacing: 0.2em;
-            text-transform: uppercase;
-            color: #666;
-            margin-bottom: 32px;
-        }
-        
-        .section-title {
-            font-size: 0.65rem;
-            font-weight: 800;
-            letter-spacing: 0.3em;
-            text-transform: uppercase;
-            color: #999;
-            margin-bottom: 16px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid #f0f0f0;
-        }
-        
-        /* Status badges */
-        .status-badge {
-            display: inline-block;
-            padding: 6px 16px;
-            font-size: 0.65rem;
-            font-weight: 800;
-            letter-spacing: 0.15em;
-            text-transform: uppercase;
-            border: 1px solid;
-        }
-        
-        .status-complete {
-            background: #000000;
-            color: #ffffff;
-            border-color: #000000;
-        }
-        
-        .status-partial {
-            background: #ffffff;
-            color: #000000;
-            border-color: #000000;
-        }
-        
-        .status-failed {
-            background: #f5f5f5;
-            color: #666666;
-            border-color: #cccccc;
-        }
-        
-        /* Buttons */
-        .zen-button {
-            background: #000000;
-            color: #ffffff;
-            border: 1px solid #000000;
-            padding: 14px 32px;
-            font-size: 0.7rem;
-            font-weight: 800;
-            letter-spacing: 0.2em;
-            text-transform: uppercase;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        
-        .zen-button:hover {
-            background: #ffffff;
-            color: #000000;
-        }
-        
-        .zen-button-outline {
-            background: #ffffff;
-            color: #000000;
-            border: 1px solid #000000;
-        }
-        
-        .zen-button-outline:hover {
-            background: #000000;
-            color: #ffffff;
-        }
-        
-        /* Inputs */
-        .stTextInput > div > div > input,
-        .stTextArea > div > div > textarea {
-            border: 1px solid #e5e5e5 !important;
-            border-radius: 0 !important;
-            font-size: 0.9rem !important;
-            padding: 12px 16px !important;
-        }
-        
-        .stTextInput > div > div > input:focus,
-        .stTextArea > div > div > textarea:focus {
-            border-color: #000000 !important;
-            box-shadow: none !important;
-        }
-        
-        /* Metrics */
-        .zen-metric {
-            text-align: center;
-            padding: 24px;
-            border: 1px solid #e5e5e5;
-        }
-        
-        .zen-metric-value {
-            font-size: 3rem;
-            font-weight: 900;
-            line-height: 1;
-            margin-bottom: 8px;
-        }
-        
-        .zen-metric-label {
-            font-size: 0.65rem;
-            font-weight: 700;
-            letter-spacing: 0.2em;
-            text-transform: uppercase;
-            color: #999;
-        }
-        
-        /* Grid */
-        .zen-grid-2 {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 24px;
-        }
-        
-        .zen-grid-3 {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 24px;
-        }
-        
-        @media (max-width: 768px) {
-            .zen-grid-2, .zen-grid-3 {
-                grid-template-columns: 1fr;
-            }
-        }
-        
-        /* Divider */
-        .zen-divider {
-            height: 1px;
-            background: #e5e5e5;
-            margin: 48px 0;
-        }
-        
-        /* Logo */
-        .zen-logo {
-            width: 48px;
-            height: 48px;
-            background: #000000;
-            color: #ffffff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 900;
-            font-size: 1.2rem;
-            margin-bottom: 32px;
-        }
-    </style>
-    """, unsafe_allow_html=True)
+    # IDENTIFIANTS LÉGAUX
+    siren: str = ""
+    siret: str = ""
+    lei: str = ""
+    duns: str = ""
+    gln: str = ""
+    qid: str = ""  # Wikidata ID
     
-    # Container principal
-    st.markdown('<div class="master-container">', unsafe_allow_html=True)
+    # VISUEL
+    logo_url: str = ""
+    logo_width: str = "600"
+    logo_height: str = "200"
+    image_url: str = ""
     
-    # Header
-    st.markdown('<div class="zen-logo">蛍</div>', unsafe_allow_html=True)
-    st.markdown('<h1 class="zen-title">MASTER DATA</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="zen-subtitle">Données d\'Entité Permanentes / JSON-LD Foundation</p>', unsafe_allow_html=True)
+    # KNOWLEDGE GRAPH
+    wikipedia_url: str = ""
+    linkedin_url: str = ""
+    twitter_url: str = ""
+    facebook_url: str = ""
+    instagram_url: str = ""
+    youtube_url: str = ""
+    tiktok_url: str = ""
     
-    # Init session state
-    if "master_data" not in st.session_state:
-        st.session_state.master_data = None
+    # EXPERTISE
+    expertise_1: str = ""
+    expertise_1_wiki: str = ""
+    expertise_2: str = ""
+    expertise_2_wiki: str = ""
     
-    # =========================================================================
-    # ÉTAPE 1 : RECHERCHE & ENRICHISSEMENT
-    # =========================================================================
+    # ADRESSE
+    street: str = ""
+    city: str = ""
+    region: str = ""
+    zip_code: str = ""
+    country: str = "FR"
+    latitude: str = ""
+    longitude: str = ""
+    google_maps_url: str = ""
     
-    st.markdown('<div class="zen-card">', unsafe_allow_html=True)
-    st.markdown('<p class="section-title">01 / Identification & Enrichissement</p>', unsafe_allow_html=True)
+    # CONTACT
+    phone: str = ""
+    email: str = ""
+    fax: str = ""
+    phone_cs: str = ""  # Customer service
+    email_cs: str = ""
+    phone_sales: str = ""
+    email_sales: str = ""
+    phone_tech: str = ""
+    email_tech: str = ""
     
-    col1, col2, col3 = st.columns([2, 1, 1])
+    # HORAIRES
+    opening_hours: str = "Mo-Fr 09:00-18:00"
     
-    with col1:
-        company_name = st.text_input(
-            "Nom de l'organisation",
-            placeholder="Ex: Airbus, BNP Paribas, Decathlon...",
-            label_visibility="collapsed",
-            key="company_search"
-        )
+    # STRUCTURE CORPORATE
+    founder_name: str = ""
+    founder_url: str = ""
+    founding_date: str = ""
+    parent_org: str = ""
+    num_employees: str = ""
     
-    with col2:
-        qid_manual = st.text_input(
-            "QID Wikidata (optionnel)",
-            placeholder="Ex: Q67",
-            label_visibility="collapsed",
-            key="qid_search"
-        )
+    # SOCIAL PROOF
+    rating_value: str = ""
+    rating_count: str = ""
+    review_count: str = ""
     
-    with col3:
-        siren_manual = st.text_input(
-            "SIREN (optionnel)",
-            placeholder="Ex: 351058151",
-            label_visibility="collapsed",
-            key="siren_search"
-        )
+    # FINANCIER
+    ticker_symbol: str = ""
+    stock_exchange: str = ""
+    annual_revenue: str = ""
     
-    st.markdown("<br>", unsafe_allow_html=True)
+    # STATUT
+    status: str = "pending"  # pending, partial, complete, failed
+    errors: List[str] = field(default_factory=list)
+
+
+class WikidataAPI:
+    """Wikidata API client for entity enrichment"""
     
-    col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
+    BASE_URL = "https://www.wikidata.org/w/api.php"
+    SPARQL_URL = "https://query.wikidata.org/sparql"
     
-    with col_btn1:
-        if st.button("🔍 RECHERCHER", use_container_width=True, key="search_btn"):
-            if company_name or qid_manual or siren_manual:
-                with st.spinner("Interrogation de Wikidata..."):
-                    handler = MasterDataHandler()
-                    st.session_state.master_data = handler.auto_enrich(
-                        search_query=company_name if company_name else None,
-                        qid=qid_manual if qid_manual else None,
-                        siren=siren_manual if siren_manual else None
-                    )
-                    st.rerun()
-            else:
-                st.error("⚠️ Entrez au moins un critère")
-    
-    with col_btn2:
-        if st.button("🤖 ENRICHIR MISTRAL", use_container_width=True, key="enrich_btn", disabled=not st.session_state.master_data):
-            mistral_key = get_mistral_key()
-            if mistral_key and st.session_state.master_data.qid:
-                with st.spinner("Mistral enrichit les données..."):
-                    handler = MasterDataHandler()
-                    st.session_state.master_data = handler.auto_complete_with_mistral(
-                        st.session_state.master_data,
-                        mistral_key
-                    )
-                    st.rerun()
-            else:
-                st.error("⚠️ Clé Mistral ou QID manquant")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    # =========================================================================
-    # ÉTAPE 2 : ÉDITION DES DONNÉES
-    # =========================================================================
-    
-    if st.session_state.master_data:
-        master = st.session_state.master_data
+    @staticmethod
+    def search_entity(query: str, limit: int = 5) -> List[Dict]:
+        """Search for entities on Wikidata"""
+        print(f"[DEBUG] === DEBUT RECHERCHE WIKIDATA ===")
+        print(f"[DEBUG] Query: '{query}'")
+        print(f"[DEBUG] Limit: {limit}")
         
-        st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+        params = {
+            "action": "wbsearchentities",
+            "search": query,
+            "language": "fr",
+            "uselang": "fr",
+            "format": "json",
+            "limit": limit,
+            "type": "item"
+        }
         
-        # Status
-        status_class = {
-            "complete": "status-complete",
-            "partial": "status-partial",
-            "failed": "status-failed"
-        }.get(master.status, "status-partial")
+        headers = {
+            "User-Agent": "HotaruEntityForge/2.0",
+            "Accept": "application/json"
+        }
         
-        status_text = {
-            "complete": "✓ Complet",
-            "partial": "⚠ Partiel",
-            "failed": "✕ Échec"
-        }.get(master.status, "⚠ Partiel")
-        
-        st.markdown(f'<span class="status-badge {status_class}">{status_text}</span>', unsafe_allow_html=True)
-        
-        if master.errors:
-            with st.expander("⚠️ Erreurs détectées"):
-                for error in master.errors:
-                    st.caption(error)
-        
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        
-        # Metrics
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.markdown('<div class="zen-metric">', unsafe_allow_html=True)
-            st.markdown(f'<div class="zen-metric-value">{len([f for f in [master.brand_name, master.qid, master.site_url] if f])}</div>', unsafe_allow_html=True)
-            st.markdown('<div class="zen-metric-label">Champs Clés</div>', unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        with col2:
-            social_count = len([f for f in [master.wikipedia_url, master.linkedin_url, master.twitter_url, master.facebook_url, master.instagram_url, master.youtube_url] if f])
-            st.markdown('<div class="zen-metric">', unsafe_allow_html=True)
-            st.markdown(f'<div class="zen-metric-value">{social_count}</div>', unsafe_allow_html=True)
-            st.markdown('<div class="zen-metric-label">Réseaux Sociaux</div>', unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        with col3:
-            contact_count = len([f for f in [master.phone, master.email, master.street, master.city] if f])
-            st.markdown('<div class="zen-metric">', unsafe_allow_html=True)
-            st.markdown(f'<div class="zen-metric-value">{contact_count}</div>', unsafe_allow_html=True)
-            st.markdown('<div class="zen-metric-label">Contact & Adresse</div>', unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-        st.markdown('<p class="section-title">02 / Édition des Champs</p>', unsafe_allow_html=True)
-        
-        # SECTION : IDENTITÉ
-        st.markdown('<div class="zen-card">', unsafe_allow_html=True)
-        st.markdown("**🏢 Identité**")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            master.brand_name = st.text_input("Nom commercial", value=master.brand_name, key="edit_brand")
-            master.legal_name = st.text_input("Raison sociale", value=master.legal_name, key="edit_legal")
-            master.org_type = st.selectbox("Type", ["Corporation", "LocalBusiness", "EducationalOrganization", "GovernmentOrganization", "NGO"], 
-                                          index=["Corporation", "LocalBusiness", "EducationalOrganization", "GovernmentOrganization", "NGO"].index(master.org_type) if master.org_type in ["Corporation", "LocalBusiness", "EducationalOrganization", "GovernmentOrganization", "NGO"] else 0,
-                                          key="edit_type")
-        
-        with col2:
-            master.description = st.text_area("Description", value=master.description, height=100, key="edit_desc")
-            master.slogan = st.text_input("Slogan", value=master.slogan, key="edit_slogan")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        # SECTION : IDENTIFIANTS
-        st.markdown('<div class="zen-card">', unsafe_allow_html=True)
-        st.markdown("**🆔 Identifiants**")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.text_input("Wikidata QID", value=master.qid, disabled=True, key="view_qid")
-            master.siren = st.text_input("SIREN", value=master.siren, key="edit_siren")
-        
-        with col2:
-            master.siret = st.text_input("SIRET", value=master.siret, key="edit_siret")
-            master.lei = st.text_input("LEI", value=master.lei, key="edit_lei")
-        
-        with col3:
-            master.site_url = st.text_input("Site web", value=master.site_url, key="edit_site")
-            master.ticker_symbol = st.text_input("Ticker", value=master.ticker_symbol, key="edit_ticker")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        # SECTION : ADRESSE & CONTACT
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown('<div class="zen-card">', unsafe_allow_html=True)
-            st.markdown("**📍 Adresse**")
+        try:
+            response = requests.get(
+                WikidataAPI.BASE_URL, 
+                params=params, 
+                headers=headers, 
+                timeout=20
+            )
             
-            master.street = st.text_input("Rue", value=master.street, key="edit_street")
+            response.raise_for_status()
+            data = response.json()
+            results = data.get('search', [])
             
-            col_city, col_zip = st.columns([2, 1])
-            with col_city:
-                master.city = st.text_input("Ville", value=master.city, key="edit_city")
-            with col_zip:
-                master.zip_code = st.text_input("Code postal", value=master.zip_code, key="edit_zip")
+            if results:
+                return results
             
-            master.region = st.text_input("Région", value=master.region, key="edit_region")
-            master.country = st.text_input("Pays", value=master.country, key="edit_country")
+            # Fallback: try English
+            params["language"] = "en"
+            params["uselang"] = "en"
             
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown('<div class="zen-card">', unsafe_allow_html=True)
-            st.markdown("**📞 Contact**")
+            response = requests.get(
+                WikidataAPI.BASE_URL,
+                params=params,
+                headers=headers,
+                timeout=20
+            )
             
-            master.phone = st.text_input("Téléphone", value=master.phone, placeholder="+33 1 23 45 67 89", key="edit_phone")
-            master.email = st.text_input("Email", value=master.email, placeholder="contact@exemple.fr", key="edit_email")
-            master.fax = st.text_input("Fax", value=master.fax, key="edit_fax")
+            response.raise_for_status()
+            data = response.json()
+            results = data.get('search', [])
             
-            st.markdown('</div>', unsafe_allow_html=True)
+            return results
+            
+        except Exception as e:
+            print(f"[ERROR] Wikidata search failed: {e}")
+            return []
+    
+    @staticmethod
+    def get_entity_data(qid: str) -> Optional[Dict]:
+        """Get complete entity data from Wikidata"""
+        print(f"\n[GET_ENTITY] QID: {qid}")
         
-        # SECTION : RÉSEAUX SOCIAUX
-        st.markdown('<div class="zen-card">', unsafe_allow_html=True)
-        st.markdown("**🌐 Réseaux Sociaux**")
+        result = {
+            "name_fr": "", "name_en": "", "desc_fr": "", "desc_en": "", 
+            "siren": "", "lei": "", "website": "", "founding_date": "",
+            "parent_qid": "", "parent_name": ""
+        }
         
-        col1, col2 = st.columns(2)
+        headers = {
+            "User-Agent": "HotaruEntityForge/2.0",
+            "Accept": "application/json"
+        }
         
-        with col1:
-            master.wikipedia_url = st.text_input("Wikipedia", value=master.wikipedia_url, key="edit_wiki")
-            master.linkedin_url = st.text_input("LinkedIn", value=master.linkedin_url, key="edit_linkedin")
-            master.twitter_url = st.text_input("Twitter/X", value=master.twitter_url, key="edit_twitter")
-            master.facebook_url = st.text_input("Facebook", value=master.facebook_url, key="edit_facebook")
+        params = {
+            "action": "wbgetentities",
+            "ids": qid,
+            "languages": "fr|en",
+            "props": "labels|descriptions|claims",
+            "format": "json"
+        }
         
-        with col2:
-            master.instagram_url = st.text_input("Instagram", value=master.instagram_url, key="edit_instagram")
-            master.youtube_url = st.text_input("YouTube", value=master.youtube_url, key="edit_youtube")
-            master.tiktok_url = st.text_input("TikTok", value=master.tiktok_url, key="edit_tiktok")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        # SECTION : VISUELS
-        st.markdown('<div class="zen-card">', unsafe_allow_html=True)
-        st.markdown("**🎨 Visuels**")
-        
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            master.logo_url = st.text_input("URL du logo", value=master.logo_url, key="edit_logo")
-        
-        with col2:
-            if master.logo_url:
+        try:
+            r = requests.get(
+                WikidataAPI.BASE_URL,
+                params=params,
+                headers=headers,
+                timeout=20
+            )
+            
+            if r.status_code != 200:
+                return None
+            
+            entity = r.json().get('entities', {}).get(qid, {})
+            
+            if not entity:
+                return None
+            
+            labels = entity.get('labels', {})
+            descs = entity.get('descriptions', {})
+            claims = entity.get('claims', {})
+            
+            result["name_fr"] = labels.get('fr', {}).get('value', '')
+            result["name_en"] = labels.get('en', {}).get('value', '')
+            result["desc_fr"] = descs.get('fr', {}).get('value', '')
+            result["desc_en"] = descs.get('en', {}).get('value', '')
+            
+            # SIREN P1616
+            if 'P1616' in claims:
                 try:
-                    st.image(master.logo_url, width=150)
+                    result["siren"] = claims['P1616'][0]['mainsnak']['datavalue']['value']
                 except:
-                    st.caption("❌ Impossible de charger l'image")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        # SECTION : CORPORATE (optionnel)
-        with st.expander("📊 Données corporate (optionnel)"):
-            col1, col2, col3 = st.columns(3)
+                    pass
             
-            with col1:
-                master.founding_date = st.text_input("Date de création", value=master.founding_date, placeholder="YYYY-MM-DD", key="edit_founding")
-                master.num_employees = st.text_input("Nombre d'employés", value=master.num_employees, key="edit_employees")
+            # LEI P1278
+            if 'P1278' in claims:
+                try:
+                    result["lei"] = claims['P1278'][0]['mainsnak']['datavalue']['value']
+                except:
+                    pass
             
-            with col2:
-                master.founder_name = st.text_input("Fondateur", value=master.founder_name, key="edit_founder")
-                master.parent_org = st.text_input("Organisation mère", value=master.parent_org, key="edit_parent")
+            # Website P856
+            if 'P856' in claims:
+                try:
+                    result["website"] = claims['P856'][0]['mainsnak']['datavalue']['value']
+                except:
+                    pass
             
-            with col3:
-                master.annual_revenue = st.text_input("Chiffre d'affaires", value=master.annual_revenue, key="edit_revenue")
-                master.stock_exchange = st.text_input("Bourse", value=master.stock_exchange, key="edit_exchange")
-        
-        st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-        
-        # =====================================================================
-        # ÉTAPE 3 : GÉNÉRATION JSON-LD
-        # =====================================================================
-        
-        st.markdown('<p class="section-title">03 / Génération du JSON-LD Master</p>', unsafe_allow_html=True)
-        
-        col1, col2, col3 = st.columns([1, 1, 1])
-        
-        with col2:
-            if st.button("📥 GÉNÉRER LE JSON-LD", type="primary", use_container_width=True, key="generate_btn"):
-                template_path = "template.json"
-                if os.path.exists(template_path):
-                    with st.spinner("⚙️ Génération en cours..."):
-                        builder = TemplateBuilder(template_path)
-                        jsonld_master = builder.generate_jsonld(
-                            master_data=master,
-                            dynamic_data=None,
-                            page_data=None
-                        )
-                        
-                        st.session_state.jsonld_master = jsonld_master
-                        st.success("✅ JSON-LD Master généré")
-                        st.rerun()
-                else:
-                    st.error("❌ Template introuvable")
-        
-        # Affichage du JSON-LD
-        if "jsonld_master" in st.session_state and st.session_state.jsonld_master:
-            st.markdown("<br>", unsafe_allow_html=True)
+            # Founding date P571
+            if 'P571' in claims:
+                try:
+                    time_val = claims['P571'][0]['mainsnak']['datavalue']['value']['time']
+                    result["founding_date"] = time_val[1:11]  # +YYYY-MM-DD -> YYYY-MM-DD
+                except:
+                    pass
             
-            st.markdown('<div class="zen-card">', unsafe_allow_html=True)
+            return result
             
-            col1, col2 = st.columns([3, 1])
-            
-            with col1:
-                st.code(st.session_state.jsonld_master, language="json", line_numbers=True)
-            
-            with col2:
-                st.download_button(
-                    label="💾 TÉLÉCHARGER",
-                    data=st.session_state.jsonld_master,
-                    file_name=f"master_{master.brand_name.lower().replace(' ', '_')}.json",
-                    mime="application/ld+json",
-                    use_container_width=True
-                )
-                
-                st.metric("Lignes", len(st.session_state.jsonld_master.split('\n')))
-                st.metric("Taille", f"{len(st.session_state.jsonld_master)} chars")
-                
-                if st.button("🔄 NOUVEAU", use_container_width=True, key="reset_btn"):
-                    st.session_state.master_data = None
-                    if "jsonld_master" in st.session_state:
-                        del st.session_state.jsonld_master
-                    st.rerun()
-            
-            st.markdown('</div>', unsafe_allow_html=True)
+        except Exception as e:
+            print(f"[GET_ENTITY] EXCEPTION: {e}")
+            return None
     
-    st.markdown('</div>', unsafe_allow_html=True)  # Fermeture master-container
+    @staticmethod
+    def extract_master_data(entity_data: Dict) -> Dict[str, str]:
+        """Extract relevant fields from Wikidata entity"""
+        result = {}
+        
+        if not entity_data:
+            return result
+        
+        result["brand_name"] = entity_data.get("name_fr") or entity_data.get("name_en", "")
+        result["description"] = entity_data.get("desc_fr") or entity_data.get("desc_en", "")
+        result["siren"] = entity_data.get("siren", "")
+        result["lei"] = entity_data.get("lei", "")
+        result["site_url"] = entity_data.get("website", "")
+        result["founding_date"] = entity_data.get("founding_date", "")
+        
+        return result
+
+
+class INSEEAPI:
+    """INSEE Sirene API client for French company data"""
+    
+    BASE_URL = "https://api.insee.fr/entreprises/sirene/V3"
+    
+    @staticmethod
+    def get_company_data(siren: str) -> Optional[Dict]:
+        """Get company data from INSEE Sirene API"""
+        # Clean SIREN
+        siren_clean = re.sub(r'\D', '', siren)
+        
+        if len(siren_clean) != 9:
+            return None
+        
+        # Mock structure for demo
+        return {
+            "siren": siren_clean,
+            "legal_name": "",
+            "address": {},
+            "activity_code": "",
+            "legal_category": "",
+        }
+    
+    @staticmethod
+    def extract_master_data(insee_data: Dict) -> Dict[str, str]:
+        """Extract relevant fields from INSEE data"""
+        result = {}
+        
+        if not insee_data:
+            return result
+        
+        result["siren"] = insee_data.get("siren", "")
+        result["legal_name"] = insee_data.get("legal_name", "")
+        
+        address = insee_data.get("address", {})
+        if address:
+            result["street"] = address.get("street", "")
+            result["city"] = address.get("city", "")
+            result["zip_code"] = address.get("postal_code", "")
+        
+        return result
+
+
+class MasterDataHandler:
+    """Main handler for master data enrichment"""
+    
+    def __init__(self):
+        self.wikidata = WikidataAPI()
+        self.insee = INSEEAPI()
+    
+    def auto_complete_with_mistral(self, master_data: MasterData, mistral_key: str) -> MasterData:
+        """Auto-complete master data with Mistral AI"""
+        print(f"\n[MISTRAL_ENRICH] === DEBUT ENRICHISSEMENT ===")
+        
+        if not mistral_key:
+            master_data.errors.append("Clé Mistral manquante")
+            return master_data
+        
+        prompt = f"""Tu es un expert en enrichissement de données entreprises.
+
+ENTREPRISE:
+- Nom: {master_data.brand_name}
+- QID Wikidata: {master_data.qid}
+- Site web: {master_data.site_url}
+- Description actuelle: {master_data.description}
+
+MISSION: Enrichir automatiquement TOUTES les données manquantes.
+
+TROUVE ET RETOURNE en JSON:
+1. description_seo: Description SEO optimisée 150-180 caractères
+2. slogan: Slogan accrocheur de la marque (ou null)
+3. expertise: Liste de 3-5 domaines d'expertise (séparés par virgules)
+4. wikipedia_url: URL Wikipedia FR si existe (ou null)
+5. linkedin_url: URL LinkedIn officielle (ou null)
+6. twitter_url: URL Twitter/X officielle (ou null)
+7. facebook_url: URL Facebook officielle (ou null)
+8. instagram_url: URL Instagram officielle (ou null)
+9. youtube_url: URL YouTube officielle (ou null)
+10. logo_url: URL du logo si trouvable (ou null)
+11. phone: Numéro de téléphone principal (ou null)
+12. email: Email contact (ou null)
+13. street: Adresse siège social (ou null)
+14. city: Ville siège (ou null)
+15. postal_code: Code postal (ou null)
+
+RÉPONDS UNIQUEMENT EN JSON VALIDE, PAS DE MARKDOWN:
+{{"description_seo": "...", "slogan": "..." ou null, "expertise": "A, B, C", ...}}"""
+
+        try:
+            response = requests.post(
+                "https://api.mistral.ai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {mistral_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "mistral-large-latest",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.3,
+                    "max_tokens": 2000
+                },
+                timeout=30
+            )
+            
+            if response.status_code != 200:
+                master_data.errors.append(f"Mistral API error: {response.status_code}")
+                return master_data
+            
+            result = response.json()
+            content = result['choices'][0]['message']['content']
+            
+            # Clean JSON
+            content = content.replace("```json", "").replace("```", "").strip()
+            
+            import json
+            data = json.loads(content)
+            
+            # Apply enrichments
+            if data.get("description_seo") and not master_data.description:
+                master_data.description = data["description_seo"]
+            
+            if data.get("slogan"):
+                master_data.slogan = data["slogan"]
+            
+            if data.get("expertise"):
+                master_data.expertise_1 = data["expertise"]
+            
+            # Social networks
+            if data.get("wikipedia_url"):
+                master_data.wikipedia_url = data["wikipedia_url"]
+            if data.get("linkedin_url"):
+                master_data.linkedin_url = data["linkedin_url"]
+            if data.get("twitter_url"):
+                master_data.twitter_url = data["twitter_url"]
+            if data.get("facebook_url"):
+                master_data.facebook_url = data["facebook_url"]
+            if data.get("instagram_url"):
+                master_data.instagram_url = data["instagram_url"]
+            if data.get("youtube_url"):
+                master_data.youtube_url = data["youtube_url"]
+            
+            # Logo
+            if data.get("logo_url") and not master_data.logo_url:
+                master_data.logo_url = data["logo_url"]
+            
+            # Contact
+            if data.get("phone") and not master_data.phone:
+                master_data.phone = data["phone"]
+            if data.get("email") and not master_data.email:
+                master_data.email = data["email"]
+            
+            # Address
+            if data.get("street") and not master_data.street:
+                master_data.street = data["street"]
+            if data.get("city") and not master_data.city:
+                master_data.city = data["city"]
+            if data.get("postal_code") and not master_data.zip_code:
+                master_data.zip_code = data["postal_code"]
+            
+            print(f"[MISTRAL_ENRICH] === FIN ENRICHISSEMENT ===\n")
+            
+        except Exception as e:
+            print(f"[MISTRAL_ENRICH] EXCEPTION: {e}")
+            master_data.errors.append(f"Mistral enrichment failed: {str(e)}")
+        
+        return master_data
+    
+    def enrich_from_wikidata(self, qid: str, master_data: MasterData) -> MasterData:
+        """Enrich master data from Wikidata entity"""
+        entity_data = self.wikidata.get_entity_data(qid)
+        
+        if not entity_data:
+            master_data.errors.append(f"Wikidata: QID {qid} not found")
+            return master_data
+        
+        # Extract data
+        extracted = self.wikidata.extract_master_data(entity_data)
+        
+        # Update master_data
+        if extracted.get("brand_name"):
+            master_data.brand_name = extracted["brand_name"]
+        if extracted.get("description"):
+            master_data.description = extracted["description"]
+        if extracted.get("site_url"):
+            master_data.site_url = extracted["site_url"]
+        if extracted.get("founding_date"):
+            master_data.founding_date = extracted["founding_date"]
+        if extracted.get("siren"):
+            master_data.siren = extracted["siren"]
+        if extracted.get("lei"):
+            master_data.lei = extracted["lei"]
+        
+        # Store QID
+        master_data.qid = qid
+        
+        return master_data
+    
+    def enrich_from_siren(self, siren: str, master_data: MasterData) -> MasterData:
+        """Enrich master data from INSEE SIREN"""
+        insee_data = self.insee.get_company_data(siren)
+        
+        if not insee_data:
+            master_data.errors.append(f"INSEE: SIREN {siren} not found")
+            return master_data
+        
+        # Extract data
+        extracted = self.insee.extract_master_data(insee_data)
+        
+        # Update master_data
+        if extracted.get("siren"):
+            master_data.siren = extracted["siren"]
+        if extracted.get("legal_name"):
+            master_data.legal_name = extracted["legal_name"]
+        if extracted.get("street"):
+            master_data.street = extracted["street"]
+        if extracted.get("city"):
+            master_data.city = extracted["city"]
+        if extracted.get("zip_code"):
+            master_data.zip_code = extracted["zip_code"]
+        
+        return master_data
+    
+    def auto_enrich(self, search_query: str = None, qid: str = None, siren: str = None) -> MasterData:
+        """Auto-enrich master data from available identifiers"""
+        print(f"\n[AUTO_ENRICH] === DEBUT ===")
+        print(f"[AUTO_ENRICH] search_query: {search_query}")
+        print(f"[AUTO_ENRICH] qid: {qid}")
+        print(f"[AUTO_ENRICH] siren: {siren}")
+        
+        master_data = MasterData()
+        
+        # Try Wikidata first if QID provided
+        if qid:
+            master_data = self.enrich_from_wikidata(qid, master_data)
+            master_data.status = "partial"
+        
+        # Try Wikidata search if query provided and no QID
+        elif search_query and not qid:
+            results = self.wikidata.search_entity(search_query, limit=1)
+            
+            if results:
+                qid = results[0]["id"]
+                master_data = self.enrich_from_wikidata(qid, master_data)
+                master_data.status = "partial"
+            else:
+                master_data.errors.append(f"Wikidata: No results for '{search_query}'")
+        
+        # Try INSEE if SIREN provided
+        if siren:
+            master_data = self.enrich_from_siren(siren, master_data)
+            master_data.status = "partial"
+        
+        # Update status
+        if master_data.brand_name and (master_data.qid or master_data.siren):
+            master_data.status = "complete"
+        elif master_data.errors:
+            master_data.status = "failed"
+        
+        print(f"[AUTO_ENRICH] === FIN ===\n")
+        
+        return master_data
