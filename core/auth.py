@@ -78,8 +78,7 @@ class AuthManager:
                 if user['email'].lower().strip() == email.lower().strip():
                     stored_hash = str(user['password_hash']).strip()
                     
-                    # 🔥 MODE COMPATIBILITÉ : Accepte hash OU mot de passe en clair
-                    if stored_hash == password_hash or stored_hash == password:
+                    if stored_hash == password_hash:
                         # Stocke le rôle de l'utilisateur
                         st.session_state.user_role = user.get('role', 'admin')
                         
@@ -146,8 +145,7 @@ class AuthManager:
             # Recherche de l'utilisateur (commence à la ligne 2, ignore les en-têtes)
             for i, row in enumerate(all_users[1:], start=2):
                 if row[0].lower() == email.lower():
-                    # Vérif mot de passe actuel (hash OU clair)
-                    if row[1] == old_hash or row[1] == old_password:
+                    if row[1] == old_hash:
                         # Mise à jour du mot de passe
                         self.users_sheet.update_cell(i, 2, new_hash)
                         st.success("✅ Mot de passe modifié avec succès")

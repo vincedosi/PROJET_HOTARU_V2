@@ -4,10 +4,7 @@ networkx
 requests
 beautifulsoup4
 lxml
-pandas
 gspread
 google-auth
-scikit-learn
-python-dotenv
 selenium
 webdriver-manager==4.0.1

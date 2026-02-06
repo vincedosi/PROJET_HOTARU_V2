@@ -1,0 +1,184 @@
+/* =============================================================================
+   HOTARU v2 - Design System (Single Source of Truth)
+   ============================================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+/* --- RESET GLOBAL --- */
+html, body, [class*="css"], .stMarkdown, p, div {
+    font-family: 'Inter', sans-serif !important;
+    color: #0f172a;
+}
+
+/* --- STRUCTURE --- */
+.block-container {
+    padding-top: 1.5rem !important;
+    padding-bottom: 5rem;
+    max-width: 95% !important;
+}
+
+/* --- NAVIGATION (st.tabs) --- */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 24px;
+    background-color: transparent;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.stTabs [data-baseweb="tab"] {
+    height: 45px;
+    background-color: transparent !important;
+    border: none !important;
+    color: #64748b !important;
+    font-weight: 500 !important;
+    font-size: 0.95rem !important;
+    transition: all 0.2s ease;
+}
+
+.stTabs [aria-selected="true"] {
+    color: #000000 !important;
+    border-bottom: 2px solid #000000 !important;
+}
+
+/* --- BOUTONS --- */
+.stButton>button {
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.stButton>button:hover {
+    border-color: #000;
+    color: #000;
+}
+
+/* --- INPUTS ZEN --- */
+.stTextInput > div > div > input,
+.stTextArea > div > div > textarea {
+    border: 1px solid #e5e5e5 !important;
+    border-radius: 0 !important;
+    font-size: 0.9rem !important;
+    padding: 12px 16px !important;
+}
+
+.stTextInput > div > div > input:focus,
+.stTextArea > div > div > textarea:focus {
+    border-color: #000000 !important;
+    box-shadow: none !important;
+}
+
+/* --- MASTER TAB : ZEN DESIGN SYSTEM --- */
+.zen-card {
+    background: #ffffff;
+    border: 1px solid #e5e5e5;
+    padding: 32px;
+    margin-bottom: 24px;
+    transition: all 0.2s ease;
+}
+
+.zen-card:hover {
+    border-color: #000000;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.zen-title {
+    font-size: 3rem;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    text-transform: uppercase;
+    line-height: 1;
+    margin-bottom: 8px;
+}
+
+.zen-subtitle {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #666;
+    margin-bottom: 32px;
+}
+
+.section-title {
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: #999;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 6px 16px;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    border: 1px solid;
+}
+
+.status-complete { background: #000; color: #fff; border-color: #000; }
+.status-partial  { background: #fff; color: #000; border-color: #000; }
+.status-failed   { background: #f5f5f5; color: #666; border-color: #ccc; }
+
+.zen-metric {
+    text-align: center;
+    padding: 24px;
+    border: 1px solid #e5e5e5;
+}
+
+.zen-metric-value {
+    font-size: 3rem;
+    font-weight: 900;
+    line-height: 1;
+    margin-bottom: 8px;
+}
+
+.zen-metric-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #999;
+}
+
+.zen-divider {
+    height: 1px;
+    background: #e5e5e5;
+    margin: 48px 0;
+}
+
+.zen-logo {
+    width: 48px;
+    height: 48px;
+    background: #000;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 1.2rem;
+    margin-bottom: 32px;
+}
+
+/* --- AUDIT TAB : INFRA BOXES --- */
+.infra-box {
+    padding: 15px;
+    border-left: 3px solid #eee;
+    margin-bottom: 10px;
+    background: #f9f9f9;
+    border-radius: 0 4px 4px 0;
+}
+
+.status-ok  { color: #2e7d32; font-weight: 600; font-size: 0.9em; }
+.status-err { color: #c62828; font-weight: 600; font-size: 0.9em; }
+.infra-desc { font-size: 0.85em; color: #666; margin-top: 5px; line-height: 1.4; }
+
+/* --- HIDE STREAMLIT CHROME --- */
+#MainMenu { visibility: hidden; }
+header    { visibility: hidden; }
+footer    { visibility: hidden; }
+.stDeployButton { display: none; }
