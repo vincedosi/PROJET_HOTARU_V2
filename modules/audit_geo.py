@@ -1,5 +1,5 @@
 # =============================================================================
-# AUDIT GEO
+# AUDIT GEO - VERSION AVEC LOGS EN TEMPS RÉEL
 # =============================================================================
 
 
@@ -18,7 +18,7 @@ from core.database import AuditDatabase
 from core.scraping import SmartScraper
 
 # =============================================================================
-# VERSION 2.6.0 - FIX PLEIN ÉCRAN + LÉGENDE + TOOLTIP DÉTAILLÉS + ÉCHELLE
+# VERSION 2.7.0 - LOGS + COMPTEURS + STATS DÉTAILLÉES
 # =============================================================================
 
 # =============================================================================
@@ -443,19 +443,40 @@ def render_audit_geo():
             
             if st.button("Lancer Hotaru", use_container_width=True):
                 if url_in:
+                    # ✅ NOUVEAU : Conteneur pour les logs en temps réel
+                    log_container = st.empty()
+                    log_messages = []
+                    
+                    def log_callback(message):
+                        """Callback pour afficher les logs dans Streamlit"""
+                        log_messages.append(message)
+                        # Limiter à 30 derniers messages pour ne pas surcharger
+                        recent_logs = log_messages[-30:]
+                        log_container.text_area(
+                            "📋 Logs en temps réel", 
+                            "\n".join(recent_logs),
+                            height=400,
+                            key=f"logs_{len(log_messages)}"
+                        )
+                    
                     bar = st.progress(0, "Analyse infrastructure...")
                     infra, score = check_geo_infrastructure(url_in)
                     st.session_state.geo_infra = infra
                     st.session_state.geo_score = score
                     
+                    # ✅ NOUVEAU : Lancement avec log_callback
                     scr = SmartScraper(url_in, max_urls=limit_in)
-                    res, _ = scr.run_analysis(lambda m, v: bar.progress(v, m))
+                    res, stats = scr.run_analysis(
+                        progress_callback=lambda m, v: bar.progress(v, m),
+                        log_callback=log_callback
+                    )
                     
                     st.session_state.update({
                         "results": res, 
                         "clusters": scr.get_pattern_summary(), 
                         "target_url": url_in,
-                        "current_ws": ws_in if ws_in else "Non classé"
+                        "current_ws": ws_in if ws_in else "Non classé",
+                        "crawl_stats": stats.get('stats', {})  # ✅ NOUVEAU
                     })
                     st.rerun()
 
@@ -479,7 +500,8 @@ def render_audit_geo():
                     "target_url": r['site_url'], 
                     "geo_infra": data.get('geo_infra', {}),
                     "geo_score": data.get('geo_score', 0),
-                    "current_ws": selected_ws
+                    "current_ws": selected_ws,
+                    "crawl_stats": data.get('stats', {})  # ✅ NOUVEAU
                 })
                 st.rerun()
 
@@ -500,6 +522,31 @@ def render_audit_geo():
                         st.markdown(f"""<div class="infra-box"><b>{name}</b><br><span class="{status}">{txt}</span><div class="infra-desc">{d['meta']['desc']}</div></div>""", unsafe_allow_html=True)
 
             st.divider()
+            
+            # ✅ NOUVEAU : Stats détaillées du crawl
+            if "crawl_stats" in st.session_state and st.session_state.crawl_stats:
+                with st.expander("📊 Statistiques détaillées du crawl", expanded=True):
+                    stats = st.session_state.crawl_stats
+                    
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        st.metric("✅ Pages crawlées", stats.get('pages_crawled', 0))
+                        st.metric("⚠️ Pages ignorées", stats.get('pages_skipped', 0))
+                    
+                    with col2:
+                        st.metric("🔗 Liens découverts", stats.get('links_discovered', 0))
+                        st.metric("🚫 Liens filtrés", stats.get('links_filtered', 0))
+                    
+                    with col3:
+                        st.metric("🔄 Doublons", stats.get('links_duplicate', 0))
+                        st.metric("⛔ Queue pleine", stats.get('queue_full_blocks', 0))
+                    
+                    with col4:
+                        st.metric("❌ Erreurs", stats.get('errors', 0))
+                        st.metric("📍 URLs visitées", len(st.session_state.visited) if hasattr(st.session_state, 'visited') else len(st.session_state.results))
+                
+                st.divider()
             
             # 2. Commandes Graphe
             c_expert, c_save_name, c_save_btn = st.columns([1, 2, 1])
@@ -524,7 +571,8 @@ def render_audit_geo():
                     "results": clean_results,
                     "clusters": st.session_state.clusters,
                     "geo_infra": st.session_state.get('geo_infra', {}),
-                    "geo_score": st.session_state.get('geo_score', 0)
+                    "geo_score": st.session_state.get('geo_score', 0),
+                    "stats": st.session_state.get('crawl_stats', {})  # ✅ NOUVEAU
                 }
                 db.save_audit(user_email, st.session_state.current_ws, st.session_state.target_url, s_name, payload)
                 st.toast("✅ Audit sauvegardé avec succès")
