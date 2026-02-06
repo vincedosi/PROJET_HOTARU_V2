@@ -428,7 +428,14 @@ def render_audit_geo():
         # --- ZONE DE SCAN ---
         with st.expander("🚀 LANCER UNE NOUVELLE ANALYSE", expanded="results" not in st.session_state):
             c1, c2 = st.columns([3, 1])
-            url_in = c1.text_input("URL Racine", placeholder="https://...")
+            
+            # ✅ NOUVEAU : Textarea pour URLs multiples
+            url_input = c1.text_area(
+                "URLs à analyser (une par ligne)",
+                placeholder="https://example.com/\nhttps://example.com/section1\nhttps://example.com/section2",
+                height=100,
+                help="Entrez une ou plusieurs URLs du même domaine, une par ligne. Le scraper explorera toutes ces sections."
+            )
             
             default_ws = "" if selected_ws == "+ Créer Nouveau" else selected_ws
             ws_in = c2.text_input("Nom du Projet", value=default_ws)
@@ -442,14 +449,30 @@ def render_audit_geo():
             )
             
             if st.button("Lancer Hotaru", use_container_width=True):
-                if url_in:
+                if url_input:
+                    # ✅ Parser les URLs (une par ligne, ignorer les lignes vides)
+                    urls = [line.strip() for line in url_input.strip().split('\n') if line.strip()]
+                    
+                    if not urls:
+                        st.error("Veuillez entrer au moins une URL")
+                        return
+                    
+                    # ✅ Vérifier que toutes les URLs sont du même domaine
+                    domains = [urlparse(url).netloc for url in urls]
+                    if len(set(domains)) > 1:
+                        st.error(f"❌ Toutes les URLs doivent être du même domaine. Trouvé: {', '.join(set(domains))}")
+                        return
+                    
+                    # Prendre la première URL comme URL de base pour l'infra check
+                    base_url = urls[0]
+                    
                     bar = st.progress(0, "Analyse infrastructure...")
-                    infra, score = check_geo_infrastructure(url_in)
+                    infra, score = check_geo_infrastructure(base_url)
                     st.session_state.geo_infra = infra
                     st.session_state.geo_score = score
                     
-                    # Lancement du scraper avec compteur en temps réel dans la barre
-                    scr = SmartScraper(url_in, max_urls=limit_in)
+                    # ✅ NOUVEAU : Lancement avec liste d'URLs
+                    scr = SmartScraper(urls, max_urls=limit_in)
                     res, stats = scr.run_analysis(
                         progress_callback=lambda m, v: bar.progress(v, m)
                     )
@@ -457,7 +480,8 @@ def render_audit_geo():
                     st.session_state.update({
                         "results": res, 
                         "clusters": scr.get_pattern_summary(), 
-                        "target_url": url_in,
+                        "target_url": base_url,  # Pour compatibilité avec le reste du code
+                        "start_urls": urls,  # ✅ NOUVEAU : Garder la liste complète
                         "current_ws": ws_in if ws_in else "Non classé",
                         "crawl_stats": stats.get('stats', {})
                     })
@@ -510,6 +534,14 @@ def render_audit_geo():
             if "crawl_stats" in st.session_state and st.session_state.crawl_stats:
                 with st.expander("📊 Statistiques détaillées du crawl", expanded=True):
                     stats = st.session_state.crawl_stats
+                    
+                    # ✅ Afficher les URLs de départ si mode multi-URLs
+                    if "start_urls" in st.session_state and len(st.session_state.start_urls) > 1:
+                        st.markdown(f"**🔗 Points d'entrée : {len(st.session_state.start_urls)}**")
+                        with st.expander("Voir les URLs de départ"):
+                            for i, url in enumerate(st.session_state.start_urls, 1):
+                                st.text(f"{i}. {url}")
+                        st.markdown("---")
                     
                     col1, col2, col3, col4 = st.columns(4)
                     
