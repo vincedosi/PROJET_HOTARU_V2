@@ -212,33 +212,27 @@ class SmartScraper:
         self.visited.add(self.base_url)
         crawled_count = 0
         
-        self._log(f"🚀 DÉBUT DU CRAWL: {self.max_urls} pages demandées")
-        self._log(f"URL: {self.base_url}")
-        self._log("─" * 60)
+        print(f"\n{'='*80}")
+        print(f"🚀 DÉBUT DU CRAWL: {self.max_urls} pages demandées")
+        print(f"URL: {self.base_url}")
+        print(f"{'='*80}\n")
         
         try:
             while queue and crawled_count < self.max_urls:
                 current_url = queue.pop(0)
                 
-                # Log tous les 5 crawls (plus fréquent pour mieux voir)
-                if crawled_count % 5 == 0:
-                    percent = min(crawled_count / self.max_urls, 0.95)
-                    
-                    # Message détaillé
-                    log_msg = f"""
-📊 PROGRESSION: {crawled_count}/{self.max_urls} ({percent*100:.0f}%)
-   ├─ Queue: {len(queue)} URLs en attente
-   ├─ Visitées: {len(self.visited)} URLs
-   ├─ Découverts: {self.stats['links_discovered']} liens
-   ├─ Filtrés: {self.stats['links_filtered']} liens
-   ├─ Doublons: {self.stats['links_duplicate']}
-   ├─ Queue pleine: {self.stats['queue_full_blocks']} blocages
-   └─ Erreurs: {self.stats['errors']}
-                    """
-                    self._log(log_msg.strip())
-                    
-                    if progress_callback:
-                        progress_callback(f"🔍 {crawled_count}/{self.max_urls} pages | Queue: {len(queue)}", percent)
+                # ✅ MISE À JOUR EN TEMPS RÉEL (chaque page)
+                percent = min(crawled_count / self.max_urls, 0.99)
+                
+                if progress_callback:
+                    progress_callback(
+                        f"🔍 {crawled_count}/{self.max_urls} pages | Queue: {len(queue)} | Liens: {self.stats['links_discovered']}", 
+                        percent
+                    )
+                
+                # Log console tous les 10 crawls
+                if crawled_count % 10 == 0:
+                    print(f"📊 {crawled_count}/{self.max_urls} | Queue: {len(queue)} | Visitées: {len(self.visited)} | Liens: {self.stats['links_discovered']}")
                 
                 data = self.get_page_details(current_url)
                 
@@ -247,7 +241,8 @@ class SmartScraper:
                     crawled_count += 1
                     self.stats['pages_crawled'] += 1
                     
-                    # Ajout des liens
+                    # Ajout des liens avec comptage détaillé
+                    links_added = 0
                     for link in data['links']:
                         if link in self.visited:
                             self.stats['links_duplicate'] += 1
@@ -256,6 +251,11 @@ class SmartScraper:
                         else:
                             self.visited.add(link)
                             queue.append(link)
+                            links_added += 1
+                    
+                    # Debug si problème de liens
+                    if crawled_count % 50 == 0:
+                        print(f"   → Dernière page: {len(data['links'])} liens trouvés, {links_added} ajoutés")
                 else:
                     self.stats['pages_skipped'] += 1
                 
@@ -266,38 +266,38 @@ class SmartScraper:
             if self.driver:
                 self.driver.quit()
         
-        # RAPPORT FINAL
-        final_report = f"""
-{'='*60}
-✅ CRAWL TERMINÉ
-{'='*60}
-📈 RÉSULTATS:
-   ├─ Pages crawlées: {self.stats['pages_crawled']} / {self.max_urls}
-   ├─ Pages ignorées: {self.stats['pages_skipped']}
-   ├─ URLs visitées: {len(self.visited)}
-   ├─ Queue finale: {len(queue)} URLs restantes
-   └─ Erreurs: {self.stats['errors']}
-
-🔗 LIENS:
-   ├─ Découverts: {self.stats['links_discovered']}
-   ├─ Filtrés: {self.stats['links_filtered']}
-   ├─ Doublons: {self.stats['links_duplicate']}
-   └─ Blocages queue: {self.stats['queue_full_blocks']}
-        """
+        # RAPPORT FINAL CONSOLE
+        print(f"\n{'='*80}")
+        print(f"✅ CRAWL TERMINÉ")
+        print(f"{'='*80}")
+        print(f"📈 RÉSULTATS:")
+        print(f"   ├─ Pages crawlées: {self.stats['pages_crawled']} / {self.max_urls}")
+        print(f"   ├─ Pages ignorées: {self.stats['pages_skipped']}")
+        print(f"   ├─ URLs visitées: {len(self.visited)}")
+        print(f"   ├─ Queue finale: {len(queue)} URLs restantes")
+        print(f"   └─ Erreurs: {self.stats['errors']}")
+        print(f"\n🔗 LIENS:")
+        print(f"   ├─ Découverts: {self.stats['links_discovered']}")
+        print(f"   ├─ Filtrés: {self.stats['links_filtered']}")
+        print(f"   ├─ Doublons: {self.stats['links_duplicate']}")
+        print(f"   └─ Blocages queue: {self.stats['queue_full_blocks']}")
         
         # Diagnostic si arrêt anticipé
         if crawled_count < self.max_urls:
+            print(f"\n⚠️ ARRÊT ANTICIPÉ: {crawled_count}/{self.max_urls} pages")
             if len(queue) == 0:
-                final_report += f"\n⚠️ ARRÊT: Queue vide (site trop petit ou filtres trop stricts)"
+                print(f"   Raison: QUEUE VIDE")
+                print(f"   → Le site a moins de {self.max_urls} pages accessibles")
+                print(f"   → Ou les filtres sont trop stricts (vérifier exclude_patterns)")
             else:
-                final_report += f"\n⚠️ ARRÊT: Condition while rompue (bug logique)"
+                print(f"   Raison: Condition while rompue (bug logique)")
         
-        self._log(final_report)
+        print(f"{'='*80}\n")
         
         patterns = self.analyze_patterns(self.results)
         
         if progress_callback:
-            progress_callback(f"✅ Terminé: {self.stats['pages_crawled']} pages", 1.0)
+            progress_callback(f"✅ Terminé: {self.stats['pages_crawled']} pages crawlées", 1.0)
         
         return self.results, {
             "total_urls": len(self.results), 
