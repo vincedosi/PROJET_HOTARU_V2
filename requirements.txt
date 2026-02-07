@@ -8,3 +8,4 @@ gspread
 google-auth
 selenium
 webdriver-manager==4.0.1
+python-dateutil

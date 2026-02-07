@@ -11,6 +11,7 @@ from modules.home import render_home
 from modules.audit_geo import render_audit_geo
 from modules.master import render_master_tab
 from modules.leaf import render_leaf_tab
+from modules.authority_score import render_authority_score
 
 # =============================================================================
 # VERSION
@@ -88,8 +89,8 @@ def main():
     st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
     # NAVIGATION
-    tab_home, tab_audit, tab_master, tab_leaf = st.tabs(
-        ["HOME", "AUDIT", "MASTER", "LEAF"]
+    tab_home, tab_audit, tab_authority, tab_master, tab_leaf = st.tabs(
+        ["HOME", "AUDIT", "AUTHORITY", "MASTER", "LEAF"]
     )
 
     with tab_home:
@@ -97,6 +98,9 @@ def main():
 
     with tab_audit:
         render_audit_geo()
+
+    with tab_authority:
+        render_authority_score()
 
     with tab_master:
         render_master_tab()
