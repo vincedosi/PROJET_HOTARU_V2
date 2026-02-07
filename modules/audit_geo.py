@@ -10,6 +10,7 @@ import requests
 import zlib
 import base64
 from urllib.parse import urlparse
+from collections import defaultdict
 import networkx as nx
 from pyvis.network import Network
 import streamlit.components.v1 as components
@@ -56,6 +57,123 @@ def check_geo_infrastructure(base_url):
     except: results["JSON-LD"] = {"status": False, "meta": assets["JSON-LD"]}
     return results, score
 
+def fetch_file_content(base_url, filename):
+    """Récupère le contenu d'un fichier (robots.txt, llms.txt) sur le site"""
+    url = f"{base_url.rstrip('/')}/{filename}"
+    try:
+        r = requests.get(url, timeout=5)
+        if r.status_code == 200:
+            return r.text.strip(), True
+        else:
+            return f"# {filename} non trouvé (HTTP {r.status_code})", False
+    except Exception as e:
+        return f"# Erreur de récupération : {e}", False
+
+def generate_mistral_optimization(file_content, filename, site_url, found):
+    """Appelle Mistral pour générer une version optimisée du fichier"""
+    try:
+        api_key = st.secrets["mistral"]["api_key"]
+    except Exception:
+        return "Clé API Mistral manquante dans les secrets Streamlit."
+
+    if filename == "robots.txt":
+        prompt = f"""Tu es un expert en SEO technique et AI-Readability.
+Voici le fichier robots.txt actuel du site {site_url} :
+
+{file_content if found else "Le fichier robots.txt n'existe pas ou est vide."}
+
+Génère un robots.txt PARFAIT et optimisé pour les agents IA (GPTBot, ChatGPT-User, Google-Extended, ClaudeBot, PerplexityBot, Bingbot).
+Le fichier doit :
+1. Autoriser explicitement les crawlers IA importants
+2. Référencer le sitemap.xml
+3. Bloquer les ressources inutiles (/admin, /wp-login, etc.)
+4. Suivre les meilleures pratiques 2025-2026
+
+Réponds UNIQUEMENT avec le contenu du fichier robots.txt, sans aucun commentaire ni explication autour."""
+    else:  # llms.txt
+        prompt = f"""Tu es un expert en AI-Readability et standards LLM.
+Voici le fichier llms.txt actuel du site {site_url} :
+
+{file_content if found else "Le fichier llms.txt n'existe pas."}
+
+Génère un llms.txt PARFAIT selon le standard llms.txt 2025.
+Le fichier doit :
+1. Présenter clairement l'organisation/entreprise
+2. Lister les pages clés et sections du site
+3. Fournir le contexte métier pour les LLMs
+4. Inclure les informations de contact et liens importants
+5. Suivre la spécification llms.txt (https://llmstxt.org/)
+
+Le site est : {site_url}
+
+Réponds UNIQUEMENT avec le contenu du fichier llms.txt, sans aucun commentaire ni explication autour."""
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+
+    payload = {
+        "model": "mistral-small-latest",
+        "messages": [
+            {"role": "system", "content": "Tu es un expert en optimisation de sites web pour les agents IA. Tu génères uniquement du code/config, jamais d'explications."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.2,
+        "max_tokens": 2000
+    }
+
+    try:
+        response = requests.post("https://api.mistral.ai/v1/chat/completions", headers=headers, json=payload)
+        response.raise_for_status()
+        result = response.json()
+        return result["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        return f"Erreur API Mistral : {e}"
+
+def render_mistral_optimization(base_url):
+    """Affiche le module d'optimisation IA avec comparatif existant vs proposition Mistral"""
+    if not base_url:
+        return
+
+    with st.expander("🤖 Optimisation IA (Mistral) — robots.txt & llms.txt", expanded=False):
+        st.caption("Analyse et optimisation automatique de vos fichiers d'infrastructure IA")
+
+        files_to_optimize = ["robots.txt", "llms.txt"]
+        tabs = st.tabs([f"📄 {f}" for f in files_to_optimize])
+
+        for idx, filename in enumerate(files_to_optimize):
+            with tabs[idx]:
+                # Récupérer le contenu existant
+                content, found = fetch_file_content(base_url, filename)
+
+                if found:
+                    st.success(f"{filename} trouvé sur le site")
+                else:
+                    st.error(f"{filename} absent ou inaccessible (404)")
+
+                # Bouton pour lancer l'optimisation
+                cache_key = f"mistral_opt_{filename}"
+                if st.button(f"Optimiser {filename} avec Mistral", key=f"btn_{filename}", use_container_width=True):
+                    with st.spinner(f"Mistral analyse {filename}..."):
+                        optimized = generate_mistral_optimization(content, filename, base_url, found)
+                        st.session_state[cache_key] = optimized
+
+                # Affichage côte à côte
+                col_left, col_right = st.columns(2)
+
+                with col_left:
+                    st.markdown(f"**Existant** {'✅' if found else '❌'}")
+                    st.code(content if found else f"# {filename} inexistant", language="text")
+
+                with col_right:
+                    st.markdown("**Proposition Mistral** 🤖")
+                    if cache_key in st.session_state:
+                        st.code(st.session_state[cache_key], language="text")
+                    else:
+                        st.info("Cliquez sur le bouton ci-dessus pour générer une proposition optimisée.")
+
 def calculate_page_score(page):
     """
     Calcule le score GEO avancé d'une page
@@ -80,6 +198,89 @@ def get_clean_label(title, url, domain):
         if len(clean) < 4: clean = url.rstrip('/').split('/')[-1].replace('-', ' ').capitalize()
         return clean[:20] + ".." if len(clean) > 22 else clean
     except: return "Page"
+
+# =============================================================================
+# 2b. CATÉGORISATION INTELLIGENTE DES URLs
+# =============================================================================
+
+# Dictionnaire de patterns -> catégories pour la classification des URLs
+URL_CATEGORY_PATTERNS = {
+    "Offres d'emploi": ['metier', 'emploi', 'offre', 'recrutement', 'carriere', 'poste', 'job', 'candidat', 'postuler'],
+    "Témoignages": ['temoignage', 'portrait', 'parcours', 'interview', 'histoire', 'vecu', 'retour-experience'],
+    "Actualités": ['actualite', 'actu', 'news', 'blog', 'article', 'presse', 'communique', 'evenement'],
+    "Formation": ['formation', 'ecole', 'cursus', 'diplome', 'stage', 'apprentissage', 'etude'],
+    "Présentation": ['decouvrir', 'qui-sommes', 'a-propos', 'about', 'presentation', 'mission', 'valeur', 'histoire'],
+    "FAQ / Aide": ['faq', 'aide', 'question', 'contact', 'support', 'assistance'],
+    "Légal": ['mention', 'legal', 'cgu', 'cgv', 'confidentialite', 'cookie', 'politique', 'condition', 'rgpd'],
+    "Médias": ['media', 'video', 'photo', 'galerie', 'image', 'reportage', 'documentaire'],
+    "Espace candidat": ['espace', 'compte', 'profil', 'inscription', 'connexion', 'login', 'dashboard'],
+}
+
+def categorize_urls(results):
+    """Classe les URLs crawlées par catégories intelligentes"""
+    categories = defaultdict(list)
+
+    for page in results:
+        url = page.get('url', '')
+        title = (page.get('title', '') or '').lower()
+        h1 = (page.get('h1', '') or '').lower()
+        path = urlparse(url).path.lower()
+
+        # Texte combiné pour la recherche
+        search_text = f"{path} {title} {h1}"
+
+        matched = False
+        for category, keywords in URL_CATEGORY_PATTERNS.items():
+            if any(kw in search_text for kw in keywords):
+                categories[category].append(page)
+                matched = True
+                break
+
+        if not matched:
+            # Fallback : catégoriser par premier segment de chemin
+            segments = [s for s in path.split('/') if s and s not in ['fr', 'en', 'de', 'es', 'www']]
+            if segments:
+                group = segments[0].replace('-', ' ').replace('_', ' ').title()
+                categories[f"📂 {group}"].append(page)
+            else:
+                categories["Pages statiques"].append(page)
+
+    return dict(sorted(categories.items(), key=lambda x: -len(x[1])))
+
+def render_url_journal(results):
+    """Affiche le journal des URLs crawlées classées par catégories"""
+    categories = categorize_urls(results)
+
+    st.markdown("#### 📋 Journal des pages crawlées")
+    st.caption(f"{len(results)} pages classées en {len(categories)} catégories")
+
+    for cat_name, pages in categories.items():
+        with st.expander(f"{cat_name} ({len(pages)} pages)", expanded=False):
+            for p in pages:
+                score_data = calculate_page_score(p)
+                if isinstance(score_data, tuple):
+                    sc, grade, _, _ = score_data
+                else:
+                    sc, grade = score_data, 'N/A'
+
+                # Couleur selon score (sévère)
+                if sc >= 95:
+                    badge_color = "#10b981"
+                elif sc >= 50:
+                    badge_color = "#f97316"
+                else:
+                    badge_color = "#ef4444"
+
+                title = p.get('title', 'Sans titre')
+                url = p.get('url', '')
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #f1f5f9;">'
+                    f'<span style="background:{badge_color};color:white;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:700;min-width:32px;text-align:center;">{grade}</span>'
+                    f'<span style="font-size:0.9rem;font-weight:500;">{title}</span>'
+                    f'<span style="font-size:0.75rem;color:#94a3b8;margin-left:auto;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{url}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
 
 # =============================================================================
 # 3. RENDU DU GRAPHE (FIX VRAI PLEIN ÉCRAN + LÉGENDE)
@@ -155,26 +356,14 @@ def render_interactive_graph(G, show_health=False):
             font-family: 'Inter', sans-serif;
             z-index: 9998;
         ">
-            <div style="font-weight: 600; margin-bottom: 10px; font-size: 13px;">Score GEO</div>
+            <div style="font-weight: 600; margin-bottom: 10px; font-size: 13px;">Score AI-READABLE</div>
             <div style="display: flex; align-items: center; margin-bottom: 6px;">
                 <div style="width: 16px; height: 16px; background: #10b981; border-radius: 50%; margin-right: 8px;"></div>
-                <span style="font-size: 12px;">90-100 : Excellent</span>
-            </div>
-            <div style="display: flex; align-items: center; margin-bottom: 6px;">
-                <div style="width: 16px; height: 16px; background: #22c55e; border-radius: 50%; margin-right: 8px;"></div>
-                <span style="font-size: 12px;">80-89 : Très bon</span>
-            </div>
-            <div style="display: flex; align-items: center; margin-bottom: 6px;">
-                <div style="width: 16px; height: 16px; background: #84cc16; border-radius: 50%; margin-right: 8px;"></div>
-                <span style="font-size: 12px;">70-79 : Bon</span>
-            </div>
-            <div style="display: flex; align-items: center; margin-bottom: 6px;">
-                <div style="width: 16px; height: 16px; background: #eab308; border-radius: 50%; margin-right: 8px;"></div>
-                <span style="font-size: 12px;">60-69 : Moyen</span>
+                <span style="font-size: 12px;">95-100 : Optimisé IA</span>
             </div>
             <div style="display: flex; align-items: center; margin-bottom: 6px;">
                 <div style="width: 16px; height: 16px; background: #f97316; border-radius: 50%; margin-right: 8px;"></div>
-                <span style="font-size: 12px;">50-59 : Faible</span>
+                <span style="font-size: 12px;">50-94 : Non optimisé</span>
             </div>
             <div style="display: flex; align-items: center;">
                 <div style="width: 16px; height: 16px; background: #ef4444; border-radius: 50%; margin-right: 8px;"></div>
@@ -543,10 +732,26 @@ def render_audit_geo():
         if "results" in st.session_state:
             st.divider()
             
-            # 1. Dashboard Infra
+            # 1. Dashboard Infra avec couleur sévère
             g_score = st.session_state.get("geo_score", 0)
-            st.markdown(f"### Score Infrastructure IA : **{g_score}/100**")
-            
+            if g_score >= 95:
+                score_color = "#10b981"
+                score_label = "Optimisé"
+            elif g_score >= 50:
+                score_color = "#f97316"
+                score_label = "Non optimisé"
+            else:
+                score_color = "#ef4444"
+                score_label = "Critique"
+
+            st.markdown(
+                f'<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">'
+                f'<h3 style="margin:0;">Score Infrastructure IA : <span style="color:{score_color};">{g_score}/100</span></h3>'
+                f'<span style="background:{score_color};color:white;padding:4px 12px;border-radius:4px;font-size:0.8rem;font-weight:700;">{score_label}</span>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
             if st.session_state.get("geo_infra"):
                 cols = st.columns(4)
                 for i, (name, d) in enumerate(st.session_state.geo_infra.items()):
@@ -555,8 +760,11 @@ def render_audit_geo():
                         txt = "OK" if d['status'] else "MISSING"
                         st.markdown(f"""<div class="infra-box"><b>{name}</b><br><span class="{status}">{txt}</span><div class="infra-desc">{d['meta']['desc']}</div></div>""", unsafe_allow_html=True)
 
+            # ✅ Module Optimisation IA (Mistral) pour robots.txt et llms.txt
+            render_mistral_optimization(st.session_state.get("target_url", ""))
+
             st.divider()
-            
+
             # ✅ NOUVEAU : Stats détaillées du crawl
             if "crawl_stats" in st.session_state and st.session_state.crawl_stats:
                 with st.expander("📊 Statistiques détaillées du crawl", expanded=True):
@@ -589,10 +797,16 @@ def render_audit_geo():
                         st.metric("📍 URLs visitées", len(st.session_state.results))
                 
                 st.divider()
-            
+
+            # ✅ Journal des pages crawlées par catégories
+            with st.expander("📋 Journal des pages crawlées (par catégories)", expanded=False):
+                render_url_journal(st.session_state.results)
+
+            st.divider()
+
             # 2. Commandes Graphe
             c_expert, c_save_name, c_save_btn = st.columns([1, 2, 1])
-            expert_on = c_expert.toggle("Mode Santé", value=False)
+            expert_on = c_expert.toggle("Score AI-READABLE", value=False)
             
             domain = urlparse(st.session_state.target_url).netloc
             s_name = c_save_name.text_input("Nom sauvegarde", value=domain.split('.')[0], label_visibility="collapsed")
@@ -677,18 +891,12 @@ def render_audit_geo():
                         breakdown = {}
                         recommendations = []
                     
-                    # ÉCHELLE DE COULEUR À 6 NIVEAUX
+                    # ÉCHELLE DE COULEUR SÉVÈRE (vente : tout doit crier "problème")
                     if expert_on:
-                        if sc >= 90:
-                            col = "#10b981"  # Vert foncé - Excellent
-                        elif sc >= 80:
-                            col = "#22c55e"  # Vert - Très bon
-                        elif sc >= 70:
-                            col = "#84cc16"  # Vert clair - Bon
-                        elif sc >= 60:
-                            col = "#eab308"  # Jaune - Moyen
+                        if sc >= 95:
+                            col = "#10b981"  # Vert - Parfait uniquement
                         elif sc >= 50:
-                            col = "#f97316"  # Orange - Faible
+                            col = "#f97316"  # Orange alerte - Non optimisé
                         else:
                             col = "#ef4444"  # Rouge - Critique
                     else:
@@ -702,7 +910,7 @@ def render_audit_geo():
                     # TOOLTIP DÉTAILLÉ avec éléments manquants
                     tooltip_parts = []
                     if expert_on and isinstance(score_data, tuple):
-                        tooltip_parts.append(f"Score GEO: {sc}/100 - Grade: {grade}")
+                        tooltip_parts.append(f"Score AI-READABLE: {sc}/100 - Grade: {grade}")
                         
                         # Ajouter les éléments manquants
                         missing = []
