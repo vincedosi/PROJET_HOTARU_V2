@@ -1,47 +1,33 @@
 """
-MASTER DATA HANDLER
-Handles fixed, factual data from external APIs (Wikidata, INSEE)
+HOTARU v2 - Engine: Master Data Handler
+Gestion des données Master avec enrichissement Wikidata + Mistral
 """
 
 import requests
+import json
 from typing import Dict, Optional, List
-from dataclasses import dataclass, field
-import re
-
-
-def log(msg: str):
-    """Simple logging helper"""
-    print(f"[WikidataAPI] {msg}")
+from dataclasses import dataclass, field, asdict
+from datetime import datetime
 
 
 @dataclass
 class MasterData:
-    """Master data structure for organization entity"""
-    # IDENTITÉ
+    """Master Data - Fixed, brand-level information"""
+    
     brand_name: str = ""
     legal_name: str = ""
-    alt_name_1: str = ""
-    alt_name_2: str = ""
     description: str = ""
     slogan: str = ""
-    site_url: str = ""
     org_type: str = "Corporation"
     
-    # IDENTIFIANTS LÉGAUX
+    qid: str = ""
     siren: str = ""
     siret: str = ""
     lei: str = ""
-    duns: str = ""
-    gln: str = ""
-    qid: str = ""  # Wikidata ID
+    ticker_symbol: str = ""
+    stock_exchange: str = ""
     
-    # VISUEL
-    logo_url: str = ""
-    logo_width: str = "600"
-    logo_height: str = "200"
-    image_url: str = ""
-    
-    # KNOWLEDGE GRAPH
+    site_url: str = ""
     wikipedia_url: str = ""
     linkedin_url: str = ""
     twitter_url: str = ""
@@ -50,13 +36,14 @@ class MasterData:
     youtube_url: str = ""
     tiktok_url: str = ""
     
-    # EXPERTISE
-    expertise_1: str = ""
-    expertise_1_wiki: str = ""
-    expertise_2: str = ""
-    expertise_2_wiki: str = ""
+    logo_url: str = ""
+    logo_width: str = "600"
+    logo_height: str = "200"
     
-    # ADRESSE
+    phone: str = ""
+    email: str = ""
+    fax: str = ""
+    
     street: str = ""
     city: str = ""
     region: str = ""
@@ -64,468 +51,267 @@ class MasterData:
     country: str = "FR"
     latitude: str = ""
     longitude: str = ""
-    google_maps_url: str = ""
     
-    # CONTACT
-    phone: str = ""
-    email: str = ""
-    fax: str = ""
-    phone_cs: str = ""  # Customer service
-    email_cs: str = ""
-    phone_sales: str = ""
-    email_sales: str = ""
-    phone_tech: str = ""
-    email_tech: str = ""
-    
-    # HORAIRES
-    opening_hours: str = "Mo-Fr 09:00-18:00"
-    
-    # STRUCTURE CORPORATE
-    founder_name: str = ""
-    founder_url: str = ""
     founding_date: str = ""
-    parent_org: str = ""
+    founder_name: str = ""
     num_employees: str = ""
-    
-    # SOCIAL PROOF
-    rating_value: str = ""
-    rating_count: str = ""
-    review_count: str = ""
-    
-    # FINANCIER
-    ticker_symbol: str = ""
-    stock_exchange: str = ""
     annual_revenue: str = ""
+    parent_org: str = ""
     
-    # STATUT
-    status: str = "pending"  # pending, partial, complete, failed
+    status: str = "pending"
     errors: List[str] = field(default_factory=list)
+    last_updated: str = ""
+    
+    def to_dict(self) -> Dict:
+        return {k: v for k, v in asdict(self).items() 
+                if v and k not in ['errors', 'status', 'last_updated']}
+    
+    def count_filled_fields(self) -> int:
+        return len(self.to_dict())
 
 
 class WikidataAPI:
-    """Wikidata API client for entity enrichment"""
-    
     BASE_URL = "https://www.wikidata.org/w/api.php"
-    SPARQL_URL = "https://query.wikidata.org/sparql"
+    HEADERS = {"User-Agent": "HotaruEntityForge/2.0"}
     
     @staticmethod
     def search_entity(query: str, limit: int = 5) -> List[Dict]:
-        """Search for entities on Wikidata"""
-        print(f"[DEBUG] === DEBUT RECHERCHE WIKIDATA ===")
-        print(f"[DEBUG] Query: '{query}'")
-        print(f"[DEBUG] Limit: {limit}")
-        
         params = {
             "action": "wbsearchentities",
             "search": query,
             "language": "fr",
-            "uselang": "fr",
             "format": "json",
             "limit": limit,
             "type": "item"
         }
-        
-        headers = {
-            "User-Agent": "HotaruEntityForge/2.0",
-            "Accept": "application/json"
-        }
-        
         try:
-            response = requests.get(
-                WikidataAPI.BASE_URL, 
-                params=params, 
-                headers=headers, 
-                timeout=20
-            )
-            
-            response.raise_for_status()
-            data = response.json()
-            results = data.get('search', [])
-            
-            if results:
-                return results
-            
-            # Fallback: try English
-            params["language"] = "en"
-            params["uselang"] = "en"
-            
-            response = requests.get(
-                WikidataAPI.BASE_URL,
-                params=params,
-                headers=headers,
-                timeout=20
-            )
-            
-            response.raise_for_status()
-            data = response.json()
-            results = data.get('search', [])
-            
-            return results
-            
+            r = requests.get(WikidataAPI.BASE_URL, params=params, 
+                           headers=WikidataAPI.HEADERS, timeout=10)
+            r.raise_for_status()
+            return r.json().get('search', [])
         except Exception as e:
-            print(f"[ERROR] Wikidata search failed: {e}")
+            print(f"Wikidata search error: {e}")
             return []
     
     @staticmethod
+    def search_by_siren(siren: str) -> Optional[str]:
+        sparql_url = "https://query.wikidata.org/sparql"
+        query = f'SELECT ?item WHERE {{ ?item wdt:P1616 "{siren}" . }} LIMIT 1'
+        try:
+            r = requests.get(sparql_url, params={"query": query, "format": "json"},
+                           headers=WikidataAPI.HEADERS, timeout=10)
+            r.raise_for_status()
+            results = r.json().get('results', {}).get('bindings', [])
+            if results:
+                return results[0]['item']['value'].split('/')[-1]
+        except:
+            pass
+        return None
+    
+    @staticmethod
     def get_entity_data(qid: str) -> Optional[Dict]:
-        """Get complete entity data from Wikidata"""
-        print(f"\n[GET_ENTITY] QID: {qid}")
-        
-        result = {
-            "name_fr": "", "name_en": "", "desc_fr": "", "desc_en": "", 
-            "siren": "", "lei": "", "website": "", "founding_date": "",
-            "parent_qid": "", "parent_name": ""
-        }
-        
-        headers = {
-            "User-Agent": "HotaruEntityForge/2.0",
-            "Accept": "application/json"
-        }
-        
         params = {
             "action": "wbgetentities",
             "ids": qid,
             "languages": "fr|en",
-            "props": "labels|descriptions|claims",
+            "props": "labels|descriptions|claims|sitelinks",
             "format": "json"
         }
-        
         try:
-            r = requests.get(
-                WikidataAPI.BASE_URL,
-                params=params,
-                headers=headers,
-                timeout=20
-            )
-            
-            if r.status_code != 200:
-                return None
-            
+            r = requests.get(WikidataAPI.BASE_URL, params=params,
+                           headers=WikidataAPI.HEADERS, timeout=10)
+            r.raise_for_status()
             entity = r.json().get('entities', {}).get(qid, {})
-            
             if not entity:
                 return None
             
             labels = entity.get('labels', {})
             descs = entity.get('descriptions', {})
             claims = entity.get('claims', {})
+            sitelinks = entity.get('sitelinks', {})
             
-            result["name_fr"] = labels.get('fr', {}).get('value', '')
-            result["name_en"] = labels.get('en', {}).get('value', '')
-            result["desc_fr"] = descs.get('fr', {}).get('value', '')
-            result["desc_en"] = descs.get('en', {}).get('value', '')
+            result = {
+                "qid": qid,
+                "name_fr": labels.get('fr', {}).get('value', ''),
+                "name_en": labels.get('en', {}).get('value', ''),
+                "desc_fr": descs.get('fr', {}).get('value', ''),
+                "desc_en": descs.get('en', {}).get('value', ''),
+            }
             
-            # SIREN P1616
+            # SIREN, LEI, Website
             if 'P1616' in claims:
                 try:
                     result["siren"] = claims['P1616'][0]['mainsnak']['datavalue']['value']
                 except:
                     pass
-            
-            # LEI P1278
             if 'P1278' in claims:
                 try:
                     result["lei"] = claims['P1278'][0]['mainsnak']['datavalue']['value']
                 except:
                     pass
-            
-            # Website P856
             if 'P856' in claims:
                 try:
                     result["website"] = claims['P856'][0]['mainsnak']['datavalue']['value']
                 except:
                     pass
             
-            # Founding date P571
+            # Founding date
             if 'P571' in claims:
                 try:
-                    time_val = claims['P571'][0]['mainsnak']['datavalue']['value']['time']
-                    result["founding_date"] = time_val[1:11]  # +YYYY-MM-DD -> YYYY-MM-DD
+                    result["founding_date"] = claims['P571'][0]['mainsnak']['datavalue']['value']['time'][1:11]
                 except:
                     pass
             
-            return result
+            # Logo
+            if 'P154' in claims:
+                try:
+                    logo = claims['P154'][0]['mainsnak']['datavalue']['value'].replace(' ', '_')
+                    result["logo_url"] = f"https://commons.wikimedia.org/wiki/Special:FilePath/{logo}"
+                except:
+                    pass
             
+            # Social media
+            if 'P4264' in claims:
+                try:
+                    val = claims['P4264'][0]['mainsnak']['datavalue']['value']
+                    result["linkedin_url"] = f"https://www.linkedin.com/company/{val}"
+                except:
+                    pass
+            if 'P2002' in claims:
+                try:
+                    val = claims['P2002'][0]['mainsnak']['datavalue']['value']
+                    result["twitter_url"] = f"https://twitter.com/{val}"
+                except:
+                    pass
+            if 'P2013' in claims:
+                try:
+                    val = claims['P2013'][0]['mainsnak']['datavalue']['value']
+                    result["facebook_url"] = f"https://www.facebook.com/{val}"
+                except:
+                    pass
+            if 'P2003' in claims:
+                try:
+                    val = claims['P2003'][0]['mainsnak']['datavalue']['value']
+                    result["instagram_url"] = f"https://www.instagram.com/{val}"
+                except:
+                    pass
+            if 'P2397' in claims:
+                try:
+                    val = claims['P2397'][0]['mainsnak']['datavalue']['value']
+                    result["youtube_url"] = f"https://www.youtube.com/channel/{val}"
+                except:
+                    pass
+            
+            # Employees
+            if 'P1128' in claims:
+                try:
+                    result["num_employees"] = str(claims['P1128'][0]['mainsnak']['datavalue']['value']['amount']).lstrip('+')
+                except:
+                    pass
+            
+            # Wikipedia
+            if 'frwiki' in sitelinks:
+                result["wikipedia_url"] = f"https://fr.wikipedia.org/wiki/{sitelinks['frwiki']['title'].replace(' ', '_')}"
+            elif 'enwiki' in sitelinks:
+                result["wikipedia_url"] = f"https://en.wikipedia.org/wiki/{sitelinks['enwiki']['title'].replace(' ', '_')}"
+            
+            return result
         except Exception as e:
-            print(f"[GET_ENTITY] EXCEPTION: {e}")
+            print(f"Wikidata fetch error: {e}")
             return None
-    
-    @staticmethod
-    def extract_master_data(entity_data: Dict) -> Dict[str, str]:
-        """Extract relevant fields from Wikidata entity"""
-        result = {}
-        
-        if not entity_data:
-            return result
-        
-        result["brand_name"] = entity_data.get("name_fr") or entity_data.get("name_en", "")
-        result["description"] = entity_data.get("desc_fr") or entity_data.get("desc_en", "")
-        result["siren"] = entity_data.get("siren", "")
-        result["lei"] = entity_data.get("lei", "")
-        result["site_url"] = entity_data.get("website", "")
-        result["founding_date"] = entity_data.get("founding_date", "")
-        
-        return result
-
-
-class INSEEAPI:
-    """INSEE Sirene API client for French company data"""
-    
-    BASE_URL = "https://api.insee.fr/entreprises/sirene/V3"
-    
-    @staticmethod
-    def get_company_data(siren: str) -> Optional[Dict]:
-        """Get company data from INSEE Sirene API"""
-        # Clean SIREN
-        siren_clean = re.sub(r'\D', '', siren)
-        
-        if len(siren_clean) != 9:
-            return None
-        
-        # Mock structure for demo
-        return {
-            "siren": siren_clean,
-            "legal_name": "",
-            "address": {},
-            "activity_code": "",
-            "legal_category": "",
-        }
-    
-    @staticmethod
-    def extract_master_data(insee_data: Dict) -> Dict[str, str]:
-        """Extract relevant fields from INSEE data"""
-        result = {}
-        
-        if not insee_data:
-            return result
-        
-        result["siren"] = insee_data.get("siren", "")
-        result["legal_name"] = insee_data.get("legal_name", "")
-        
-        address = insee_data.get("address", {})
-        if address:
-            result["street"] = address.get("street", "")
-            result["city"] = address.get("city", "")
-            result["zip_code"] = address.get("postal_code", "")
-        
-        return result
 
 
 class MasterDataHandler:
-    """Main handler for master data enrichment"""
+    MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions"
+    MISTRAL_MODEL = "mistral-large-latest"
     
     def __init__(self):
         self.wikidata = WikidataAPI()
-        self.insee = INSEEAPI()
     
-    def auto_complete_with_mistral(self, master_data: MasterData, mistral_key: str) -> MasterData:
-        """Auto-complete master data with Mistral AI"""
-        print(f"\n[MISTRAL_ENRICH] === DEBUT ENRICHISSEMENT ===")
+    def auto_enrich(self, search_query: Optional[str] = None,
+                    qid: Optional[str] = None, siren: Optional[str] = None) -> MasterData:
+        master = MasterData()
+        master.errors = []
+        resolved_qid = qid
         
-        if not mistral_key:
-            master_data.errors.append("Clé Mistral manquante")
-            return master_data
+        if not resolved_qid and siren:
+            resolved_qid = WikidataAPI.search_by_siren(siren)
+            if not resolved_qid:
+                master.errors.append(f"SIREN {siren} non trouvé")
         
-        prompt = f"""Tu es un expert en enrichissement de données entreprises.
-
-ENTREPRISE:
-- Nom: {master_data.brand_name}
-- QID Wikidata: {master_data.qid}
-- Site web: {master_data.site_url}
-- Description actuelle: {master_data.description}
-
-MISSION: Enrichir automatiquement TOUTES les données manquantes.
-
-TROUVE ET RETOURNE en JSON:
-1. description_seo: Description SEO optimisée 150-180 caractères
-2. slogan: Slogan accrocheur de la marque (ou null)
-3. expertise: Liste de 3-5 domaines d'expertise (séparés par virgules)
-4. wikipedia_url: URL Wikipedia FR si existe (ou null)
-5. linkedin_url: URL LinkedIn officielle (ou null)
-6. twitter_url: URL Twitter/X officielle (ou null)
-7. facebook_url: URL Facebook officielle (ou null)
-8. instagram_url: URL Instagram officielle (ou null)
-9. youtube_url: URL YouTube officielle (ou null)
-10. logo_url: URL du logo si trouvable (ou null)
-11. phone: Numéro de téléphone principal (ou null)
-12. email: Email contact (ou null)
-13. street: Adresse siège social (ou null)
-14. city: Ville siège (ou null)
-15. postal_code: Code postal (ou null)
-
-RÉPONDS UNIQUEMENT EN JSON VALIDE, PAS DE MARKDOWN:
-{{"description_seo": "...", "slogan": "..." ou null, "expertise": "A, B, C", ...}}"""
+        if not resolved_qid and search_query:
+            results = WikidataAPI.search_entity(search_query, limit=1)
+            if results:
+                resolved_qid = results[0]['id']
+            else:
+                master.errors.append(f"Aucun résultat pour '{search_query}'")
+        
+        if not resolved_qid:
+            master.status = "failed"
+            master.errors.append("Entité introuvable")
+            return master
+        
+        entity_data = WikidataAPI.get_entity_data(resolved_qid)
+        if not entity_data:
+            master.status = "failed"
+            master.errors.append(f"Données indisponibles pour {resolved_qid}")
+            return master
+        
+        master.qid = entity_data.get('qid', '')
+        master.brand_name = entity_data.get('name_fr') or entity_data.get('name_en', '')
+        master.description = entity_data.get('desc_fr') or entity_data.get('desc_en', '')
+        master.siren = entity_data.get('siren', '') or (siren or '')
+        master.lei = entity_data.get('lei', '')
+        master.site_url = entity_data.get('website', '')
+        master.founding_date = entity_data.get('founding_date', '')
+        master.logo_url = entity_data.get('logo_url', '')
+        master.linkedin_url = entity_data.get('linkedin_url', '')
+        master.twitter_url = entity_data.get('twitter_url', '')
+        master.facebook_url = entity_data.get('facebook_url', '')
+        master.instagram_url = entity_data.get('instagram_url', '')
+        master.youtube_url = entity_data.get('youtube_url', '')
+        master.wikipedia_url = entity_data.get('wikipedia_url', '')
+        master.num_employees = entity_data.get('num_employees', '')
+        master.status = "partial"
+        master.last_updated = datetime.now().isoformat()
+        return master
+    
+    def auto_complete_with_mistral(self, master: MasterData, api_key: str) -> MasterData:
+        if not api_key:
+            master.errors.append("Clé API Mistral manquante")
+            return master
+        
+        existing = master.to_dict()
+        prompt = f"""Tu es expert en enrichissement de données d'entreprises.
+CONTEXTE: {json.dumps(existing, ensure_ascii=False)}
+Complète les champs VIDES. Retourne UNIQUEMENT du JSON valide:
+{{"legal_name":"","slogan":"","phone":"","email":"","street":"","city":"","zip_code":"","region":"","country":"","founder_name":"","annual_revenue":"","ticker_symbol":"","stock_exchange":""}}"""
 
         try:
-            response = requests.post(
-                "https://api.mistral.ai/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {mistral_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": "mistral-large-latest",
-                    "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.3,
-                    "max_tokens": 2000
-                },
-                timeout=30
-            )
+            response = requests.post(self.MISTRAL_API_URL,
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={"model": self.MISTRAL_MODEL, "messages": [{"role": "user", "content": prompt}],
+                      "temperature": 0.1, "max_tokens": 1500}, timeout=30)
             
             if response.status_code != 200:
-                master_data.errors.append(f"Mistral API error: {response.status_code}")
-                return master_data
+                master.errors.append(f"Erreur Mistral API: {response.status_code}")
+                return master
             
-            result = response.json()
-            content = result['choices'][0]['message']['content']
-            
-            # Clean JSON
+            content = response.json()['choices'][0]['message']['content']
             content = content.replace("```json", "").replace("```", "").strip()
+            enriched = json.loads(content)
             
-            import json
-            data = json.loads(content)
+            for key, value in enriched.items():
+                if hasattr(master, key) and value and not getattr(master, key, ""):
+                    setattr(master, key, value)
             
-            # Apply enrichments
-            if data.get("description_seo") and not master_data.description:
-                master_data.description = data["description_seo"]
-            
-            if data.get("slogan"):
-                master_data.slogan = data["slogan"]
-            
-            if data.get("expertise"):
-                master_data.expertise_1 = data["expertise"]
-            
-            # Social networks
-            if data.get("wikipedia_url"):
-                master_data.wikipedia_url = data["wikipedia_url"]
-            if data.get("linkedin_url"):
-                master_data.linkedin_url = data["linkedin_url"]
-            if data.get("twitter_url"):
-                master_data.twitter_url = data["twitter_url"]
-            if data.get("facebook_url"):
-                master_data.facebook_url = data["facebook_url"]
-            if data.get("instagram_url"):
-                master_data.instagram_url = data["instagram_url"]
-            if data.get("youtube_url"):
-                master_data.youtube_url = data["youtube_url"]
-            
-            # Logo
-            if data.get("logo_url") and not master_data.logo_url:
-                master_data.logo_url = data["logo_url"]
-            
-            # Contact
-            if data.get("phone") and not master_data.phone:
-                master_data.phone = data["phone"]
-            if data.get("email") and not master_data.email:
-                master_data.email = data["email"]
-            
-            # Address
-            if data.get("street") and not master_data.street:
-                master_data.street = data["street"]
-            if data.get("city") and not master_data.city:
-                master_data.city = data["city"]
-            if data.get("postal_code") and not master_data.zip_code:
-                master_data.zip_code = data["postal_code"]
-            
-            print(f"[MISTRAL_ENRICH] === FIN ENRICHISSEMENT ===\n")
-            
+            master.status = "complete"
+            master.last_updated = datetime.now().isoformat()
+        except json.JSONDecodeError:
+            master.errors.append("Erreur parsing JSON")
         except Exception as e:
-            print(f"[MISTRAL_ENRICH] EXCEPTION: {e}")
-            master_data.errors.append(f"Mistral enrichment failed: {str(e)}")
-        
-        return master_data
-    
-    def enrich_from_wikidata(self, qid: str, master_data: MasterData) -> MasterData:
-        """Enrich master data from Wikidata entity"""
-        entity_data = self.wikidata.get_entity_data(qid)
-        
-        if not entity_data:
-            master_data.errors.append(f"Wikidata: QID {qid} not found")
-            return master_data
-        
-        # Extract data
-        extracted = self.wikidata.extract_master_data(entity_data)
-        
-        # Update master_data
-        if extracted.get("brand_name"):
-            master_data.brand_name = extracted["brand_name"]
-        if extracted.get("description"):
-            master_data.description = extracted["description"]
-        if extracted.get("site_url"):
-            master_data.site_url = extracted["site_url"]
-        if extracted.get("founding_date"):
-            master_data.founding_date = extracted["founding_date"]
-        if extracted.get("siren"):
-            master_data.siren = extracted["siren"]
-        if extracted.get("lei"):
-            master_data.lei = extracted["lei"]
-        
-        # Store QID
-        master_data.qid = qid
-        
-        return master_data
-    
-    def enrich_from_siren(self, siren: str, master_data: MasterData) -> MasterData:
-        """Enrich master data from INSEE SIREN"""
-        insee_data = self.insee.get_company_data(siren)
-        
-        if not insee_data:
-            master_data.errors.append(f"INSEE: SIREN {siren} not found")
-            return master_data
-        
-        # Extract data
-        extracted = self.insee.extract_master_data(insee_data)
-        
-        # Update master_data
-        if extracted.get("siren"):
-            master_data.siren = extracted["siren"]
-        if extracted.get("legal_name"):
-            master_data.legal_name = extracted["legal_name"]
-        if extracted.get("street"):
-            master_data.street = extracted["street"]
-        if extracted.get("city"):
-            master_data.city = extracted["city"]
-        if extracted.get("zip_code"):
-            master_data.zip_code = extracted["zip_code"]
-        
-        return master_data
-    
-    def auto_enrich(self, search_query: str = None, qid: str = None, siren: str = None) -> MasterData:
-        """Auto-enrich master data from available identifiers"""
-        print(f"\n[AUTO_ENRICH] === DEBUT ===")
-        print(f"[AUTO_ENRICH] search_query: {search_query}")
-        print(f"[AUTO_ENRICH] qid: {qid}")
-        print(f"[AUTO_ENRICH] siren: {siren}")
-        
-        master_data = MasterData()
-        
-        # Try Wikidata first if QID provided
-        if qid:
-            master_data = self.enrich_from_wikidata(qid, master_data)
-            master_data.status = "partial"
-        
-        # Try Wikidata search if query provided and no QID
-        elif search_query and not qid:
-            results = self.wikidata.search_entity(search_query, limit=1)
-            
-            if results:
-                qid = results[0]["id"]
-                master_data = self.enrich_from_wikidata(qid, master_data)
-                master_data.status = "partial"
-            else:
-                master_data.errors.append(f"Wikidata: No results for '{search_query}'")
-        
-        # Try INSEE if SIREN provided
-        if siren:
-            master_data = self.enrich_from_siren(siren, master_data)
-            master_data.status = "partial"
-        
-        # Update status
-        if master_data.brand_name and (master_data.qid or master_data.siren):
-            master_data.status = "complete"
-        elif master_data.errors:
-            master_data.status = "failed"
-        
-        print(f"[AUTO_ENRICH] === FIN ===\n")
-        
-        return master_data
+            master.errors.append(f"Erreur: {str(e)}")
+        return master
+
+
+__all__ = ['MasterData', 'MasterDataHandler', 'WikidataAPI']

@@ -1,187 +1,113 @@
+"""
+HOTARU v2 - Module HOME
+Landing page / Dashboard d'accueil
+"""
+
 import streamlit as st
 
-def render_home_guide():
-    # Style Hotaru 200% : Full White, Lignes ultra-fines, Typographie chirurgicale
+
+def render_home():
     st.markdown("""
     <style>
-        .hotaru-container {
-            font-family: 'Inter', sans-serif;
-            color: #0f172a;
-            max-width: 900px;
-            margin: auto;
-            padding: 20px;
-        }
-        .hotaru-title {
-            font-size: 2.8rem;
-            font-weight: 800;
-            letter-spacing: -0.04em;
-            margin-bottom: 0.2rem;
-            color: #000;
-        }
-        .hotaru-subtitle {
-            font-size: 1.1rem;
-            color: #94a3b8;
-            margin-bottom: 4rem;
-            font-weight: 400;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-        }
-        .section-header {
-            font-size: 0.8rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.2em;
-            color: #000;
-            margin-bottom: 2rem;
-            border-bottom: 2px solid #000;
-            padding-bottom: 8px;
-            width: fit-content;
-        }
-        .geo-card {
-            background: #ffffff;
-            border: 1px solid #e2e8f0;
-            padding: 30px;
-            margin-bottom: -1px; /* Pour l'effet de grille collée */
-            transition: all 0.2s ease;
-        }
-        .geo-card:hover {
-            background: #f8fafc;
-            z-index: 10;
-            position: relative;
-        }
-        .badge {
-            font-size: 0.65rem;
-            font-weight: 800;
-            color: #64748b;
-            border: 1px solid #e2e8f0;
-            padding: 2px 8px;
-            margin-bottom: 15px;
-            display: inline-block;
-        }
-        .grade-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 15px 0;
-            border-bottom: 1px solid #f1f5f9;
-        }
-        .grade-letter { font-weight: 800; font-size: 1.2rem; }
-        .grade-range { font-family: 'Mono', monospace; color: #64748b; }
-
-        .health-visual {
-            border: 1px solid #000;
-            padding: 40px;
-            margin: 50px 0;
-            background: #fff;
-        }
-        .dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; margin-right: 10px; }
-        
-        .tips-list { list-style: none; padding: 0; }
-        .tips-list li {
-            padding: 15px 0;
-            border-bottom: 1px solid #f1f5f9;
-            color: #000;
-            font-size: 1rem;
-            display: flex;
-            align-items: center;
-        }
-        .tips-list li::before {
-            content: "";
-            width: 12px;
-            height: 1px;
-            background: #000;
-            margin-right: 20px;
-        }
+        .home-container { max-width: 900px; margin: auto; padding: 40px 20px; }
+        .home-hero { font-size: 3.5rem; font-weight: 900; letter-spacing: -0.04em; line-height: 1.05; margin-bottom: 1rem; color: #000; }
+        .home-tagline { font-size: 1.2rem; color: #64748b; margin-bottom: 3rem; line-height: 1.6; max-width: 600px; }
+        .home-section { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.25em; color: #94a3b8; margin-bottom: 1.5rem; }
+        .home-feature { border: 1px solid #e2e8f0; padding: 32px; margin-bottom: -1px; transition: all 0.15s ease; }
+        .home-feature:hover { border-color: #000; background: #fafafa; }
+        .home-feature-title { font-weight: 700; font-size: 1.05rem; margin-bottom: 6px; color: #000; }
+        .home-feature-desc { font-size: 0.9rem; color: #64748b; line-height: 1.5; }
+        .home-feature-tag { font-size: 0.6rem; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; color: #94a3b8; margin-bottom: 12px; }
+        .home-divider { height: 1px; background: #e2e8f0; margin: 4rem 0; }
     </style>
     """, unsafe_allow_html=True)
 
-    st.markdown('<div class="hotaru-container">', unsafe_allow_html=True)
-    
-    # Header
-    st.markdown('<div class="hotaru-title">MÉTHODOLOGIE HOTARU</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hotaru-subtitle">2026 Framework</div>', unsafe_allow_html=True)
+    st.markdown('<div class="home-container">', unsafe_allow_html=True)
 
-    # Intro
-    st.markdown('<div class="section-header">01. CONCEPT</div>', unsafe_allow_html=True)
-    st.write("L'optimisation des actifs sémantiques pour la citation directe par les LLMs.  Le score Hotaru mesure la capacité d'un contenu à être extrait et validé par les moteurs génératifs.")
-    
-    st.markdown('<div style="margin-bottom:4rem;"></div>', unsafe_allow_html=True)
+    # Hero
+    st.markdown('<div class="home-hero">THE AI-READABLE WEB</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="home-tagline">'
+        "Hotaru audite la lisibilité de votre site web pour les moteurs de réponse IA. "
+        "Optimisez vos données structurées, votre sémantique HTML et votre visibilité LLM."
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
-    # Critères
-    st.markdown('<div class="section-header">02. CRITÈRES D\'ANALYSE</div>', unsafe_allow_html=True)
-    
+    st.markdown('<div class="home-divider"></div>', unsafe_allow_html=True)
+
+    # Features
+    st.markdown('<div class="home-section">Outils</div>', unsafe_allow_html=True)
+
     col1, col2 = st.columns(2)
+
     with col1:
         st.markdown("""
-        <div class="geo-card">
-            <div class="badge">15 PTS</div>
-            <div style="font-weight:700; font-size:1.1rem; margin-bottom:8px;">Meta Description</div>
-            <div style="font-size:0.9rem; color:#64748b; line-height:1.5;">Précision sémantique du résumé pour le crawling par les agents IA.</div>
+        <div class="home-feature">
+            <div class="home-feature-tag">Module 01</div>
+            <div class="home-feature-title">AUDIT GEO</div>
+            <div class="home-feature-desc">
+                Crawl intelligent, scoring multicritère, graphe interactif.
+                Analysez jusqu'à 10 000 pages et identifiez les failles sémantiques.
+            </div>
         </div>
-        <div class="geo-card">
-            <div class="badge">15 PTS</div>
-            <div style="font-weight:700; font-size:1.1rem; margin-bottom:8px;">Données Structurées</div>
-            <div style="font-size:0.9rem; color:#64748b; line-height:1.5;">Schémas JSON-LD, identification des entités et relations.</div>
-        </div>
-        <div class="geo-card">
-            <div class="badge">20 PTS</div>
-            <div style="font-weight:700; font-size:1.1rem; margin-bottom:8px;">Architecture Sémantique</div>
-            <div style="font-size:0.9rem; color:#64748b; line-height:1.5;">Logique de titrage Hn et structuration par listes/tableaux.</div>
+        <div class="home-feature">
+            <div class="home-feature-tag">Module 02</div>
+            <div class="home-feature-title">MASTER DATA</div>
+            <div class="home-feature-desc">
+                Enrichissement automatique via Wikidata + Mistral AI.
+                Générez le JSON-LD de votre entité d'entreprise.
+            </div>
         </div>
         """, unsafe_allow_html=True)
-        
+
     with col2:
         st.markdown("""
-        <div class="geo-card">
-            <div class="badge">15 PTS</div>
-            <div style="font-weight:700; font-size:1.1rem; margin-bottom:8px;">Profondeur & Sources</div>
-            <div style="font-size:0.9rem; color:#64748b; line-height:1.5;">Richesse textuelle et autorité des maillages externes.</div>
+        <div class="home-feature">
+            <div class="home-feature-tag">Module 03</div>
+            <div class="home-feature-title">LEAF BUILDER</div>
+            <div class="home-feature-desc">
+                JSON-LD par page avec prédictions IA.
+                Comparatif avant/après et export instantané.
+            </div>
         </div>
-        <div class="geo-card">
-            <div class="badge">10 PTS</div>
-            <div style="font-weight:700; font-size:1.1rem; margin-bottom:8px;">Richesse en Entités</div>
-            <div style="font-size:0.9rem; color:#64748b; line-height:1.5;">Extraction de faits, dates et données propriétaires.</div>
-        </div>
-        <div class="geo-card">
-            <div class="badge">25 PTS</div>
-            <div style="font-weight:700; font-size:1.1rem; margin-bottom:8px;">Technique IA-Ready</div>
-            <div style="font-size:0.9rem; color:#64748b; line-height:1.5;">Accessibilité bots et présence du standard llms.txt.</div>
+        <div class="home-feature">
+            <div class="home-feature-tag">Module 04</div>
+            <div class="home-feature-title">API (Coming Soon)</div>
+            <div class="home-feature-desc">
+                Accès programmatique aux données d'audit.
+                Intégration CI/CD et monitoring continu.
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
-    # Barème
-    st.markdown('<div style="margin-bottom:4rem;"></div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-header">03. SCORING SYSTEM</div>', unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class="grade-row"><span class="grade-letter">A+</span><span class="grade-range">90 - 100</span></div>
-    <div class="grade-row"><span class="grade-letter">A</span><span class="grade-range">80 - 89</span></div>
-    <div class="grade-row"><span class="grade-letter">B</span><span class="grade-range">70 - 79</span></div>
-    <div class="grade-row"><span class="grade-letter">C</span><span class="grade-range">50 - 69</span></div>
-    <div class="grade-row"><span class="grade-letter">F</span><span class="grade-range"> < 50</span></div>
-    """, unsafe_allow_html=True)
+    st.markdown('<div class="home-divider"></div>', unsafe_allow_html=True)
 
-    # Mode Santé (En blanc, bordures noires)
-    st.markdown("""
-    <div class="health-visual">
-        <div style="font-weight:800; text-transform:uppercase; font-size:0.7rem; letter-spacing:0.2em; margin-bottom:2rem;">Health Monitoring</div>
-        <div style="display:flex; gap:30px;">
-            <div><span class="dot" style="background:#22c55e;"></span><span style="font-size:0.9rem; font-weight:600;">OPTIMAL</span></div>
-            <div><span class="dot" style="background:#eab308;"></span><span style="font-size:0.9rem; font-weight:600;">AVERAGE</span></div>
-            <div><span class="dot" style="background:#ef4444;"></span><span style="font-size:0.9rem; font-weight:600;">CRITICAL</span></div>
+    # Quick stats
+    st.markdown('<div class="home-section">Votre Espace</div>', unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown("""
+        <div style="text-align:center; padding:24px; border:1px solid #e2e8f0;">
+            <div style="font-size:2.5rem; font-weight:900; line-height:1;">17</div>
+            <div style="font-size:0.65rem; font-weight:700; letter-spacing:0.2em; text-transform:uppercase; color:#94a3b8; margin-top:8px;">Secteurs couverts</div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+    with col2:
+        st.markdown("""
+        <div style="text-align:center; padding:24px; border:1px solid #e2e8f0;">
+            <div style="font-size:2.5rem; font-weight:900; line-height:1;">100</div>
+            <div style="font-size:0.65rem; font-weight:700; letter-spacing:0.2em; text-transform:uppercase; color:#94a3b8; margin-top:8px;">Score max GEO</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col3:
+        st.markdown("""
+        <div style="text-align:center; padding:24px; border:1px solid #e2e8f0;">
+            <div style="font-size:2.5rem; font-weight:900; line-height:1;">10K</div>
+            <div style="font-size:0.65rem; font-weight:700; letter-spacing:0.2em; text-transform:uppercase; color:#94a3b8; margin-top:8px;">Pages par audit</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    # Conseils
-    st.markdown('<div class="section-header">04. STRATEGIC DIRECTIVES</div>', unsafe_allow_html=True)
-    st.markdown("""
-    <ul class="tips-list">
-        <li>Privilégier les formats factuels (tableaux, data-points).</li>
-        <li>Convertir les paragraphes denses en listes structurées.</li>
-        <li>Implémenter le balisage JSON-LD spécifique.</li>
-        <li>Utiliser des titres sous forme de questions directes.</li>
-        <li>Maintenir une fraîcheur de donnée < 90 jours.</li>
-    </ul>
-    """, unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
