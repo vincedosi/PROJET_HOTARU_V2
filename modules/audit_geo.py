@@ -1,5 +1,6 @@
 # =============================================================================
-# AUDIT GEO - HOTARU DESIGN SYSTEM
+# AUDIT GEO - HOTARU DESIGN SYSTEM (V3 - REFONTE VISUELLE TOTALE)
+# Zero icone. Typographie stricte. Esthetique finance/terminal.
 # =============================================================================
 
 import streamlit as st
@@ -89,7 +90,6 @@ def generate_robots_optimization(file_content, site_url, found):
 
     current = file_content if found else "Le fichier robots.txt n'existe pas ou est vide."
 
-    # --- Appel 1 : Code optimise ---
     code_prompt = f"""Tu es un expert SEO specialise en securite et AI-Readability.
 Voici le robots.txt actuel du site {site_url} :
 
@@ -113,7 +113,6 @@ Le fichier doit :
 
 Reponds UNIQUEMENT avec le contenu du fichier robots.txt. Aucune explication autour."""
 
-    # --- Appel 2 : Analyse comparative ---
     analysis_prompt = f"""Tu es un consultant SEO senior qui presente un audit a un client non-technique.
 
 Voici le robots.txt ACTUEL du site {site_url} :
@@ -202,93 +201,6 @@ Reponds UNIQUEMENT avec le contenu du fichier llms.txt, sans aucune explication 
         return f"Erreur API Mistral : {e}"
 
 
-def render_mistral_optimization(base_url):
-    """Module d'optimisation IA avec comparatif existant vs proposition Mistral"""
-    if not base_url:
-        return
-
-    with st.expander("OPTIMISATION IA  /  robots.txt & llms.txt", expanded=False):
-        st.markdown(
-            '<p style="font-size:0.8rem;color:#94a3b8;margin-bottom:20px;">'
-            'Generation et analyse comparative via Mistral AI</p>',
-            unsafe_allow_html=True
-        )
-
-        tab_robots, tab_llms = st.tabs(["robots.txt", "llms.txt"])
-
-        # ==================== ROBOTS.TXT ====================
-        with tab_robots:
-            content, found = fetch_file_content(base_url, "robots.txt")
-
-            if found:
-                st.markdown('<span class="status-badge status-complete">PRESENT</span>', unsafe_allow_html=True)
-            else:
-                st.markdown('<span class="status-badge status-failed">ABSENT</span>', unsafe_allow_html=True)
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            if st.button("Analyser et optimiser", key="btn_robots", use_container_width=True):
-                with st.spinner("Mistral genere le code optimise et l'analyse comparative..."):
-                    optimized_code, analysis = generate_robots_optimization(content, base_url, found)
-                    if optimized_code:
-                        st.session_state["mistral_robots_code"] = optimized_code
-                    st.session_state["mistral_robots_analysis"] = analysis
-
-            # Zone 1 : Comparateur de code (2 colonnes)
-            col_left, col_right = st.columns(2)
-
-            with col_left:
-                st.markdown("**Code Actuel (Site)**")
-                st.code(content if found else "# robots.txt inexistant", language="text")
-
-            with col_right:
-                st.markdown("**Proposition Optimisee (AI-Ready)**")
-                if "mistral_robots_code" in st.session_state:
-                    st.code(st.session_state["mistral_robots_code"], language="text")
-                else:
-                    st.caption("Cliquez sur le bouton pour generer la proposition.")
-
-            # Zone 2 : Analyse strategique
-            if "mistral_robots_analysis" in st.session_state:
-                st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-                st.markdown(
-                    '<p style="font-size:0.65rem;font-weight:800;letter-spacing:0.3em;'
-                    'text-transform:uppercase;color:#999;margin-bottom:16px;padding-bottom:8px;'
-                    'border-bottom:1px solid #f0f0f0;">Analyse Strategique</p>',
-                    unsafe_allow_html=True
-                )
-                st.markdown(st.session_state["mistral_robots_analysis"])
-
-        # ==================== LLMS.TXT ====================
-        with tab_llms:
-            content, found = fetch_file_content(base_url, "llms.txt")
-
-            if found:
-                st.markdown('<span class="status-badge status-complete">PRESENT</span>', unsafe_allow_html=True)
-            else:
-                st.markdown('<span class="status-badge status-failed">ABSENT</span>', unsafe_allow_html=True)
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            if st.button("Generer proposition optimisee", key="btn_llms", use_container_width=True):
-                with st.spinner("Mistral genere le llms.txt Gold Standard..."):
-                    optimized = generate_llms_optimization(content, base_url, found)
-                    st.session_state["mistral_llms_code"] = optimized
-
-            col_left, col_right = st.columns(2)
-
-            with col_left:
-                st.markdown("**Code Actuel (Site)**")
-                st.code(content if found else "# llms.txt inexistant", language="text")
-
-            with col_right:
-                st.markdown("**Proposition Optimisee (Gold Standard)**")
-                if "mistral_llms_code" in st.session_state:
-                    st.code(st.session_state["mistral_llms_code"], language="text")
-                else:
-                    st.caption("Cliquez sur le bouton pour generer la proposition.")
-
-
 def calculate_page_score(page):
     """Calcule le score GEO avance d'une page"""
     try:
@@ -313,9 +225,29 @@ def _score_color(score):
     if score >= 95:
         return "#10b981"
     elif score >= 50:
-        return "#f97316"
+        return "#FFA500"
     else:
-        return "#ef4444"
+        return "#FF4B4B"
+
+
+def _score_label(score):
+    """Retourne le libelle selon l'echelle severe"""
+    if score >= 95:
+        return "OPTIMISE"
+    elif score >= 50:
+        return "NON OPTIMISE"
+    else:
+        return "CRITIQUE"
+
+
+def _grade_color(grade):
+    """Couleur de badge par grade"""
+    if grade in ('A+', 'A'):
+        return "#10b981"
+    elif grade in ('B', 'C'):
+        return "#FFA500"
+    else:
+        return "#FF4B4B"
 
 
 # =============================================================================
@@ -365,21 +297,31 @@ def categorize_urls(results):
 
 
 # =============================================================================
-# 3. JOURNAUX (3 VUES)
+# 3. JOURNAUX (3 VUES) - DESIGN TERMINAL / FINANCE
 # =============================================================================
 
 def render_journal_crawled(results):
-    """Vue A : Journal des pages crawlees (validees), classees par categories"""
+    """Vue A : Journal des pages crawlees, classees par categories"""
     categories = categorize_urls(results)
 
     st.markdown(
-        f'<p style="font-size:0.8rem;color:#94a3b8;margin-bottom:16px;">'
-        f'{len(results)} pages  /  {len(categories)} categories</p>',
+        f'<p style="font-size:0.75rem;font-weight:600;color:#94a3b8;margin-bottom:20px;">'
+        f'{len(results)} pages analysees  &mdash;  {len(categories)} categories detectees</p>',
+        unsafe_allow_html=True
+    )
+
+    # En-tete de tableau
+    st.markdown(
+        '<div style="display:flex;align-items:center;padding:10px 0;border-bottom:2px solid #0f172a;margin-bottom:4px;">'
+        '<span style="font-size:0.6rem;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;color:#0f172a;width:50px;">GRADE</span>'
+        '<span style="font-size:0.6rem;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;color:#0f172a;flex:1;">PAGE</span>'
+        '<span style="font-size:0.6rem;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;color:#0f172a;width:300px;text-align:right;">PATH</span>'
+        '</div>',
         unsafe_allow_html=True
     )
 
     for cat_name, pages in categories.items():
-        with st.expander(f"**{cat_name}**  ({len(pages)})", expanded=False):
+        with st.expander(f"{cat_name}  ({len(pages)})", expanded=False):
             for p in pages:
                 score_data = calculate_page_score(p)
                 if isinstance(score_data, tuple):
@@ -387,15 +329,21 @@ def render_journal_crawled(results):
                 else:
                     sc, grade = score_data, 'N/A'
 
-                col = _score_color(sc)
+                col = _grade_color(grade)
                 title = p.get('title', 'Sans titre')
                 url = p.get('url', '')
+                path = urlparse(url).path or '/'
 
                 st.markdown(
                     f'<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #f1f5f9;">'
-                    f'<span style="background:{col};color:white;padding:2px 8px;font-size:0.7rem;font-weight:800;min-width:28px;text-align:center;">{grade}</span>'
-                    f'<a href="{url}" target="_blank" style="font-size:0.9rem;font-weight:600;color:#0f172a;text-decoration:none;border-bottom:1px solid #e2e8f0;">{title}</a>'
-                    f'<span style="font-size:0.7rem;color:#94a3b8;margin-left:auto;max-width:350px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace;">{urlparse(url).path}</span>'
+                    f'<span style="background:{col};color:#fff;padding:2px 8px;font-size:0.65rem;font-weight:800;'
+                    f'min-width:32px;text-align:center;letter-spacing:0.05em;">{grade}</span>'
+                    f'<a href="{url}" target="_blank" style="font-size:0.85rem;font-weight:600;color:#0f172a;'
+                    f'text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"'
+                    f' onmouseover="this.style.borderBottom=\'1px solid #0f172a\'"'
+                    f' onmouseout="this.style.borderBottom=\'none\'">{title}</a>'
+                    f'<span style="font-size:0.7rem;color:#94a3b8;font-family:\'Courier New\',monospace;'
+                    f'max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;">{path}</span>'
                     f'</div>',
                     unsafe_allow_html=True
                 )
@@ -404,45 +352,72 @@ def render_journal_crawled(results):
 def render_journal_filtered(filtered_log):
     """Vue B : Journal des liens filtres"""
     if not filtered_log:
-        st.caption("Aucun lien filtre lors de ce crawl.")
+        st.markdown(
+            '<p style="font-size:0.85rem;color:#94a3b8;font-style:italic;">Aucun lien filtre lors de ce crawl.</p>',
+            unsafe_allow_html=True
+        )
         return
 
     st.markdown(
-        f'<p style="font-size:0.8rem;color:#94a3b8;margin-bottom:16px;">'
-        f'{len(filtered_log)} liens exclus par les filtres</p>',
+        f'<p style="font-size:0.75rem;font-weight:600;color:#94a3b8;margin-bottom:20px;">'
+        f'{len(filtered_log)} liens exclus par les filtres anti-bruit</p>',
         unsafe_allow_html=True
     )
 
-    # Grouper par motif
+    # En-tete
+    st.markdown(
+        '<div style="display:flex;align-items:center;padding:10px 0;border-bottom:2px solid #0f172a;margin-bottom:4px;">'
+        '<span style="font-size:0.6rem;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;color:#0f172a;width:120px;">MOTIF</span>'
+        '<span style="font-size:0.6rem;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;color:#0f172a;flex:1;">URL</span>'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
     by_pattern = defaultdict(list)
     for url, pattern in filtered_log:
         by_pattern[pattern].append(url)
 
     for pattern, urls in sorted(by_pattern.items(), key=lambda x: -len(x[1])):
-        with st.expander(f"**{pattern}**  ({len(urls)} liens)", expanded=False):
-            for url in urls[:100]:  # Limiter l'affichage
+        with st.expander(f"{pattern}  ({len(urls)} liens)", expanded=False):
+            for url in urls[:100]:
                 st.markdown(
-                    f'<div style="padding:4px 0;border-bottom:1px solid #f8fafc;font-size:0.8rem;font-family:monospace;color:#64748b;">'
-                    f'{url}</div>',
+                    f'<div style="padding:5px 0;border-bottom:1px solid #f8fafc;">'
+                    f'<span style="font-size:0.75rem;font-family:\'Courier New\',monospace;color:#64748b;">{url}</span>'
+                    f'</div>',
                     unsafe_allow_html=True
                 )
             if len(urls) > 100:
-                st.caption(f"... et {len(urls) - 100} autres")
+                st.markdown(
+                    f'<p style="font-size:0.75rem;font-style:italic;color:#94a3b8;margin-top:8px;">'
+                    f'... et {len(urls) - 100} autres</p>',
+                    unsafe_allow_html=True
+                )
 
 
 def render_journal_duplicates(duplicate_log):
     """Vue C : Journal des doublons"""
     if not duplicate_log:
-        st.caption("Aucun doublon detecte lors de ce crawl.")
+        st.markdown(
+            '<p style="font-size:0.85rem;color:#94a3b8;font-style:italic;">Aucun doublon detecte lors de ce crawl.</p>',
+            unsafe_allow_html=True
+        )
         return
 
-    # Compter les occurrences
     counts = Counter(duplicate_log)
     sorted_dupes = sorted(counts.items(), key=lambda x: -x[1])
 
     st.markdown(
-        f'<p style="font-size:0.8rem;color:#94a3b8;margin-bottom:16px;">'
-        f'{len(duplicate_log)} doublons detectes  /  {len(counts)} URLs uniques</p>',
+        f'<p style="font-size:0.75rem;font-weight:600;color:#94a3b8;margin-bottom:20px;">'
+        f'{len(duplicate_log)} doublons detectes  &mdash;  {len(counts)} URLs uniques</p>',
+        unsafe_allow_html=True
+    )
+
+    # En-tete
+    st.markdown(
+        '<div style="display:flex;align-items:center;padding:10px 0;border-bottom:2px solid #0f172a;margin-bottom:4px;">'
+        '<span style="font-size:0.6rem;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;color:#0f172a;width:60px;">OCCUR.</span>'
+        '<span style="font-size:0.6rem;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;color:#0f172a;flex:1;">PATH</span>'
+        '</div>',
         unsafe_allow_html=True
     )
 
@@ -450,18 +425,180 @@ def render_journal_duplicates(duplicate_log):
         path = urlparse(url).path or '/'
         st.markdown(
             f'<div style="display:flex;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid #f8fafc;">'
-            f'<span style="background:#0f172a;color:white;padding:2px 10px;font-size:0.7rem;font-weight:800;min-width:20px;text-align:center;">{count}x</span>'
-            f'<span style="font-size:0.85rem;font-family:monospace;color:#64748b;">{path}</span>'
+            f'<span style="background:#0f172a;color:#fff;padding:2px 10px;font-size:0.65rem;font-weight:800;'
+            f'min-width:40px;text-align:center;">{count}x</span>'
+            f'<span style="font-size:0.8rem;font-family:\'Courier New\',monospace;color:#64748b;">{path}</span>'
             f'</div>',
             unsafe_allow_html=True
         )
 
     if len(sorted_dupes) > 200:
-        st.caption(f"... et {len(sorted_dupes) - 200} autres URLs")
+        st.markdown(
+            f'<p style="font-size:0.75rem;font-style:italic;color:#94a3b8;margin-top:8px;">'
+            f'... et {len(sorted_dupes) - 200} autres URLs</p>',
+            unsafe_allow_html=True
+        )
 
 
 # =============================================================================
-# 4. RENDU DU GRAPHE
+# 4. OPTIMISATION MISTRAL - DESIGN PROFESSIONNEL
+# =============================================================================
+
+def render_mistral_optimization(base_url):
+    """Module d'optimisation IA avec comparatif existant vs proposition Mistral"""
+    if not base_url:
+        return
+
+    st.markdown(
+        '<p class="section-title">05 / OPTIMISATION MISTRAL AI</p>',
+        unsafe_allow_html=True
+    )
+    st.markdown(
+        '<p style="font-size:0.8rem;color:#94a3b8;font-style:italic;margin-bottom:24px;">'
+        'Generation et analyse comparative via Mistral AI &mdash; robots.txt & llms.txt</p>',
+        unsafe_allow_html=True
+    )
+
+    tab_robots, tab_llms = st.tabs(["ROBOTS.TXT", "LLMS.TXT"])
+
+    # ==================== ROBOTS.TXT ====================
+    with tab_robots:
+        content, found = fetch_file_content(base_url, "robots.txt")
+
+        # Status
+        if found:
+            st.markdown(
+                '<span style="display:inline-block;padding:4px 14px;font-size:0.6rem;font-weight:800;'
+                'letter-spacing:0.15em;text-transform:uppercase;background:#0f172a;color:#fff;border:1px solid #0f172a;">'
+                'DETECTE</span>',
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                '<span style="display:inline-block;padding:4px 14px;font-size:0.6rem;font-weight:800;'
+                'letter-spacing:0.15em;text-transform:uppercase;background:#fff;color:#FF4B4B;border:1px solid #FF4B4B;">'
+                'ABSENT</span>',
+                unsafe_allow_html=True
+            )
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        if st.button("ANALYSER ET OPTIMISER", key="btn_robots", use_container_width=True):
+            with st.spinner("Mistral genere le code optimise et l'analyse comparative..."):
+                optimized_code, analysis = generate_robots_optimization(content, base_url, found)
+                if optimized_code:
+                    st.session_state["mistral_robots_code"] = optimized_code
+                st.session_state["mistral_robots_analysis"] = analysis
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Zone 1 : Comparateur de code
+        st.markdown(
+            '<p style="font-size:0.6rem;font-weight:800;letter-spacing:0.25em;text-transform:uppercase;'
+            'color:#94a3b8;margin-bottom:12px;">COMPARATEUR DE CODE</p>',
+            unsafe_allow_html=True
+        )
+
+        col_left, col_right = st.columns(2)
+
+        with col_left:
+            st.markdown(
+                '<p style="font-size:0.75rem;font-weight:700;color:#0f172a;margin-bottom:8px;">Code Actuel</p>',
+                unsafe_allow_html=True
+            )
+            st.code(content if found else "# robots.txt inexistant", language="text")
+
+        with col_right:
+            st.markdown(
+                '<p style="font-size:0.75rem;font-weight:700;color:#0f172a;margin-bottom:8px;">'
+                'Proposition Optimisee <span style="font-weight:400;font-style:italic;color:#94a3b8;">(AI-Ready)</span></p>',
+                unsafe_allow_html=True
+            )
+            if "mistral_robots_code" in st.session_state:
+                st.code(st.session_state["mistral_robots_code"], language="text")
+            else:
+                st.markdown(
+                    '<p style="font-size:0.8rem;color:#94a3b8;font-style:italic;padding:16px;border:1px solid #f1f5f9;">'
+                    'Cliquez sur le bouton ci-dessus pour generer la proposition.</p>',
+                    unsafe_allow_html=True
+                )
+
+        # Zone 2 : Analyse strategique
+        if "mistral_robots_analysis" in st.session_state:
+            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+            st.markdown(
+                '<p style="font-size:0.6rem;font-weight:800;letter-spacing:0.25em;text-transform:uppercase;'
+                'color:#94a3b8;margin-bottom:16px;">ANALYSE STRATEGIQUE</p>',
+                unsafe_allow_html=True
+            )
+            st.markdown(
+                '<div style="padding:24px;border:1px solid #e2e8f0;background:#fafafa;">',
+                unsafe_allow_html=True
+            )
+            st.markdown(st.session_state["mistral_robots_analysis"])
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    # ==================== LLMS.TXT ====================
+    with tab_llms:
+        content, found = fetch_file_content(base_url, "llms.txt")
+
+        if found:
+            st.markdown(
+                '<span style="display:inline-block;padding:4px 14px;font-size:0.6rem;font-weight:800;'
+                'letter-spacing:0.15em;text-transform:uppercase;background:#0f172a;color:#fff;border:1px solid #0f172a;">'
+                'DETECTE</span>',
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                '<span style="display:inline-block;padding:4px 14px;font-size:0.6rem;font-weight:800;'
+                'letter-spacing:0.15em;text-transform:uppercase;background:#fff;color:#FF4B4B;border:1px solid #FF4B4B;">'
+                'ABSENT</span>',
+                unsafe_allow_html=True
+            )
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        if st.button("GENERER PROPOSITION OPTIMISEE", key="btn_llms", use_container_width=True):
+            with st.spinner("Mistral genere le llms.txt Gold Standard..."):
+                optimized = generate_llms_optimization(content, base_url, found)
+                st.session_state["mistral_llms_code"] = optimized
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        st.markdown(
+            '<p style="font-size:0.6rem;font-weight:800;letter-spacing:0.25em;text-transform:uppercase;'
+            'color:#94a3b8;margin-bottom:12px;">COMPARATEUR DE CODE</p>',
+            unsafe_allow_html=True
+        )
+
+        col_left, col_right = st.columns(2)
+
+        with col_left:
+            st.markdown(
+                '<p style="font-size:0.75rem;font-weight:700;color:#0f172a;margin-bottom:8px;">Code Actuel</p>',
+                unsafe_allow_html=True
+            )
+            st.code(content if found else "# llms.txt inexistant", language="text")
+
+        with col_right:
+            st.markdown(
+                '<p style="font-size:0.75rem;font-weight:700;color:#0f172a;margin-bottom:8px;">'
+                'Proposition Optimisee <span style="font-weight:400;font-style:italic;color:#94a3b8;">(Gold Standard)</span></p>',
+                unsafe_allow_html=True
+            )
+            if "mistral_llms_code" in st.session_state:
+                st.code(st.session_state["mistral_llms_code"], language="text")
+            else:
+                st.markdown(
+                    '<p style="font-size:0.8rem;color:#94a3b8;font-style:italic;padding:16px;border:1px solid #f1f5f9;">'
+                    'Cliquez sur le bouton ci-dessus pour generer la proposition.</p>',
+                    unsafe_allow_html=True
+                )
+
+
+# =============================================================================
+# 5. RENDU DU GRAPHE
 # =============================================================================
 
 def render_interactive_graph(G, show_health=False):
@@ -533,11 +670,11 @@ def render_interactive_graph(G, show_health=False):
                 <span style="font-size: 0.8rem; font-weight: 600;">95-100  Optimise</span>
             </div>
             <div style="display: flex; align-items: center; margin-bottom: 8px;">
-                <div style="width: 12px; height: 12px; background: #f97316; margin-right: 10px;"></div>
+                <div style="width: 12px; height: 12px; background: #FFA500; margin-right: 10px;"></div>
                 <span style="font-size: 0.8rem; font-weight: 600;">50-94  Non optimise</span>
             </div>
             <div style="display: flex; align-items: center;">
-                <div style="width: 12px; height: 12px; background: #ef4444; margin-right: 10px;"></div>
+                <div style="width: 12px; height: 12px; background: #FF4B4B; margin-right: 10px;"></div>
                 <span style="font-size: 0.8rem; font-weight: 600;">0-49  Critique</span>
             </div>
         </div>
@@ -569,8 +706,8 @@ def render_interactive_graph(G, show_health=False):
         }}
 
         var fullscreenBtn = document.createElement('button');
-        fullscreenBtn.innerHTML = 'Plein ecran';
-        fullscreenBtn.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9999;padding:10px 24px;background:#0f172a;color:white;border:none;font-family:Inter,sans-serif;font-size:0.75rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;cursor:pointer;';
+        fullscreenBtn.innerHTML = 'PLEIN ECRAN';
+        fullscreenBtn.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9999;padding:10px 24px;background:#0f172a;color:white;border:none;font-family:Inter,sans-serif;font-size:0.65rem;font-weight:800;letter-spacing:0.15em;text-transform:uppercase;cursor:pointer;';
         fullscreenBtn.onclick = toggleFullscreen;
         document.body.appendChild(fullscreenBtn);
     </script>
@@ -581,7 +718,7 @@ def render_interactive_graph(G, show_health=False):
 
 
 # =============================================================================
-# 5. ONGLET METHODOLOGIE
+# 6. ONGLET METHODOLOGIE
 # =============================================================================
 
 def render_methodologie():
@@ -675,8 +812,8 @@ def render_methodologie():
         <div style="font-weight:800; text-transform:uppercase; font-size:0.7rem; letter-spacing:0.2em; margin-bottom:2rem;">Health Monitoring</div>
         <div style="display:flex; gap:30px;">
             <div><span class="methodo-dot" style="background:#10b981;"></span><span style="font-size:0.9rem; font-weight:600;">OPTIMAL</span></div>
-            <div><span class="methodo-dot" style="background:#f97316;"></span><span style="font-size:0.9rem; font-weight:600;">NON OPTIMISE</span></div>
-            <div><span class="methodo-dot" style="background:#ef4444;"></span><span style="font-size:0.9rem; font-weight:600;">CRITICAL</span></div>
+            <div><span class="methodo-dot" style="background:#FFA500;"></span><span style="font-size:0.9rem; font-weight:600;">NON OPTIMISE</span></div>
+            <div><span class="methodo-dot" style="background:#FF4B4B;"></span><span style="font-size:0.9rem; font-weight:600;">CRITICAL</span></div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -696,7 +833,7 @@ def render_methodologie():
 
 
 # =============================================================================
-# 6. INTERFACE PRINCIPALE
+# 7. INTERFACE PRINCIPALE - DESIGN HOTARU STRICT
 # =============================================================================
 
 def render_audit_geo():
@@ -721,75 +858,101 @@ def render_audit_geo():
         selected_ws = st.sidebar.selectbox("Projets (Workspaces)", ws_list)
         filtered_audits = [a for a in all_audits if str(a.get('workspace', '')).strip() == selected_ws]
 
-        # --- ZONE DE SCAN ---
-        with st.expander("LANCER UNE NOUVELLE ANALYSE", expanded="results" not in st.session_state):
-            c1, c2 = st.columns([3, 1])
+        # =================================================================
+        # ZONE DE SCAN
+        # =================================================================
+        st.markdown(
+            '<p class="section-title">01 / NOUVELLE ANALYSE</p>',
+            unsafe_allow_html=True
+        )
 
-            url_input = c1.text_area(
-                "URLs a analyser (une par ligne)",
-                placeholder="https://example.com/\nhttps://example.com/section1",
-                height=100,
-                help="Entrez une ou plusieurs URLs du meme domaine, une par ligne."
-            )
+        st.markdown('<div class="zen-card">', unsafe_allow_html=True)
 
-            default_ws = "" if selected_ws == "+ Creer Nouveau" else selected_ws
-            ws_in = c2.text_input("Nom du Projet", value=default_ws)
+        c1, c2 = st.columns([3, 1])
 
-            limit_in = st.select_slider(
-                "Nombre de pages a analyser",
-                options=[10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000],
-                value=100,
-                help="Analyse de 10 a 10 000 pages."
-            )
+        url_input = c1.text_area(
+            "URLs a analyser (une par ligne)",
+            placeholder="https://example.com/\nhttps://example.com/section1",
+            height=100,
+            label_visibility="collapsed"
+        )
 
-            if st.button("Lancer Hotaru", use_container_width=True):
-                if url_input:
-                    urls = [line.strip() for line in url_input.strip().split('\n') if line.strip()]
+        default_ws = "" if selected_ws == "+ Creer Nouveau" else selected_ws
+        ws_in = c2.text_input("Nom du Projet", value=default_ws, label_visibility="collapsed",
+                              placeholder="Nom du projet")
 
-                    if not urls:
-                        st.error("Veuillez entrer au moins une URL")
-                        return
+        limit_in = st.select_slider(
+            "Pages",
+            options=[10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000],
+            value=100
+        )
 
-                    domains = [urlparse(url).netloc for url in urls]
-                    if len(set(domains)) > 1:
-                        st.error(f"Toutes les URLs doivent etre du meme domaine. Trouve: {', '.join(set(domains))}")
-                        return
+        st.markdown("<br>", unsafe_allow_html=True)
 
-                    base_url = urls[0]
+        if st.button("LANCER L'ANALYSE", use_container_width=True, type="primary"):
+            if url_input:
+                urls = [line.strip() for line in url_input.strip().split('\n') if line.strip()]
 
-                    bar = st.progress(0, "Analyse infrastructure...")
-                    infra, score = check_geo_infrastructure(base_url)
-                    st.session_state.geo_infra = infra
-                    st.session_state.geo_score = score
-
-                    scr = SmartScraper(urls, max_urls=limit_in)
-                    res, stats = scr.run_analysis(
-                        progress_callback=lambda m, v: bar.progress(v, m)
+                if not urls:
+                    st.markdown(
+                        '<p style="color:#FF4B4B;font-weight:700;font-size:0.85rem;">Veuillez entrer au moins une URL.</p>',
+                        unsafe_allow_html=True
                     )
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    return
 
-                    st.session_state.update({
-                        "results": res,
-                        "clusters": scr.get_pattern_summary(),
-                        "target_url": base_url,
-                        "start_urls": urls,
-                        "current_ws": ws_in if ws_in else "Non classe",
-                        "crawl_stats": stats.get('stats', {}),
-                        "filtered_log": stats.get('filtered_log', []),
-                        "duplicate_log": stats.get('duplicate_log', [])
-                    })
-                    st.rerun()
+                domains = [urlparse(url).netloc for url in urls]
+                if len(set(domains)) > 1:
+                    st.markdown(
+                        f'<p style="color:#FF4B4B;font-weight:700;font-size:0.85rem;">'
+                        f'Toutes les URLs doivent etre du meme domaine. Trouve : {", ".join(set(domains))}</p>',
+                        unsafe_allow_html=True
+                    )
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    return
 
-        # --- ARCHIVES ---
+                base_url = urls[0]
+
+                bar = st.progress(0, "Analyse infrastructure...")
+                infra, score = check_geo_infrastructure(base_url)
+                st.session_state.geo_infra = infra
+                st.session_state.geo_score = score
+
+                scr = SmartScraper(urls, max_urls=limit_in)
+                res, stats = scr.run_analysis(
+                    progress_callback=lambda m, v: bar.progress(v, m)
+                )
+
+                st.session_state.update({
+                    "results": res,
+                    "clusters": scr.get_pattern_summary(),
+                    "target_url": base_url,
+                    "start_urls": urls,
+                    "current_ws": ws_in if ws_in else "Non classe",
+                    "crawl_stats": stats.get('stats', {}),
+                    "filtered_log": stats.get('filtered_log', []),
+                    "duplicate_log": stats.get('duplicate_log', [])
+                })
+                st.rerun()
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # =================================================================
+        # ARCHIVES
+        # =================================================================
         if filtered_audits:
             st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-            st.markdown('<p class="section-title">Archives</p>', unsafe_allow_html=True)
+            st.markdown(
+                '<p class="section-title">ARCHIVES</p>',
+                unsafe_allow_html=True
+            )
 
             audit_labels = {f"{a.get('nom_site') or 'Audit'} ({a.get('date')})": a for a in filtered_audits}
 
             col1, col2 = st.columns([3, 1])
             choice = col1.selectbox("Charger un audit", list(audit_labels.keys()), label_visibility="collapsed")
 
-            if col2.button("Visualiser", use_container_width=True):
+            if col2.button("VISUALISER", use_container_width=True):
                 r = audit_labels[choice]
                 raw_data = zlib.decompress(base64.b64decode(r['data_compressed'])).decode('utf-8')
                 data = json.loads(raw_data)
@@ -806,265 +969,307 @@ def render_audit_geo():
                 })
                 st.rerun()
 
-        # --- RESULTATS ---
-        if "results" in st.session_state:
-            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+        # =================================================================
+        # RESULTATS
+        # =================================================================
+        if "results" not in st.session_state:
+            return
 
-            # ========== SCORE INFRASTRUCTURE ==========
-            g_score = st.session_state.get("geo_score", 0)
-            score_color = _score_color(g_score)
+        st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
 
-            if g_score >= 95:
-                score_label = "OPTIMISE"
-            elif g_score >= 50:
-                score_label = "NON OPTIMISE"
-            else:
-                score_label = "CRITIQUE"
+        # ========== 02 / SCORE AI-READABLE ==========
+        st.markdown(
+            '<p class="section-title">02 / SCORE AI-READABLE</p>',
+            unsafe_allow_html=True
+        )
 
+        g_score = st.session_state.get("geo_score", 0)
+        score_color = _score_color(g_score)
+        score_label = _score_label(g_score)
+
+        st.markdown(
+            f'<div style="display:flex;align-items:flex-end;gap:16px;margin-bottom:12px;">'
+            f'<span style="font-size:5rem;font-weight:900;color:{score_color};line-height:1;letter-spacing:-0.04em;">{g_score}</span>'
+            f'<span style="font-size:1.2rem;font-weight:700;color:#94a3b8;margin-bottom:10px;">/100</span>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+
+        st.markdown(
+            f'<span style="display:inline-block;padding:6px 20px;font-size:0.6rem;font-weight:800;'
+            f'letter-spacing:0.2em;text-transform:uppercase;background:{score_color};color:#fff;'
+            f'border:1px solid {score_color};">{score_label}</span>',
+            unsafe_allow_html=True
+        )
+
+        st.markdown("<br><br>", unsafe_allow_html=True)
+
+        # ========== INFRASTRUCTURE ==========
+        st.markdown(
+            '<p class="section-title">03 / INFRASTRUCTURE IA</p>',
+            unsafe_allow_html=True
+        )
+
+        if st.session_state.get("geo_infra"):
+            cols = st.columns(4)
+            for i, (name, d) in enumerate(st.session_state.geo_infra.items()):
+                with cols[i]:
+                    if d['status']:
+                        status_html = (
+                            '<span style="font-size:0.7rem;font-weight:800;color:#10b981;'
+                            'letter-spacing:0.1em;">PRESENT</span>'
+                        )
+                    else:
+                        status_html = (
+                            '<span style="font-size:0.7rem;font-weight:800;color:#FF4B4B;'
+                            'letter-spacing:0.1em;">ABSENT</span>'
+                        )
+
+                    st.markdown(
+                        f'<div style="padding:20px;border:1px solid #e2e8f0;border-left:3px solid '
+                        f'{"#10b981" if d["status"] else "#FF4B4B"};">'
+                        f'<div style="font-weight:800;font-size:0.85rem;margin-bottom:8px;">{name}</div>'
+                        f'{status_html}'
+                        f'<div style="font-size:0.75rem;color:#94a3b8;margin-top:8px;line-height:1.4;'
+                        f'font-style:italic;">{d["meta"]["desc"]}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
+
+        st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+
+        # ========== 04 / STATISTIQUES DU CRAWL ==========
+        if "crawl_stats" in st.session_state and st.session_state.crawl_stats:
             st.markdown(
-                f'<div style="display:flex;align-items:baseline;gap:16px;margin-bottom:4px;">'
-                f'<span style="font-size:2.5rem;font-weight:900;color:{score_color};line-height:1;">{g_score}</span>'
-                f'<span style="font-size:0.65rem;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:#94a3b8;">/100</span>'
-                f'</div>',
+                '<p class="section-title">04 / STATISTIQUES DU CRAWL</p>',
                 unsafe_allow_html=True
             )
-            st.markdown(
-                f'<span class="status-badge" style="background:{score_color};color:white;border-color:{score_color};">{score_label}</span>',
-                unsafe_allow_html=True
-            )
-            st.markdown(
-                '<p class="section-title" style="margin-top:24px;">Infrastructure IA</p>',
-                unsafe_allow_html=True
-            )
 
-            if st.session_state.get("geo_infra"):
-                cols = st.columns(4)
-                for i, (name, d) in enumerate(st.session_state.geo_infra.items()):
-                    with cols[i]:
-                        status = "status-ok" if d['status'] else "status-err"
-                        txt = "OK" if d['status'] else "MISSING"
+            stats = st.session_state.crawl_stats
+
+            # Points d'entree multiples
+            if "start_urls" in st.session_state and len(st.session_state.start_urls) > 1:
+                with st.expander(f"Points d'entree : {len(st.session_state.start_urls)}", expanded=False):
+                    for i, url in enumerate(st.session_state.start_urls, 1):
                         st.markdown(
-                            f'<div class="infra-box"><b>{name}</b><br>'
-                            f'<span class="{status}">{txt}</span>'
-                            f'<div class="infra-desc">{d["meta"]["desc"]}</div></div>',
+                            f'<div style="padding:4px 0;font-size:0.8rem;font-family:\'Courier New\',monospace;'
+                            f'color:#64748b;">{i}. {url}</div>',
                             unsafe_allow_html=True
                         )
 
-            # ========== MISTRAL OPTIMIZATION ==========
-            render_mistral_optimization(st.session_state.get("target_url", ""))
+            # Metriques principales - style massif
+            col1, col2, col3, col4 = st.columns(4)
 
-            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+            metrics = [
+                (col1, stats.get("pages_crawled", 0), "Pages crawlees"),
+                (col2, stats.get("links_discovered", 0), "Liens decouverts"),
+                (col3, stats.get("links_duplicate", 0), "Doublons"),
+                (col4, stats.get("errors", 0), "Erreurs"),
+            ]
 
-            # ========== STATISTIQUES DU CRAWL ==========
-            if "crawl_stats" in st.session_state and st.session_state.crawl_stats:
-                st.markdown('<p class="section-title">Statistiques du crawl</p>', unsafe_allow_html=True)
-
-                stats = st.session_state.crawl_stats
-
-                if "start_urls" in st.session_state and len(st.session_state.start_urls) > 1:
-                    with st.expander(f"**Points d'entree : {len(st.session_state.start_urls)}**"):
-                        for i, url in enumerate(st.session_state.start_urls, 1):
-                            st.text(f"{i}. {url}")
-
-                col1, col2, col3, col4 = st.columns(4)
-
-                with col1:
+            for col, value, label in metrics:
+                with col:
                     st.markdown(
-                        '<div class="zen-metric">'
-                        f'<div class="zen-metric-value">{stats.get("pages_crawled", 0)}</div>'
-                        '<div class="zen-metric-label">Pages crawlees</div>'
-                        '</div>',
-                        unsafe_allow_html=True
-                    )
-                with col2:
-                    st.markdown(
-                        '<div class="zen-metric">'
-                        f'<div class="zen-metric-value">{stats.get("links_discovered", 0)}</div>'
-                        '<div class="zen-metric-label">Liens decouverts</div>'
-                        '</div>',
-                        unsafe_allow_html=True
-                    )
-                with col3:
-                    st.markdown(
-                        '<div class="zen-metric">'
-                        f'<div class="zen-metric-value">{stats.get("links_duplicate", 0)}</div>'
-                        '<div class="zen-metric-label">Doublons</div>'
-                        '</div>',
-                        unsafe_allow_html=True
-                    )
-                with col4:
-                    st.markdown(
-                        '<div class="zen-metric">'
-                        f'<div class="zen-metric-value">{stats.get("errors", 0)}</div>'
-                        '<div class="zen-metric-label">Erreurs</div>'
-                        '</div>',
+                        f'<div style="text-align:center;padding:24px;border:1px solid #e2e8f0;">'
+                        f'<div style="font-size:2.5rem;font-weight:900;line-height:1;color:#0f172a;">{value}</div>'
+                        f'<div style="font-size:0.6rem;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;'
+                        f'color:#94a3b8;margin-top:10px;">{label}</div>'
+                        f'</div>',
                         unsafe_allow_html=True
                     )
 
-                st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
 
-                # Metrics secondaires en plus petit
-                s_col1, s_col2, s_col3 = st.columns(3)
-                with s_col1:
-                    st.caption(f"Pages ignorees : {stats.get('pages_skipped', 0)}")
-                with s_col2:
-                    st.caption(f"Liens filtres : {stats.get('links_filtered', 0)}")
-                with s_col3:
-                    st.caption(f"URLs visitees : {len(st.session_state.results)}")
-
-            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-
-            # ========== JOURNAUX (3 VUES) ==========
-            st.markdown('<p class="section-title">Journaux</p>', unsafe_allow_html=True)
-
-            j_tab1, j_tab2, j_tab3 = st.tabs([
-                "Pages crawlees",
-                "Liens filtres",
-                "Doublons"
-            ])
-
-            with j_tab1:
-                render_journal_crawled(st.session_state.results)
-
-            with j_tab2:
-                render_journal_filtered(st.session_state.get("filtered_log", []))
-
-            with j_tab3:
-                render_journal_duplicates(st.session_state.get("duplicate_log", []))
-
-            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-
-            # ========== GRAPHE ==========
-            st.markdown('<p class="section-title">Graphe</p>', unsafe_allow_html=True)
-
-            c_expert, c_save_name, c_save_btn = st.columns([1, 2, 1])
-            expert_on = c_expert.toggle("Score AI-READABLE", value=False)
-
-            domain = urlparse(st.session_state.target_url).netloc
-            s_name = c_save_name.text_input("Nom sauvegarde", value=domain.split('.')[0], label_visibility="collapsed")
-
-            # Sauvegarde
-            if c_save_btn.button("Sauvegarder", use_container_width=True):
-                max_pages_to_save = 100
-                results_to_save = st.session_state.results[:max_pages_to_save]
-
-                clean_results = []
-                for r in results_to_save:
-                    clean_results.append({
-                        "url": r.get("url"),
-                        "title": r.get("title", "")[:50],
-                        "description": r.get("description", "")[:100],
-                        "h1": r.get("h1", "")[:50],
-                        "response_time": round(r.get("response_time", 0), 2),
-                        "has_structured_data": r.get("has_structured_data", False),
-                        "h2_count": r.get("h2_count", 0)
-                    })
-
-                compact_clusters = []
-                for cluster in st.session_state.clusters:
-                    compact_clusters.append({
-                        "name": cluster["name"],
-                        "count": cluster["count"],
-                        "samples": []
-                    })
-
-                payload = {
-                    "results": clean_results,
-                    "clusters": compact_clusters,
-                    "geo_infra": st.session_state.get('geo_infra', {}),
-                    "geo_score": st.session_state.get('geo_score', 0),
-                    "stats": {
-                        "pages_crawled": st.session_state.crawl_stats.get('pages_crawled', 0),
-                        "links_discovered": st.session_state.crawl_stats.get('links_discovered', 0),
-                        "links_filtered": st.session_state.crawl_stats.get('links_filtered', 0),
-                        "links_duplicate": st.session_state.crawl_stats.get('links_duplicate', 0),
-                        "pages_skipped": st.session_state.crawl_stats.get('pages_skipped', 0),
-                        "errors": st.session_state.crawl_stats.get('errors', 0),
-                        "start_urls_count": st.session_state.crawl_stats.get('start_urls_count', 1)
-                    },
-                    "start_urls": st.session_state.get('start_urls', [st.session_state.target_url])[:5]
-                }
-
-                if len(st.session_state.results) > max_pages_to_save:
-                    st.warning(f"Seules les {max_pages_to_save} premieres pages sur {len(st.session_state.results)} seront sauvegardees (limite Google Sheets)")
-
-                db.save_audit(user_email, st.session_state.current_ws, st.session_state.target_url, s_name, payload)
-                st.toast("Audit sauvegarde")
-
-            # Construction du graphe
-            G = nx.DiGraph()
-            G.add_node(
-                st.session_state.target_url,
-                label=domain.upper(),
-                size=35,
-                color="#0f172a",
-                font={'color': '#ffffff', 'face': 'Inter'}
-            )
-
-            for c in st.session_state.clusters:
-                c_id = f"group_{c['name']}"
-                G.add_node(
-                    c_id,
-                    label=c['name'].upper(),
-                    color="#cbd5e1",
-                    size=25,
-                    font={'color': '#0f172a', 'face': 'Inter'}
+            # Metriques secondaires - discrets, italiques
+            s_col1, s_col2, s_col3 = st.columns(3)
+            with s_col1:
+                st.markdown(
+                    f'<p style="font-size:0.75rem;color:#94a3b8;font-style:italic;">'
+                    f'Pages ignorees : <strong>{stats.get("pages_skipped", 0)}</strong></p>',
+                    unsafe_allow_html=True
                 )
-                G.add_edge(st.session_state.target_url, c_id)
+            with s_col2:
+                st.markdown(
+                    f'<p style="font-size:0.75rem;color:#94a3b8;font-style:italic;">'
+                    f'Liens filtres : <strong>{stats.get("links_filtered", 0)}</strong></p>',
+                    unsafe_allow_html=True
+                )
+            with s_col3:
+                st.markdown(
+                    f'<p style="font-size:0.75rem;color:#94a3b8;font-style:italic;">'
+                    f'URLs visitees : <strong>{len(st.session_state.results)}</strong></p>',
+                    unsafe_allow_html=True
+                )
 
-                for p in c['samples'][:40]:
-                    score_data = calculate_page_score(p)
-                    if isinstance(score_data, tuple):
-                        sc, grade, breakdown, recommendations = score_data
-                    else:
-                        sc = score_data
-                        grade = 'N/A'
-                        breakdown = {}
-                        recommendations = []
+        st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
 
-                    if expert_on:
-                        col = _score_color(sc)
-                    else:
-                        col = "#e2e8f0"
+        # ========== MISTRAL OPTIMIZATION ==========
+        render_mistral_optimization(st.session_state.get("target_url", ""))
 
-                    label = get_clean_label(p.get('title', ''), p['url'], domain)
-                    if expert_on and isinstance(score_data, tuple):
-                        label = f"{label}\\n[{grade}]"
+        st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
 
-                    tooltip_parts = []
-                    if expert_on and isinstance(score_data, tuple):
-                        tooltip_parts.append(f"Score AI-READABLE: {sc}/100 - Grade: {grade}")
+        # ========== 06 / JOURNAUX ==========
+        st.markdown(
+            '<p class="section-title">06 / JOURNAUX</p>',
+            unsafe_allow_html=True
+        )
 
-                        missing = []
-                        if not p.get('description'):
-                            missing.append("Meta description manquante")
-                        if not p.get('h1'):
-                            missing.append("H1 manquant")
-                        if not p.get('has_structured_data'):
-                            missing.append("JSON-LD manquant")
-                        if p.get('h2_count', 0) < 2:
-                            missing.append("Peu de H2")
+        j_tab1, j_tab2, j_tab3 = st.tabs([
+            "PAGES CRAWLEES",
+            "LIENS FILTRES",
+            "DOUBLONS"
+        ])
 
-                        if missing:
-                            tooltip_parts.append("\\n\\nElements manquants:\\n" + "\\n".join(f"- {m}" for m in missing))
+        with j_tab1:
+            render_journal_crawled(st.session_state.results)
 
-                        if recommendations:
-                            top_reco = recommendations[:2]
-                            tooltip_parts.append("\\n\\nRecommandations:\\n" + "\\n".join(f"- {r}" for r in top_reco))
+        with j_tab2:
+            render_journal_filtered(st.session_state.get("filtered_log", []))
 
-                    tooltip = "\\n".join(tooltip_parts) if tooltip_parts else ""
+        with j_tab3:
+            render_journal_duplicates(st.session_state.get("duplicate_log", []))
 
-                    G.add_node(
-                        p['url'],
-                        label=label,
-                        size=12,
-                        color=col,
-                        font={'color': '#0f172a', 'face': 'Inter'},
-                        title=tooltip
-                    )
-                    G.add_edge(c_id, p['url'])
+        st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
 
-            render_interactive_graph(G, show_health=expert_on)
+        # ========== 07 / GRAPHE ==========
+        st.markdown(
+            '<p class="section-title">07 / GRAPHE DE MAILLAGE</p>',
+            unsafe_allow_html=True
+        )
+
+        c_expert, c_save_name, c_save_btn = st.columns([1, 2, 1])
+        expert_on = c_expert.toggle("Score AI-READABLE", value=False)
+
+        domain = urlparse(st.session_state.target_url).netloc
+        s_name = c_save_name.text_input("Nom sauvegarde", value=domain.split('.')[0], label_visibility="collapsed")
+
+        # Sauvegarde
+        if c_save_btn.button("SAUVEGARDER", use_container_width=True):
+            max_pages_to_save = 100
+            results_to_save = st.session_state.results[:max_pages_to_save]
+
+            clean_results = []
+            for r in results_to_save:
+                clean_results.append({
+                    "url": r.get("url"),
+                    "title": r.get("title", "")[:50],
+                    "description": r.get("description", "")[:100],
+                    "h1": r.get("h1", "")[:50],
+                    "response_time": round(r.get("response_time", 0), 2),
+                    "has_structured_data": r.get("has_structured_data", False),
+                    "h2_count": r.get("h2_count", 0)
+                })
+
+            compact_clusters = []
+            for cluster in st.session_state.clusters:
+                compact_clusters.append({
+                    "name": cluster["name"],
+                    "count": cluster["count"],
+                    "samples": []
+                })
+
+            payload = {
+                "results": clean_results,
+                "clusters": compact_clusters,
+                "geo_infra": st.session_state.get('geo_infra', {}),
+                "geo_score": st.session_state.get('geo_score', 0),
+                "stats": {
+                    "pages_crawled": st.session_state.crawl_stats.get('pages_crawled', 0),
+                    "links_discovered": st.session_state.crawl_stats.get('links_discovered', 0),
+                    "links_filtered": st.session_state.crawl_stats.get('links_filtered', 0),
+                    "links_duplicate": st.session_state.crawl_stats.get('links_duplicate', 0),
+                    "pages_skipped": st.session_state.crawl_stats.get('pages_skipped', 0),
+                    "errors": st.session_state.crawl_stats.get('errors', 0),
+                    "start_urls_count": st.session_state.crawl_stats.get('start_urls_count', 1)
+                },
+                "start_urls": st.session_state.get('start_urls', [st.session_state.target_url])[:5]
+            }
+
+            if len(st.session_state.results) > max_pages_to_save:
+                st.markdown(
+                    f'<p style="color:#FFA500;font-weight:700;font-size:0.8rem;">'
+                    f'Seules les {max_pages_to_save} premieres pages sur {len(st.session_state.results)} seront sauvegardees '
+                    f'(limite Google Sheets)</p>',
+                    unsafe_allow_html=True
+                )
+
+            db.save_audit(user_email, st.session_state.current_ws, st.session_state.target_url, s_name, payload)
+            st.toast("Audit sauvegarde")
+
+        # Construction du graphe
+        G = nx.DiGraph()
+        G.add_node(
+            st.session_state.target_url,
+            label=domain.upper(),
+            size=35,
+            color="#0f172a",
+            font={'color': '#ffffff', 'face': 'Inter'}
+        )
+
+        for c in st.session_state.clusters:
+            c_id = f"group_{c['name']}"
+            G.add_node(
+                c_id,
+                label=c['name'].upper(),
+                color="#cbd5e1",
+                size=25,
+                font={'color': '#0f172a', 'face': 'Inter'}
+            )
+            G.add_edge(st.session_state.target_url, c_id)
+
+            for p in c['samples'][:40]:
+                score_data = calculate_page_score(p)
+                if isinstance(score_data, tuple):
+                    sc, grade, breakdown, recommendations = score_data
+                else:
+                    sc = score_data
+                    grade = 'N/A'
+                    breakdown = {}
+                    recommendations = []
+
+                if expert_on:
+                    col = _score_color(sc)
+                else:
+                    col = "#e2e8f0"
+
+                label = get_clean_label(p.get('title', ''), p['url'], domain)
+                if expert_on and isinstance(score_data, tuple):
+                    label = f"{label}\\n[{grade}]"
+
+                tooltip_parts = []
+                if expert_on and isinstance(score_data, tuple):
+                    tooltip_parts.append(f"Score AI-READABLE: {sc}/100 - Grade: {grade}")
+
+                    missing = []
+                    if not p.get('description'):
+                        missing.append("Meta description manquante")
+                    if not p.get('h1'):
+                        missing.append("H1 manquant")
+                    if not p.get('has_structured_data'):
+                        missing.append("JSON-LD manquant")
+                    if p.get('h2_count', 0) < 2:
+                        missing.append("Peu de H2")
+
+                    if missing:
+                        tooltip_parts.append("\\n\\nElements manquants:\\n" + "\\n".join(f"- {m}" for m in missing))
+
+                    if recommendations:
+                        top_reco = recommendations[:2]
+                        tooltip_parts.append("\\n\\nRecommandations:\\n" + "\\n".join(f"- {r}" for r in top_reco))
+
+                tooltip = "\\n".join(tooltip_parts) if tooltip_parts else ""
+
+                G.add_node(
+                    p['url'],
+                    label=label,
+                    size=12,
+                    color=col,
+                    font={'color': '#0f172a', 'face': 'Inter'},
+                    title=tooltip
+                )
+                G.add_edge(c_id, p['url'])
+
+        render_interactive_graph(G, show_health=expert_on)
 
     # ========================== TAB 2 : METHODOLOGIE ==========================
     with tab2:
