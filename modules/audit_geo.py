@@ -59,33 +59,119 @@ def fetch_file_content(base_url, filename):
         return f"# Erreur de recuperation : {e}", False
 
 
-def generate_mistral_optimization(file_content, filename, site_url, found):
-    """Appelle Mistral pour generer une version optimisee du fichier"""
+def _call_mistral(api_key, system_prompt, user_prompt, max_tokens=2500):
+    """Appel generique a l'API Mistral"""
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    payload = {
+        "model": "mistral-small-latest",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        "temperature": 0.2,
+        "max_tokens": max_tokens
+    }
+    response = requests.post("https://api.mistral.ai/v1/chat/completions", headers=headers, json=payload)
+    response.raise_for_status()
+    return response.json()["choices"][0]["message"]["content"].strip()
+
+
+def generate_robots_optimization(file_content, site_url, found):
+    """Genere le code robots.txt optimise + analyse comparative via Mistral"""
+    try:
+        api_key = st.secrets["mistral"]["api_key"]
+    except Exception:
+        return None, "Cle API Mistral manquante dans les secrets Streamlit."
+
+    current = file_content if found else "Le fichier robots.txt n'existe pas ou est vide."
+
+    # --- Appel 1 : Code optimise ---
+    code_prompt = f"""Tu es un expert SEO specialise en securite et AI-Readability.
+Voici le robots.txt actuel du site {site_url} :
+
+{current}
+
+Genere une version "Forteresse AI-Ready" du robots.txt pour un site institutionnel.
+Le fichier doit :
+1. BLOQUER les dossiers sensibles : /wp-admin/, /wp-login.php, /xmlrpc.php, /wp-includes/, /wp-content/plugins/, /cgi-bin/, /admin/, les fichiers *.php inutiles
+2. BLOQUER les ressources qui gaspillent le crawl budget : /feed/, /trackback/, /?s=, /wp-json/, /wp-content/uploads/*.pdf
+3. AUTORISER EXPLICITEMENT chaque agent IA avec un bloc dedie :
+   - User-agent: GPTBot (OpenAI)
+   - User-agent: ChatGPT-User (OpenAI browse)
+   - User-agent: Google-Extended (Gemini)
+   - User-agent: ClaudeBot (Anthropic)
+   - User-agent: PerplexityBot
+   - User-agent: Bingbot
+   - User-agent: Applebot-Extended
+   Chacun avec Allow: / et les Disallow necessaires (/wp-admin, etc.)
+4. Inclure la directive Sitemap en bas
+5. Ajouter des commentaires clairs par section
+
+Reponds UNIQUEMENT avec le contenu du fichier robots.txt. Aucune explication autour."""
+
+    # --- Appel 2 : Analyse comparative ---
+    analysis_prompt = f"""Tu es un consultant SEO senior qui presente un audit a un client non-technique.
+
+Voici le robots.txt ACTUEL du site {site_url} :
+
+{current}
+
+Redige une analyse comparative concise et professionnelle (ton d'audit financier) qui explique :
+
+**Securite**
+Analyse les failles de la version actuelle. Les dossiers sensibles (/wp-admin, /xmlrpc.php, etc.) sont-ils proteges ?
+La version actuelle est-elle une "passoire" qui expose des points d'entree aux attaques ?
+
+**Crawl Budget**
+Le fichier actuel gaspille-t-il les ressources en laissant les bots crawler des pages inutiles (feeds, trackbacks, fichiers PHP internes) ?
+Quel est l'impact sur la performance d'indexation ?
+
+**Signal AI-Ready**
+Les agents IA (GPTBot, ClaudeBot, Google-Extended, PerplexityBot) sont-ils explicitement autorises ?
+Sans signal explicite, le site est-il invisible pour les moteurs de reponse IA ?
+Pourquoi nommer chaque bot individuellement est critique en 2025-2026 ?
+
+**Verdict**
+Resume en une phrase l'ecart entre la version actuelle et la version optimisee.
+
+Ecris en francais. Utilise des titres en Markdown (**Gras**). Ton professionnel, factuel, zero emoji."""
+
+    try:
+        optimized_code = _call_mistral(
+            api_key,
+            "Tu es un expert SEO. Tu generes uniquement du code robots.txt, sans explications.",
+            code_prompt,
+            max_tokens=1500
+        )
+        analysis = _call_mistral(
+            api_key,
+            "Tu es un consultant SEO senior. Tu rediges des analyses d'audit professionnelles en francais, ton factuel, zero emoji.",
+            analysis_prompt,
+            max_tokens=1500
+        )
+        return optimized_code, analysis
+    except Exception as e:
+        return None, f"Erreur API Mistral : {e}"
+
+
+def generate_llms_optimization(file_content, site_url, found):
+    """Genere le fichier llms.txt Gold Standard via Mistral"""
     try:
         api_key = st.secrets["mistral"]["api_key"]
     except Exception:
         return "Cle API Mistral manquante dans les secrets Streamlit."
 
-    if filename == "robots.txt":
-        prompt = f"""Tu es un expert en SEO technique et AI-Readability.
-Voici le fichier robots.txt actuel du site {site_url} :
+    current = file_content if found else "Le fichier llms.txt n'existe pas."
 
-{file_content if found else "Le fichier robots.txt n'existe pas ou est vide."}
-
-Genere un robots.txt PARFAIT et optimise pour les agents IA (GPTBot, ChatGPT-User, Google-Extended, ClaudeBot, PerplexityBot, Bingbot).
-Le fichier doit :
-1. Autoriser explicitement les crawlers IA importants
-2. Referencer le sitemap.xml
-3. Bloquer les ressources inutiles (/admin, /wp-login, etc.)
-4. Suivre les meilleures pratiques 2025-2026
-
-Reponds UNIQUEMENT avec le contenu du fichier robots.txt, sans aucun commentaire ni explication autour."""
-    else:  # llms.txt - Gold Standard hybride EN/FR
-        prompt = f"""Tu es un expert en AI-Readability et standards LLM. Tu dois generer un fichier llms.txt "Gold Standard".
+    prompt = f"""Tu es un expert en AI-Readability et standards LLM. Tu dois generer un fichier llms.txt "Gold Standard".
 
 Voici le fichier llms.txt actuel du site {site_url} :
 
-{file_content if found else "Le fichier llms.txt n'existe pas."}
+{current}
 
 Genere un llms.txt PARFAIT selon le standard llms.txt 2025 avec cette structure OBLIGATOIRE :
 
@@ -105,27 +191,13 @@ Le site est : {site_url}
 
 Reponds UNIQUEMENT avec le contenu du fichier llms.txt, sans aucune explication autour."""
 
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-
-    payload = {
-        "model": "mistral-small-latest",
-        "messages": [
-            {"role": "system", "content": "Tu es un expert en optimisation de sites web pour les agents IA. Tu generes uniquement du code/config, jamais d'explications."},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.2,
-        "max_tokens": 2000
-    }
-
     try:
-        response = requests.post("https://api.mistral.ai/v1/chat/completions", headers=headers, json=payload)
-        response.raise_for_status()
-        result = response.json()
-        return result["choices"][0]["message"]["content"].strip()
+        return _call_mistral(
+            api_key,
+            "Tu es un expert en optimisation de sites web pour les agents IA. Tu generes uniquement du code/config, jamais d'explications.",
+            prompt,
+            max_tokens=2000
+        )
     except Exception as e:
         return f"Erreur API Mistral : {e}"
 
@@ -138,49 +210,83 @@ def render_mistral_optimization(base_url):
     with st.expander("OPTIMISATION IA  /  robots.txt & llms.txt", expanded=False):
         st.markdown(
             '<p style="font-size:0.8rem;color:#94a3b8;margin-bottom:20px;">'
-            'Analyse et generation automatique via Mistral AI</p>',
+            'Generation et analyse comparative via Mistral AI</p>',
             unsafe_allow_html=True
         )
 
-        files_to_optimize = ["robots.txt", "llms.txt"]
-        tabs = st.tabs(files_to_optimize)
+        tab_robots, tab_llms = st.tabs(["robots.txt", "llms.txt"])
 
-        for idx, filename in enumerate(files_to_optimize):
-            with tabs[idx]:
-                content, found = fetch_file_content(base_url, filename)
+        # ==================== ROBOTS.TXT ====================
+        with tab_robots:
+            content, found = fetch_file_content(base_url, "robots.txt")
 
-                # Status badge
-                if found:
-                    st.markdown(
-                        f'<span class="status-badge status-complete">PRESENT</span>',
-                        unsafe_allow_html=True
-                    )
+            if found:
+                st.markdown('<span class="status-badge status-complete">PRESENT</span>', unsafe_allow_html=True)
+            else:
+                st.markdown('<span class="status-badge status-failed">ABSENT</span>', unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            if st.button("Analyser et optimiser", key="btn_robots", use_container_width=True):
+                with st.spinner("Mistral genere le code optimise et l'analyse comparative..."):
+                    optimized_code, analysis = generate_robots_optimization(content, base_url, found)
+                    if optimized_code:
+                        st.session_state["mistral_robots_code"] = optimized_code
+                    st.session_state["mistral_robots_analysis"] = analysis
+
+            # Zone 1 : Comparateur de code (2 colonnes)
+            col_left, col_right = st.columns(2)
+
+            with col_left:
+                st.markdown("**Code Actuel (Site)**")
+                st.code(content if found else "# robots.txt inexistant", language="text")
+
+            with col_right:
+                st.markdown("**Proposition Optimisee (AI-Ready)**")
+                if "mistral_robots_code" in st.session_state:
+                    st.code(st.session_state["mistral_robots_code"], language="text")
                 else:
-                    st.markdown(
-                        f'<span class="status-badge status-failed">ABSENT</span>',
-                        unsafe_allow_html=True
-                    )
+                    st.caption("Cliquez sur le bouton pour generer la proposition.")
 
-                st.markdown("<br>", unsafe_allow_html=True)
+            # Zone 2 : Analyse strategique
+            if "mistral_robots_analysis" in st.session_state:
+                st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+                st.markdown(
+                    '<p style="font-size:0.65rem;font-weight:800;letter-spacing:0.3em;'
+                    'text-transform:uppercase;color:#999;margin-bottom:16px;padding-bottom:8px;'
+                    'border-bottom:1px solid #f0f0f0;">Analyse Strategique</p>',
+                    unsafe_allow_html=True
+                )
+                st.markdown(st.session_state["mistral_robots_analysis"])
 
-                cache_key = f"mistral_opt_{filename}"
-                if st.button(f"Generer proposition optimisee", key=f"btn_{filename}", use_container_width=True):
-                    with st.spinner(f"Mistral analyse {filename}..."):
-                        optimized = generate_mistral_optimization(content, filename, base_url, found)
-                        st.session_state[cache_key] = optimized
+        # ==================== LLMS.TXT ====================
+        with tab_llms:
+            content, found = fetch_file_content(base_url, "llms.txt")
 
-                col_left, col_right = st.columns(2)
+            if found:
+                st.markdown('<span class="status-badge status-complete">PRESENT</span>', unsafe_allow_html=True)
+            else:
+                st.markdown('<span class="status-badge status-failed">ABSENT</span>', unsafe_allow_html=True)
 
-                with col_left:
-                    st.markdown("**Existant**")
-                    st.code(content if found else f"# {filename} inexistant", language="text")
+            st.markdown("<br>", unsafe_allow_html=True)
 
-                with col_right:
-                    st.markdown("**Proposition Mistral**")
-                    if cache_key in st.session_state:
-                        st.code(st.session_state[cache_key], language="text")
-                    else:
-                        st.caption("Cliquez sur le bouton pour generer une proposition.")
+            if st.button("Generer proposition optimisee", key="btn_llms", use_container_width=True):
+                with st.spinner("Mistral genere le llms.txt Gold Standard..."):
+                    optimized = generate_llms_optimization(content, base_url, found)
+                    st.session_state["mistral_llms_code"] = optimized
+
+            col_left, col_right = st.columns(2)
+
+            with col_left:
+                st.markdown("**Code Actuel (Site)**")
+                st.code(content if found else "# llms.txt inexistant", language="text")
+
+            with col_right:
+                st.markdown("**Proposition Optimisee (Gold Standard)**")
+                if "mistral_llms_code" in st.session_state:
+                    st.code(st.session_state["mistral_llms_code"], language="text")
+                else:
+                    st.caption("Cliquez sur le bouton pour generer la proposition.")
 
 
 def calculate_page_score(page):
