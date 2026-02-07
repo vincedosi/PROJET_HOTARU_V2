@@ -7,7 +7,7 @@ SMART SCRAPER HYBRIDE (V7 - LOGS STREAMLIT + COMPTEUR + VITESSE)
 """
 import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse, urljoin, urlunparse
 import time
 import re
 from selenium import webdriver
@@ -23,9 +23,9 @@ class SmartScraper:
         if isinstance(start_urls, str):
             start_urls = [start_urls]
         
-        self.start_urls = [url.rstrip('/') for url in start_urls]
+        self.domain = urlparse(start_urls[0]).netloc.lower()
+        self.start_urls = [self.normalize_url(url) for url in start_urls]
         self.base_url = self.start_urls[0]  # Pour compatibilité
-        self.domain = urlparse(self.start_urls[0]).netloc
         self.max_urls = max_urls
         self.visited = set()
         self.results = []
@@ -70,6 +70,24 @@ class SmartScraper:
         if self._is_spa_site():
             self.use_selenium = True
             self._init_selenium()
+
+    def normalize_url(self, url):
+        """Normalise une URL pour éviter les doublons (trailing slash, fragments, query params, casse)"""
+        # Supprimer les fragments (#) et les paramètres de requête (?)
+        url = url.split('#')[0].split('?')[0]
+        # Supprimer le trailing slash (sauf pour la racine du domaine)
+        parsed = urlparse(url)
+        path = parsed.path.rstrip('/') or '/'
+        # Normaliser la casse du chemin
+        path = path.lower()
+        # Reconstruire l'URL normalisée
+        normalized = urlunparse((
+            parsed.scheme.lower(),
+            parsed.netloc.lower(),
+            path,
+            '', '', ''
+        ))
+        return normalized
 
     def _log(self, message):
         """Log visible dans Streamlit"""
@@ -190,13 +208,14 @@ class SmartScraper:
                 meta_desc = meta_tag['content'].strip()
             
             links = []
+            normalized_current = self.normalize_url(url)
             for a in soup.find_all('a', href=True):
                 href = a['href']
                 full_url = urljoin(url, href)
-                
-                if urlparse(full_url).netloc == self.domain and self.is_valid_url(full_url):
-                    clean_link = full_url.split('#')[0].split('?')[0]
-                    if clean_link != url:
+
+                if urlparse(full_url).netloc.lower() == self.domain.lower() and self.is_valid_url(full_url):
+                    clean_link = self.normalize_url(full_url)
+                    if clean_link != normalized_current:
                         links.append(clean_link)
                 else:
                     self.stats['links_filtered'] += 1
@@ -228,9 +247,9 @@ class SmartScraper:
         """Lance l'analyse avec logs Streamlit"""
         self.log_callback = log_callback
         
-        # ✅ CRAWL MULTI-URLs : Commence avec toutes les URLs de départ
+        # ✅ CRAWL MULTI-URLs : Commence avec toutes les URLs de départ (normalisées)
         queue = list(self.start_urls)
-        self.visited.update(self.start_urls)
+        self.visited.update(self.start_urls)  # start_urls déjà normalisées dans __init__
         crawled_count = 0
         
         print(f"\n{'='*80}")
