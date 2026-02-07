@@ -19,6 +19,331 @@ from core.database import AuditDatabase
 from core.scraping import SmartScraper
 
 # =============================================================================
+# CONSTANTE API MISTRAL
+# =============================================================================
+# La cle API Mistral est geree via st.secrets["mistral"]["api_key"]
+# Configuree dans ~/.streamlit/secrets.toml sous [mistral] api_key = "..."
+MISTRAL_API_KEY_PATH = "mistral"  # Chemin dans st.secrets
+
+
+# =============================================================================
+# 0. DOUBLE VERIFICATION ACCESSIBILITE IA (FRONTEND + API)
+# =============================================================================
+
+def _parse_robots_txt(robots_content):
+    """Analyse le robots.txt pour determiner si les crawlers IA sont bloques"""
+    if not robots_content:
+        return {"accessible": False, "details": "Fichier absent"}
+
+    content_lower = robots_content.lower()
+    ai_bots = ['gptbot', 'chatgpt-user', 'google-extended', 'claudebot', 'perplexitybot', 'applebot-extended']
+    blocked_bots = []
+    allowed_bots = []
+
+    lines = content_lower.split('\n')
+    current_agent = None
+    for line in lines:
+        line = line.strip()
+        if line.startswith('user-agent:'):
+            current_agent = line.split(':', 1)[1].strip()
+        elif line.startswith('disallow:') and current_agent:
+            path = line.split(':', 1)[1].strip()
+            if path == '/':
+                if current_agent == '*':
+                    blocked_bots = ai_bots[:]
+                    break
+                for bot in ai_bots:
+                    if bot in current_agent:
+                        blocked_bots.append(bot)
+        elif line.startswith('allow:') and current_agent:
+            path = line.split(':', 1)[1].strip()
+            if path == '/':
+                for bot in ai_bots:
+                    if bot in current_agent:
+                        allowed_bots.append(bot)
+
+    # Verifier aussi les balises "Disallow: /" globales (User-agent: *)
+    is_globally_blocked = False
+    current_agent = None
+    for line in lines:
+        line = line.strip()
+        if line.startswith('user-agent:'):
+            current_agent = line.split(':', 1)[1].strip()
+        elif line.startswith('disallow:') and current_agent == '*':
+            if line.split(':', 1)[1].strip() == '/':
+                is_globally_blocked = True
+
+    if is_globally_blocked and not allowed_bots:
+        return {
+            "accessible": False,
+            "details": "Disallow: / global (tous les bots bloques)",
+            "blocked_bots": ai_bots,
+            "allowed_bots": []
+        }
+
+    if blocked_bots:
+        return {
+            "accessible": False,
+            "details": f"Bots IA bloques: {', '.join(blocked_bots)}",
+            "blocked_bots": blocked_bots,
+            "allowed_bots": allowed_bots
+        }
+
+    return {
+        "accessible": True,
+        "details": "Aucun blocage detecte pour les crawlers IA",
+        "blocked_bots": [],
+        "allowed_bots": allowed_bots
+    }
+
+
+def _check_meta_robots(base_url):
+    """Verifie les balises meta robots de la page d'accueil"""
+    try:
+        r = requests.get(base_url, timeout=5)
+        soup = BeautifulSoup(r.text, 'html.parser')
+
+        meta_robots = soup.find('meta', attrs={'name': 'robots'})
+        meta_content = meta_robots.get('content', '').lower() if meta_robots else ''
+
+        noindex = 'noindex' in meta_content
+        nofollow = 'nofollow' in meta_content
+
+        # Verifier aussi les meta specifiques aux bots IA
+        ai_meta_tags = {}
+        for bot_name in ['googlebot', 'gptbot', 'claudebot']:
+            tag = soup.find('meta', attrs={'name': bot_name})
+            if tag:
+                ai_meta_tags[bot_name] = tag.get('content', '')
+
+        return {
+            "noindex": noindex,
+            "nofollow": nofollow,
+            "meta_content": meta_content,
+            "ai_meta_tags": ai_meta_tags,
+            "indexable": not noindex
+        }
+    except Exception:
+        return {
+            "noindex": False,
+            "nofollow": False,
+            "meta_content": "",
+            "ai_meta_tags": {},
+            "indexable": True  # Par defaut, on suppose indexable si erreur
+        }
+
+
+def _detect_api_subdomain(base_url, crawl_results=None):
+    """Detecte le sous-domaine API du site (via sniffer de liens et tentative directe)"""
+    parsed = urlparse(base_url)
+    domain = parsed.netloc.lower()
+
+    # Retirer le www. pour obtenir le domaine nu
+    base_domain = domain.replace('www.', '')
+
+    # Candidats API classiques
+    api_candidates = [
+        f"api.{base_domain}",
+        f"backend.{base_domain}",
+        f"data.{base_domain}",
+        f"rest.{base_domain}",
+        f"app.{base_domain}",
+    ]
+
+    # Sniffer: chercher des references API dans les pages crawlees
+    sniffed_apis = set()
+    if crawl_results:
+        for page in crawl_results:
+            html = page.get('html_content', '')
+            if html:
+                # Chercher des patterns API dans le code source
+                api_patterns = re.findall(
+                    r'https?://([a-zA-Z0-9\-]+\.' + re.escape(base_domain) + r')[/"\'\s]',
+                    html
+                )
+                for match in api_patterns:
+                    subdomain = match.lower()
+                    if subdomain != domain and subdomain != f"www.{base_domain}":
+                        sniffed_apis.add(subdomain)
+
+                # Chercher aussi les fetch/axios/XMLHttpRequest vers des sous-domaines
+                fetch_patterns = re.findall(
+                    r'(?:fetch|axios|api_url|apiUrl|API_BASE|baseURL|endpoint)[^"\']*["\']https?://([^/"\']+)',
+                    html, re.IGNORECASE
+                )
+                for match in fetch_patterns:
+                    if base_domain in match.lower():
+                        sniffed_apis.add(match.lower())
+
+    # Combiner: sniffed en priorite, puis candidats classiques
+    all_candidates = list(sniffed_apis) + [c for c in api_candidates if c not in sniffed_apis]
+
+    # Tester chaque candidat
+    for candidate in all_candidates:
+        try:
+            test_url = f"https://{candidate}"
+            r = requests.head(test_url, timeout=3, allow_redirects=True)
+            if r.status_code < 500:
+                return {
+                    "detected": True,
+                    "subdomain": candidate,
+                    "url": test_url,
+                    "source": "sniffer" if candidate in sniffed_apis else "deduction"
+                }
+        except Exception:
+            continue
+
+    return {"detected": False, "subdomain": None, "url": None, "source": None}
+
+
+def check_ai_accessibility(base_url, crawl_results=None):
+    """
+    Double verification de l'accessibilite IA :
+    1. Site Principal (Frontend) : robots.txt + balises meta
+    2. API Backend (si detectee) : robots.txt de l'API
+    Retourne un dictionnaire complet pour le rapport GEO.
+    """
+    result = {
+        "domain": urlparse(base_url).netloc,
+        "frontend": {},
+        "api": {},
+        "summary": {}
+    }
+
+    # === 1. VERIFICATION FRONTEND ===
+    # Robots.txt du site principal
+    try:
+        robots_url = f"{base_url.rstrip('/')}/robots.txt"
+        r = requests.get(robots_url, timeout=5)
+        if r.status_code == 200:
+            robots_content = r.text
+            robots_found = True
+        else:
+            robots_content = ""
+            robots_found = False
+    except Exception:
+        robots_content = ""
+        robots_found = False
+
+    robots_analysis = _parse_robots_txt(robots_content)
+    meta_analysis = _check_meta_robots(base_url)
+
+    # Determiner le statut global du frontend
+    frontend_open = robots_analysis["accessible"] and meta_analysis["indexable"]
+
+    result["frontend"] = {
+        "robots_found": robots_found,
+        "robots_analysis": robots_analysis,
+        "meta_analysis": meta_analysis,
+        "status": "OUVERT" if frontend_open else "FERME",
+        "robots_content": robots_content[:2000] if robots_content else ""
+    }
+
+    # === 2. VERIFICATION API BACKEND ===
+    api_info = _detect_api_subdomain(base_url, crawl_results)
+
+    if api_info["detected"]:
+        # Verifier le robots.txt de l'API
+        try:
+            api_robots_url = f"{api_info['url'].rstrip('/')}/robots.txt"
+            r = requests.get(api_robots_url, timeout=5)
+            if r.status_code == 200:
+                api_robots_content = r.text
+                api_robots_found = True
+            else:
+                api_robots_content = ""
+                api_robots_found = False
+        except Exception:
+            api_robots_content = ""
+            api_robots_found = False
+
+        api_robots_analysis = _parse_robots_txt(api_robots_content)
+        api_open = api_robots_analysis["accessible"]
+
+        result["api"] = {
+            "detected": True,
+            "subdomain": api_info["subdomain"],
+            "source": api_info["source"],
+            "robots_found": api_robots_found,
+            "robots_analysis": api_robots_analysis,
+            "status": "OUVERT" if api_open else "FERME",
+            "robots_content": api_robots_content[:2000] if api_robots_content else ""
+        }
+    else:
+        result["api"] = {
+            "detected": False,
+            "subdomain": None,
+            "source": None,
+            "robots_found": False,
+            "robots_analysis": {},
+            "status": "NON DETECTEE"
+        }
+
+    # === RESUME ===
+    result["summary"] = {
+        "site_accessible": result["frontend"]["status"],
+        "api_detected": result["api"]["detected"],
+        "api_accessible": result["api"]["status"],
+    }
+
+    return result
+
+
+# =============================================================================
+# 0.5 RAPPORT GEO & DATA VIA MISTRAL
+# =============================================================================
+
+def generate_geo_report(domain, accessibility_data):
+    """
+    Utilise l'API Mistral pour generer la conclusion de l'audit GEO.
+    Envoie le prompt systeme d'expert GEO avec les donnees d'accessibilite.
+    """
+    try:
+        api_key = st.secrets[MISTRAL_API_KEY_PATH]["api_key"]
+    except Exception:
+        return "Cle API Mistral manquante. Configurez st.secrets['mistral']['api_key'] dans ~/.streamlit/secrets.toml"
+
+    site_status = accessibility_data.get("frontend", {}).get("status", "INCONNU")
+    api_detected = "OUI" if accessibility_data.get("api", {}).get("detected", False) else "NON"
+    api_status = accessibility_data.get("api", {}).get("status", "NON DETECTEE")
+
+    system_prompt = (
+        "Agis comme un expert international en GEO (Generative Engine Optimization) "
+        "et en strategie de Donnees. Analyse la situation suivante pour le client "
+        f"[{domain}] :\n\n"
+        f"Accessibilite Site Web : [{site_status} via robots.txt]\n"
+        f"API Detectee : [{api_detected}]\n"
+        f"Accessibilite API : [{api_status}]\n\n"
+        "Redige un resume strategique court (3-4 phrases) pour le Directeur Marketing et le DSI. "
+        "Adopte le ton suivant :\n\n"
+        "Si tout est OUVERT : \"Excellent pour votre visibilite IA (GEO). Vos contenus seront "
+        "facilement repris par les LLMs. Attention cependant : votre API est aussi en libre acces, "
+        "ce qui facilite le clonage de vos donnees par des concurrents.\"\n\n"
+        "Si Site FERME mais API OUVERTE : \"Situation paradoxale. Vous bloquez les IA sur votre "
+        "vitrine, mais votre API laisse fuiter toutes vos donnees structurees. Vous perdez en "
+        "visibilite tout en etant vulnerable.\"\n\n"
+        "Si tout est FERME : \"Vous etes invisible pour les IA. C'est securise, mais vous "
+        "disparaissez des reponses de ChatGPT/Gemini.\"\n\n"
+        "Si Site OUVERT et API NON DETECTEE : \"Bonne configuration pour le SEO/GEO classique.\"\n\n"
+        "Sois professionnel, concis et oriente business."
+    )
+
+    user_prompt = (
+        f"Domaine audite : {domain}\n"
+        f"Accessibilite Site Web : {site_status}\n"
+        f"API Detectee : {api_detected}\n"
+        f"Accessibilite API : {api_status}\n\n"
+        "Genere le rapport strategique GEO & Data."
+    )
+
+    try:
+        report = _call_mistral(api_key, system_prompt, user_prompt, max_tokens=800)
+        return report
+    except Exception as e:
+        return f"Erreur lors de la generation du rapport Mistral : {e}"
+
+
+# =============================================================================
 # 1. FONCTIONS TECHNIQUES (SCORING & INFRA)
 # =============================================================================
 
@@ -438,6 +763,156 @@ def render_journal_duplicates(duplicate_log):
             f'... et {len(sorted_dupes) - 200} autres URLs</p>',
             unsafe_allow_html=True
         )
+
+
+# =============================================================================
+# 3.5. RAPPORT D'AUDIT GEO & DATA - ENCADRE VISIBLE
+# =============================================================================
+
+def render_ai_accessibility_panel(accessibility_data):
+    """Affiche le panneau de double verification accessibilite IA"""
+    if not accessibility_data:
+        return
+
+    frontend = accessibility_data.get("frontend", {})
+    api = accessibility_data.get("api", {})
+
+    # Statut Frontend
+    fe_status = frontend.get("status", "INCONNU")
+    fe_color = "#10b981" if fe_status == "OUVERT" else "#FF4B4B"
+
+    # Statut API
+    api_detected = api.get("detected", False)
+    api_status = api.get("status", "NON DETECTEE")
+    if api_status == "OUVERT":
+        api_color = "#FFA500"  # Orange = ouvert mais risque
+    elif api_status == "FERME":
+        api_color = "#10b981"
+    else:
+        api_color = "#94a3b8"  # Gris = non detectee
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown(
+            f'<div style="padding:24px;border:1px solid #e2e8f0;border-left:4px solid {fe_color};">'
+            f'<div style="font-size:0.6rem;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;'
+            f'color:#94a3b8;margin-bottom:12px;">SITE PRINCIPAL (FRONTEND)</div>'
+            f'<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">'
+            f'<span style="display:inline-block;padding:4px 14px;font-size:0.65rem;font-weight:800;'
+            f'letter-spacing:0.1em;background:{fe_color};color:#fff;">{fe_status}</span>'
+            f'<span style="font-size:0.75rem;color:#64748b;">via robots.txt</span>'
+            f'</div>'
+            f'<div style="font-size:0.8rem;color:#64748b;line-height:1.5;">'
+            f'{frontend.get("robots_analysis", {}).get("details", "Non analyse")}</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+
+        # Details meta robots
+        meta = frontend.get("meta_analysis", {})
+        if meta.get("noindex") or meta.get("nofollow") or meta.get("ai_meta_tags"):
+            details = []
+            if meta.get("noindex"):
+                details.append("noindex detecte")
+            if meta.get("nofollow"):
+                details.append("nofollow detecte")
+            for bot, content in meta.get("ai_meta_tags", {}).items():
+                details.append(f"meta {bot}: {content}")
+            if details:
+                st.markdown(
+                    f'<div style="padding:12px;background:#fafafa;border:1px solid #f1f5f9;margin-top:8px;">'
+                    f'<div style="font-size:0.7rem;font-weight:700;color:#94a3b8;margin-bottom:6px;">BALISES META</div>'
+                    f'<div style="font-size:0.75rem;color:#64748b;">{" | ".join(details)}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
+    with col2:
+        if api_detected:
+            st.markdown(
+                f'<div style="padding:24px;border:1px solid #e2e8f0;border-left:4px solid {api_color};">'
+                f'<div style="font-size:0.6rem;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;'
+                f'color:#94a3b8;margin-bottom:12px;">API BACKEND</div>'
+                f'<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">'
+                f'<span style="display:inline-block;padding:4px 14px;font-size:0.65rem;font-weight:800;'
+                f'letter-spacing:0.1em;background:{api_color};color:#fff;">{api_status}</span>'
+                f'<span style="font-size:0.75rem;color:#64748b;">via robots.txt API</span>'
+                f'</div>'
+                f'<div style="font-size:0.8rem;color:#64748b;line-height:1.5;">'
+                f'Sous-domaine : <strong>{api.get("subdomain", "")}</strong><br>'
+                f'Detection : {api.get("source", "")}<br>'
+                f'{api.get("robots_analysis", {}).get("details", "")}</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                f'<div style="padding:24px;border:1px solid #e2e8f0;border-left:4px solid {api_color};">'
+                f'<div style="font-size:0.6rem;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;'
+                f'color:#94a3b8;margin-bottom:12px;">API BACKEND</div>'
+                f'<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">'
+                f'<span style="display:inline-block;padding:4px 14px;font-size:0.65rem;font-weight:800;'
+                f'letter-spacing:0.1em;background:#94a3b8;color:#fff;">NON DETECTEE</span>'
+                f'</div>'
+                f'<div style="font-size:0.8rem;color:#94a3b8;font-style:italic;">Aucun sous-domaine API identifie '
+                f'(api.*, backend.*, data.*)</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
+
+def render_geo_report(base_url, accessibility_data):
+    """Affiche le rapport GEO & Data Mistral dans un encadre bien visible"""
+    if not base_url or not accessibility_data:
+        return
+
+    domain = urlparse(base_url).netloc
+
+    st.markdown(
+        '<p class="section-title">RAPPORT D\'AUDIT GEO & DATA</p>',
+        unsafe_allow_html=True
+    )
+    st.markdown(
+        '<p style="font-size:0.8rem;color:#94a3b8;font-style:italic;margin-bottom:24px;">'
+        'Double verification accessibilite IA (Frontend + API) et conclusion strategique Mistral</p>',
+        unsafe_allow_html=True
+    )
+
+    # Panel d'accessibilite
+    render_ai_accessibility_panel(accessibility_data)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Bouton pour generer le rapport Mistral
+    if st.button("GENERER LE RAPPORT STRATEGIQUE MISTRAL", key="btn_geo_report", use_container_width=True):
+        with st.spinner("Mistral analyse l'accessibilite IA et genere le rapport strategique..."):
+            report = generate_geo_report(domain, accessibility_data)
+            st.session_state["geo_ai_report"] = report
+
+    # Affichage du rapport dans un encadre visible
+    if "geo_ai_report" in st.session_state:
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Resume des statuts en haut du rapport
+        fe_status = accessibility_data.get("frontend", {}).get("status", "INCONNU")
+        api_detected = accessibility_data.get("api", {}).get("detected", False)
+        api_status = accessibility_data.get("api", {}).get("status", "NON DETECTEE")
+
+        st.markdown(
+            f'<div style="padding:32px;border:2px solid #0f172a;background:#fafafa;margin-top:8px;">'
+            f'<div style="font-size:0.65rem;font-weight:800;letter-spacing:0.25em;text-transform:uppercase;'
+            f'color:#0f172a;margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid #e2e8f0;">'
+            f'RAPPORT D\'AUDIT GEO & DATA</div>'
+            f'<div style="display:flex;gap:24px;margin-bottom:20px;">'
+            f'<span style="font-size:0.7rem;color:#64748b;">Site : <strong>{fe_status}</strong></span>'
+            f'<span style="font-size:0.7rem;color:#64748b;">API : <strong>{"OUI" if api_detected else "NON"}</strong></span>'
+            f'<span style="font-size:0.7rem;color:#64748b;">Acces API : <strong>{api_status}</strong></span>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+        st.markdown(st.session_state["geo_ai_report"])
+        st.markdown('</div>', unsafe_allow_html=True)
 
 
 # =============================================================================
@@ -923,6 +1398,10 @@ def render_audit_geo():
                     progress_callback=lambda m, v: bar.progress(v, m)
                 )
 
+                # Double verification accessibilite IA (Frontend + API)
+                bar.progress(0.95, "Verification accessibilite IA (Frontend + API)...")
+                ai_access = check_ai_accessibility(base_url, res)
+
                 st.session_state.update({
                     "results": res,
                     "clusters": scr.get_pattern_summary(),
@@ -931,7 +1410,8 @@ def render_audit_geo():
                     "current_ws": ws_in if ws_in else "Non classe",
                     "crawl_stats": stats.get('stats', {}),
                     "filtered_log": stats.get('filtered_log', []),
-                    "duplicate_log": stats.get('duplicate_log', [])
+                    "duplicate_log": stats.get('duplicate_log', []),
+                    "ai_accessibility": ai_access
                 })
                 st.rerun()
 
@@ -965,7 +1445,8 @@ def render_audit_geo():
                     "current_ws": selected_ws,
                     "crawl_stats": data.get('stats', {}),
                     "filtered_log": data.get('filtered_log', []),
-                    "duplicate_log": data.get('duplicate_log', [])
+                    "duplicate_log": data.get('duplicate_log', []),
+                    "ai_accessibility": data.get('ai_accessibility', {})
                 })
                 st.rerun()
 
@@ -1103,6 +1584,14 @@ def render_audit_geo():
 
         st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
 
+        # ========== 04.5 / RAPPORT D'AUDIT GEO & DATA ==========
+        render_geo_report(
+            st.session_state.get("target_url", ""),
+            st.session_state.get("ai_accessibility", {})
+        )
+
+        st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+
         # ========== MISTRAL OPTIMIZATION ==========
         render_mistral_optimization(st.session_state.get("target_url", ""))
 
@@ -1182,7 +1671,8 @@ def render_audit_geo():
                     "errors": st.session_state.crawl_stats.get('errors', 0),
                     "start_urls_count": st.session_state.crawl_stats.get('start_urls_count', 1)
                 },
-                "start_urls": st.session_state.get('start_urls', [st.session_state.target_url])[:5]
+                "start_urls": st.session_state.get('start_urls', [st.session_state.target_url])[:5],
+                "ai_accessibility": st.session_state.get('ai_accessibility', {})
             }
 
             if len(st.session_state.results) > max_pages_to_save:
