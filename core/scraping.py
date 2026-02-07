@@ -55,6 +55,10 @@ class SmartScraper:
             'queue_full_blocks': 0,
             'start_urls_count': len(self.start_urls)
         }
+
+        # Journaux détaillés (URLs réelles, pas juste les compteurs)
+        self.filtered_log = []   # [(url, motif)]
+        self.duplicate_log = []  # [url]
         
         # Filtres anti-bruit réduits (seulement les vrais parasites)
         self.exclude_patterns = [
@@ -129,9 +133,7 @@ class SmartScraper:
         """Vérifie si l'URL est pertinente"""
         for pattern in self.exclude_patterns:
             if pattern in url.lower():
-                # Debug: voir ce qui est filtré
-                if self.stats['links_filtered'] < 10:  # Log les 10 premiers seulement
-                    print(f"   🚫 Filtré: {url[:60]}... (motif: {pattern})")
+                self.filtered_log.append((url, pattern))
                 return False
         return True
 
@@ -289,6 +291,7 @@ class SmartScraper:
                     for link in data['links']:
                         if link in self.visited:
                             self.stats['links_duplicate'] += 1
+                            self.duplicate_log.append(link)
                         elif len(queue) >= 5000:
                             self.stats['queue_full_blocks'] += 1
                         else:
@@ -352,9 +355,11 @@ class SmartScraper:
             progress_callback(f"✅ Terminé: {self.stats['pages_crawled']} pages crawlées", 1.0)
         
         return self.results, {
-            "total_urls": len(self.results), 
+            "total_urls": len(self.results),
             "patterns": len(patterns),
-            "stats": self.stats
+            "stats": self.stats,
+            "filtered_log": self.filtered_log,
+            "duplicate_log": self.duplicate_log
         }
 
     def analyze_patterns(self, pages):
