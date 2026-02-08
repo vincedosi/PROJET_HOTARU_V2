@@ -1,0 +1,338 @@
+# =============================================================================
+# RSE & ECO-SCORE - HOTARU
+# Calculatrice d'impact carbone : réduction des tokens = sobriété numérique
+# =============================================================================
+
+import re
+import json
+
+import requests
+from bs4 import BeautifulSoup
+
+try:
+    import tiktoken
+    HAS_TIKTOKEN = True
+except ImportError:
+    HAS_TIKTOKEN = False
+
+try:
+    import trafilatura
+    HAS_TRAFILATURA = True
+except ImportError:
+    HAS_TRAFILATURA = False
+
+
+# Constantes physiques (ordre de grandeur)
+# E_Token : énergie moyenne (kWh) pour traiter 1000 tokens en inférence (NVIDIA H100)
+KWH_PER_1K_TOKENS = 0.0004
+# I_Carbone : intensité carbone moyenne mondiale (gCO2/kWh)
+GCO2_PER_KWH = 475
+# Équivalence : 1 recharge smartphone ~ 0.012 kWh
+KWH_PER_SMARTPHONE_CHARGE = 0.012
+
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+
+
+class EcoImpactCalculator:
+    """
+    Calcule l'économie de tokens et l'impact carbone
+    entre une page "brute" (HTML complet) et une page optimisée HOTARU (signal pur).
+    """
+
+    def __init__(self, timeout=15):
+        self.timeout = timeout
+        self.session = requests.Session()
+        self.session.headers.update({"User-Agent": USER_AGENT})
+        self._enc = None
+
+    def _get_encoding(self):
+        if not HAS_TIKTOKEN:
+            return None
+        if self._enc is None:
+            self._enc = tiktoken.get_encoding("cl100k_base")
+        return self._enc
+
+    def _count_tokens(self, text: str) -> int:
+        if not text or not HAS_TIKTOKEN:
+            return 0
+        enc = self._get_encoding()
+        return len(enc.encode(text))
+
+    def _fetch_html(self, url: str) -> str:
+        if not url.startswith(("http://", "https://")):
+            url = "https://" + url
+        r = self.session.get(url, timeout=self.timeout)
+        r.raise_for_status()
+        r.encoding = r.apparent_encoding or "utf-8"
+        return r.text
+
+    def get_dirty_tokens(self, url: str) -> int:
+        """
+        Récupère le HTML complet, extrait tout le texte visible (menu, footer, etc.)
+        et compte les tokens (poids cognitif "sale").
+        """
+        try:
+            html = self._fetch_html(url)
+        except requests.RequestException:
+            return 0
+        soup = BeautifulSoup(html, "html.parser")
+        for tag in soup(["script", "style", "noscript"]):
+            tag.decompose()
+        text = soup.get_text(separator=" ", strip=True)
+        text = re.sub(r"\s+", " ", text)
+        return self._count_tokens(text)
+
+    def _extract_jsonld(self, soup: BeautifulSoup) -> str:
+        out = []
+        for tag in soup.find_all("script", type="application/ld+json"):
+            if tag.string:
+                try:
+                    data = json.loads(tag.string)
+                    out.append(json.dumps(data, ensure_ascii=False))
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        return " ".join(out) if out else ""
+
+    def _extract_main_content(self, html: str, url: str) -> str:
+        if HAS_TRAFILATURA:
+            try:
+                main = trafilatura.extract(html, include_comments=False)
+                if main and len(main.strip()) > 100:
+                    return main.strip()
+            except Exception:
+                pass
+        soup = BeautifulSoup(html, "html.parser")
+        for tag in soup(["script", "style", "noscript"]):
+            tag.decompose()
+        main = soup.find("main") or soup.find("article") or soup.find("div", class_=re.compile(r"content|main|article", re.I))
+        if main:
+            return main.get_text(separator=" ", strip=True)
+        return soup.get_text(separator=" ", strip=True)
+
+    def get_clean_tokens(self, url: str) -> int:
+        """
+        Simule une extraction HOTARU : Titre + H1 + Contenu principal + JSON-LD.
+        Si pas de JSON-LD, on simule ~10% de la taille du texte brut comme "structure".
+        """
+        try:
+            html = self._fetch_html(url)
+        except requests.RequestException:
+            return 0
+        soup = BeautifulSoup(html, "html.parser")
+        for tag in soup(["script", "style", "noscript"]):
+            tag.decompose()
+
+        parts = []
+
+        title = soup.find("title")
+        if title and title.string:
+            parts.append(title.get_text(strip=True))
+
+        h1 = soup.find("h1")
+        if h1:
+            parts.append(h1.get_text(separator=" ", strip=True))
+
+        main_text = self._extract_main_content(html, url)
+        if main_text:
+            parts.append(main_text)
+
+        jsonld = self._extract_jsonld(soup)
+        if jsonld:
+            parts.append(jsonld)
+        else:
+            raw_len = len(" ".join(parts))
+            if raw_len > 0:
+                simulated_ld = " ".join(parts)[: max(100, raw_len // 10)]
+                parts.append(simulated_ld)
+
+        clean_text = " ".join(parts)
+        clean_text = re.sub(r"\s+", " ", clean_text)
+        return self._count_tokens(clean_text)
+
+    def calculate(self, url: str) -> dict:
+        """
+        Calcule l'économie : tokens, kWh, gCO2.
+        Renvoie un dictionnaire avec toutes les métriques + données pour le graphique.
+        """
+        if not HAS_TIKTOKEN:
+            return {
+                "error": "tiktoken non installé. Installez avec: pip install tiktoken",
+                "tokens_dirty": 0,
+                "tokens_clean": 0,
+                "tokens_saved": 0,
+                "kwh_saved": 0.0,
+                "co2_saved": 0.0,
+                "smartphone_charges": 0.0,
+            }
+        try:
+            tokens_dirty = self.get_dirty_tokens(url)
+            tokens_clean = self.get_clean_tokens(url)
+        except Exception as e:
+            return {
+                "error": str(e),
+                "tokens_dirty": 0,
+                "tokens_clean": 0,
+                "tokens_saved": 0,
+                "kwh_saved": 0.0,
+                "co2_saved": 0.0,
+                "smartphone_charges": 0.0,
+            }
+        tokens_saved = max(0, tokens_dirty - tokens_clean)
+        kwh_saved = (tokens_saved / 1000.0) * KWH_PER_1K_TOKENS
+        co2_saved = kwh_saved * GCO2_PER_KWH
+        smartphone_charges = kwh_saved / KWH_PER_SMARTPHONE_CHARGE if KWH_PER_SMARTPHONE_CHARGE else 0
+
+        return {
+            "error": None,
+            "tokens_dirty": tokens_dirty,
+            "tokens_clean": tokens_clean,
+            "tokens_saved": tokens_saved,
+            "kwh_saved": round(kwh_saved, 6),
+            "co2_saved": round(co2_saved, 2),
+            "smartphone_charges": round(smartphone_charges, 1),
+        }
+
+
+# =============================================================================
+# UI STREAMLIT (Calculatrice + Méthodologie)
+# =============================================================================
+
+def render_eco_tab():
+    """Onglet principal RSE & Eco-Score : Calculatrice + Méthodologie."""
+    import streamlit as st
+
+    st.markdown(
+        "<p class='section-title'>🌍 RSE & Eco-Score</p>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<p class='home-tagline' style='margin-bottom:1.5rem;'>"
+        "Sobriété numérique — Prouver que l'optimisation des données (JSON-LD, llms.txt) réduit la consommation d'énergie des IA.</p>",
+        unsafe_allow_html=True,
+    )
+
+    tab_calc, tab_methodo = st.tabs(["Calculatrice d'Impact", "Méthodologie Scientifique"])
+
+    with tab_calc:
+        _render_calculatrice()
+    with tab_methodo:
+        _render_methodologie()
+
+
+def _render_calculatrice():
+    import streamlit as st
+    import plotly.graph_objects as go
+
+    st.markdown("#### Calculatrice d'Impact Carbone")
+    url = st.text_input(
+        "URL du site web",
+        placeholder="https://www.example.com",
+        key="eco_impact_url",
+    )
+    if st.button("Simuler l'économie Carbone", type="primary", use_container_width=True, key="eco_btn"):
+        if not url or not url.strip():
+            st.warning("Veuillez saisir une URL.")
+            return
+        with st.spinner("Analyse du poids cognitif en cours..."):
+            calc = EcoImpactCalculator()
+            result = calc.calculate(url.strip())
+
+        if result.get("error"):
+            st.error(result["error"])
+            return
+
+        st.markdown("---")
+        st.markdown("##### Métriques clés")
+
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Tokens économisés", f"{result['tokens_saved']:,}")
+        with col2:
+            st.metric("Énergie épargnée (kWh)", f"{result['kwh_saved']:.6f}")
+        with col3:
+            st.metric("gCO₂ évité", f"{result['co2_saved']:.2f}")
+        with col4:
+            st.metric("Équivalence", f"~{result['smartphone_charges']:.0f} recharges smartphone")
+
+        st.markdown("##### Comparatif : Poids cognitif")
+        fig = go.Figure(
+            data=[
+                go.Bar(name="Poids cognitif actuel (brut)", x=["Tokens"], y=[result["tokens_dirty"]], marker_color="#e74c3c"),
+                go.Bar(name="Poids cognitif HOTARU (optimisé)", x=["Tokens"], y=[result["tokens_clean"]], marker_color="#27ae60"),
+            ]
+        )
+        fig.update_layout(
+            barmode="group",
+            template="plotly_white",
+            margin=dict(l=40, r=40, t=40, b=40),
+            height=320,
+            font=dict(size=12),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02),
+            xaxis_title="",
+            yaxis_title="Nombre de tokens",
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.markdown(
+            f"<p style='font-size:0.9rem; color: var(--text-muted);'>"
+            f"Ce gain équivaut à environ <strong>{result['smartphone_charges']:.0f} recharges de smartphone</strong>.</p>",
+            unsafe_allow_html=True,
+        )
+
+
+def _render_methodologie():
+    import streamlit as st
+
+    st.markdown("#### Méthodologie Scientifique")
+    st.markdown("---")
+
+    st.markdown("""
+## La Physique de la Donnée : Pourquoi structurer, c'est dépolluer
+
+### 1. Le Problème : L'Obésité Numérique et l'IA
+
+Les modèles de langage (LLM) comme **GPT-4** ou **Claude** ne « lisent » pas les pages web comme des humains. Ils doivent **tokeniser** (découper) le code brut.
+
+Un site web classique non optimisé est rempli de **bruit** :
+- balises HTML complexes,
+- scripts JS,
+- CSS in-line.
+
+**Conséquence :** Pour trouver une information simple (ex. le prix d'un produit), l'IA doit traiter des **milliers de tokens inutiles**.
+
+**Impact :** *Plus de tokens = Plus de cycles GPU = Plus d'électricité consommée.*
+
+---
+
+### 2. La Solution HOTARU : Le Signal Pur
+
+HOTARU restructure l'information via le **JSON-LD** et le format **llms.txt**. Nous éliminons le bruit pour ne garder que le **signal sémantique**.
+
+---
+
+### 3. La Formule d'Impact Carbone
+
+Notre calculatrice se base sur la réduction de la charge cognitive des serveurs d'inférence (Data Centers).
+
+$$
+\\Delta_{CO_2} = (Tokens_{Bruts} - Tokens_{Optimisés}) \\times E_{Token} \\times I_{Carbone}
+$$
+
+- **Tokens** : Unité de base de lecture des LLMs (env. 0,75 mot).
+- **E_Token** : Énergie moyenne pour traiter 1000 tokens (inférence NVIDIA H100).
+- **I_Carbone** : Intensité carbone moyenne mondiale du kWh.
+
+---
+
+### Conclusion
+
+En structurant vos données avec **HOTARU**, vous ne gagnez pas seulement en visibilité IA. Vous participez activement à la **Sobriété Numérique**.
+""")
+
+
+def render_eco_tab_standalone():
+    """Point d'entrée pour app.py."""
+    return render_eco_tab()

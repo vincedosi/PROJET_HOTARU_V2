@@ -10,3 +10,5 @@ google-auth
 scikit-learn
 selenium
 webdriver-manager==4.0.1
+tiktoken
+plotly

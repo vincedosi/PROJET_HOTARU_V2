@@ -1269,3 +1269,24 @@ pre, code {
         padding: 16px;
     }
 }
+
+/* =============================================================================
+   RSE & ECO-SCORE - DARK CYBERPUNK (visuel)
+   ============================================================================= */
+
+.eco-impact-wrapper {
+    background: linear-gradient(145deg, #0d1117 0%, #161b22 100%) !important;
+    border: 1px solid rgba(0, 255, 136, 0.25) !important;
+    border-radius: 0 !important;
+    padding: 24px !important;
+    margin-bottom: 24px !important;
+    box-shadow: 0 0 20px rgba(0, 255, 136, 0.08) !important;
+}
+
+.eco-metric-card {
+    background: rgba(22, 27, 34, 0.9) !important;
+    border: 1px solid rgba(0, 255, 136, 0.2) !important;
+    color: #e6edf3 !important;
+    padding: 16px !important;
+    border-radius: 0 !important;
+}

@@ -21,6 +21,7 @@ from modules.audit_geo import render_audit_geo
 from modules.authority_score import render_authority_score
 from modules.master import render_master_tab
 from modules.leaf import render_leaf_tab
+from modules.eco_impact import render_eco_tab
 
 # =============================================================================
 # VERSION (date + heure à chaque run / déploiement)
@@ -140,8 +141,8 @@ def main():
             st.rerun()
 
     # NAVIGATION
-    tab_home, tab_audit, tab_authority, tab_master, tab_leaf = st.tabs(
-        ["Home", "Audit", "Authority Score", "Master", "Leaf"]
+    tab_home, tab_audit, tab_authority, tab_master, tab_leaf, tab_eco = st.tabs(
+        ["Home", "Audit", "Authority Score", "Master", "Leaf", "🌍 RSE & Eco-Score"]
     )
 
     with tab_home:
@@ -158,6 +159,9 @@ def main():
 
     with tab_leaf:
         render_leaf_tab()
+
+    with tab_eco:
+        render_eco_tab()
 
     # FOOTER
     st.markdown(
