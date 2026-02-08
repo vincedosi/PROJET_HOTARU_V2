@@ -17,6 +17,12 @@ from collections import Counter
 from bs4 import BeautifulSoup
 
 try:
+    import trafilatura
+    HAS_TRAFILATURA = True
+except ImportError:
+    HAS_TRAFILATURA = False
+
+try:
     from sklearn.feature_extraction.text import TfidfVectorizer
     HAS_SKLEARN = True
 except ImportError:
@@ -408,10 +414,10 @@ class AuthorityScoreAnalyzer:
     # PILIER 3 : CITATION AUTHORITY (20%)
     # =========================================================================
     def _analyze_citation_authority(self):
-        """Evalue l'autorite de citation via signaux externes"""
+        """Evalue l'autorite de citation via signaux externes et signaux de confiance."""
         details = {
             "domain_mentions": 0,
-            "backlink_estimate": 0,
+            "trust_signals": 0,
             "wikipedia_references": 0,
             "social_presence": {},
         }
@@ -422,9 +428,16 @@ class AuthorityScoreAnalyzer:
         wiki_refs = self._count_wikipedia_references()
         details["wikipedia_references"] = wiki_refs
 
-        # 2. Estimation des backlinks via CommonCrawl index (gratuit)
-        backlink_score = self._estimate_backlink_authority(domain)
-        details["backlink_estimate"] = backlink_score
+        # 2. Signaux de confiance (page d'accueil) — remplace l'ancienne estimation backlinks
+        soup_home = None
+        try:
+            r = self.session.get(self.website_url, timeout=HTTP_TIMEOUT)
+            if r.status_code == 200:
+                soup_home = BeautifulSoup(r.text, "html.parser")
+        except Exception:
+            pass
+        trust_score = self._analyze_trust_signals(domain, soup_home)
+        details["trust_signals"] = trust_score
 
         # 3. Presence sociale / mentions
         social = self._check_social_presence()
@@ -432,10 +445,10 @@ class AuthorityScoreAnalyzer:
 
         # Score composite
         wiki_component = min(40, wiki_refs * 10)
-        backlink_component = min(40, backlink_score)
+        trust_component = min(40, trust_score)
         social_component = min(20, sum(1 for v in social.values() if v) * 5)
 
-        score = min(100, wiki_component + backlink_component + social_component)
+        score = min(100, wiki_component + trust_component + social_component)
 
         return {"score": score, "details": details}
 
@@ -462,36 +475,49 @@ class AuthorityScoreAnalyzer:
         except Exception:
             return 0
 
-    def _estimate_backlink_authority(self, domain):
-        """Estime l'autorite des backlinks via des signaux indirects"""
+    def _analyze_trust_signals(self, domain, soup):
+        """
+        Score de confiance (sur 40 pts) basé sur les éléments de réassurance
+        sur la page d'accueil. soup peut être None (retourne 0).
+        """
+        if soup is None:
+            return 0
+
         score = 0
-        try:
-            # Verifier la page d'accueil et ses indicateurs
-            r = self.session.get(self.website_url, timeout=HTTP_TIMEOUT)
-            if r.status_code == 200:
-                soup = BeautifulSoup(r.text, "html.parser")
+        html_lower = soup.get_text().lower() if soup else ""
+        all_links = " ".join(
+            (a.get("href") or "") + " " + (a.get_text() or "")
+            for a in soup.find_all("a", href=True)
+        ).lower()
 
-                # Liens externes entrants mentionnes (hreflang, canonical, etc.)
-                canonical = soup.find("link", rel="canonical")
-                if canonical:
-                    score += 10
+        # +10 pts : Mentions Légales / Politique de confidentialité
+        legal_patterns = [
+            "mentions", "legal", "légal", "confidentialité", "privacy",
+            "terms", "conditions", "cgv", "cgu", "mentions-legales",
+        ]
+        if any(p in all_links or p in html_lower for p in legal_patterns):
+            score += 10
 
-                # Presence de hreflang (signe d'un site international)
-                hreflangs = soup.find_all("link", rel="alternate", hreflang=True)
-                if hreflangs:
-                    score += min(15, len(hreflangs) * 3)
+        # +10 pts : Contact / À propos
+        contact_patterns = ["contact", "about", "propos", "nous-contacter", "a-propos"]
+        if any(p in all_links or p in html_lower for p in contact_patterns):
+            score += 10
 
-                # Presence de schema Organization avec sameAs (liens sociaux)
-                for script in soup.find_all("script", type="application/ld+json"):
-                    try:
-                        ld = json.loads(script.string or "{}")
-                        same_as = ld.get("sameAs", [])
-                        if isinstance(same_as, list) and same_as:
-                            score += min(15, len(same_as) * 3)
-                    except (json.JSONDecodeError, TypeError):
-                        pass
-        except Exception:
-            pass
+        # +10 pts : Email visible (mailto: ou pattern textuel)
+        email_re = re.compile(
+            r"(?:mailto:)?[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",
+            re.IGNORECASE,
+        )
+        if email_re.search(html_lower) or email_re.search(all_links):
+            score += 10
+
+        # +10 pts : Téléphone visible (format intl ou local)
+        phone_re = re.compile(
+            r"(?:\+33|0)[\s.-]?[1-9](?:[\s.-]?\d{2}){4}|"
+            r"\+?\d{1,4}[\s.-]?\(?\d{2,3}\)?[\s.-]?\d{2}[\s.-]?\d{2}[\s.-]?\d{2}",
+        )
+        if phone_re.search(html_lower) or phone_re.search(all_links):
+            score += 10
 
         return min(40, score)
 
@@ -577,15 +603,20 @@ class AuthorityScoreAnalyzer:
         return " ".join(texts)
 
     def _extract_text_from_url(self, url):
-        """Extrait le texte d'une URL"""
+        """Extrait le contenu principal propre (trafilatura), fallback soup.get_text()."""
         try:
             if not url.startswith("http"):
                 url = "https://" + url
             r = self.session.get(url, timeout=HTTP_TIMEOUT)
             if r.status_code != 200:
                 return ""
+            text = None
+            if HAS_TRAFILATURA:
+                text = trafilatura.extract(r.text)
+            if text and text.strip():
+                return text.strip()
+            # Fallback : ancienne méthode (soup sans nav/footer/header)
             soup = BeautifulSoup(r.text, "html.parser")
-            # Retirer les scripts et styles
             for tag in soup(["script", "style", "nav", "footer", "header"]):
                 tag.decompose()
             return soup.get_text(separator=" ", strip=True)
@@ -1176,7 +1207,7 @@ def _render_authority_analyse_content():
         with col1:
             st.metric("REFERENCES WIKIPEDIA", ca_d.get("wikipedia_references", 0))
         with col2:
-            st.metric("SCORE BACKLINKS", ca_d.get("backlink_estimate", 0))
+            st.metric("SIGNALUX DE CONFIANCE", ca_d.get("trust_signals", 0))
 
         social = ca_d.get("social_presence", {})
         if social:

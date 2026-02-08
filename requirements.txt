@@ -4,6 +4,7 @@ networkx
 requests
 beautifulsoup4
 lxml
+trafilatura
 gspread
 google-auth
 scikit-learn
