@@ -47,16 +47,6 @@ def render_methodologie_for_module(module_key: str):
         st.info("Méthodologie non définie pour ce module.")
         return
 
-    st.markdown("""
-    <style>
-        .methodo-container { max-width: 900px; margin: auto; padding: 20px; }
-        .methodo-title { font-size: 1.8rem; font-weight: 900; letter-spacing: -0.04em; margin-bottom: 0.2rem; color: rgb(168, 27, 35); border-bottom: 2px solid rgb(168, 27, 35); padding-bottom: 8px; }
-        .methodo-subtitle { font-size: 0.95rem; color: rgba(0,0,0,0.5); margin-bottom: 2rem; font-weight: 400; text-transform: uppercase; letter-spacing: 0.1em; }
-        .methodo-header { font-size: 1rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: rgb(168, 27, 35); margin-bottom: 1rem; border-bottom: 2px solid rgb(168, 27, 35); padding-bottom: 6px; width: fit-content; }
-        .methodo-text { font-size: 0.95rem; color: #000; line-height: 1.6; margin-bottom: 1.5rem; }
-    </style>
-    """, unsafe_allow_html=True)
-
     st.markdown('<div class="methodo-container">', unsafe_allow_html=True)
     st.markdown(f'<div class="methodo-title">{content["title"]}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="methodo-subtitle">{content["subtitle"]}</div>', unsafe_allow_html=True)

@@ -18,7 +18,7 @@
     --bg: #FFFFFF;
     --bg-dark: #0A0A0A;
     --text: #000000;
-    --text-muted: rgba(0, 0, 0, 0.4);
+    --text-muted: rgba(0, 0, 0, 0.5);
     --text-secondary: rgba(0, 0, 0, 0.55);
     --border: #000000;
     --border-light: rgba(0, 0, 0, 0.12);
@@ -26,6 +26,16 @@
     --surface: #FFFFFF;
     --surface-hover: #FAFAFA;
     --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    /* Spacing scale (4px base) */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-10: 40px;
+    --space-12: 48px;
 }
 
 /* =============================================================================
@@ -78,8 +88,8 @@ a:hover {
 
 /* Main container */
 .block-container {
-    padding-top: 1rem !important;
-    padding-bottom: 4rem !important;
+    padding-top: var(--space-4) !important;
+    padding-bottom: var(--space-12) !important;
     max-width: 95% !important;
 }
 
@@ -190,6 +200,11 @@ hr, .stDivider {
     background-color: transparent !important;
 }
 
+.stTabs [data-baseweb="tab"]:focus-visible {
+    outline: 2px solid var(--primary) !important;
+    outline-offset: 2px !important;
+}
+
 /* Tab highlight indicator */
 .stTabs [data-baseweb="tab-highlight"] {
     background-color: var(--primary) !important;
@@ -234,6 +249,11 @@ hr, .stDivider {
     box-shadow: none !important;
     border-color: var(--primary) !important;
     outline: none !important;
+}
+
+.stButton > button:focus-visible {
+    outline: 2px solid var(--primary) !important;
+    outline-offset: 2px !important;
 }
 
 .stButton > button:active {
@@ -348,6 +368,11 @@ button[kind="primary"]:hover,
     outline: none !important;
 }
 
+.stTextInput > div > div > input:focus-visible {
+    outline: 2px solid var(--primary) !important;
+    outline-offset: 2px !important;
+}
+
 .stTextInput > div > div > input::placeholder {
     color: var(--text-muted) !important;
     font-weight: 400 !important;
@@ -376,6 +401,11 @@ button[kind="primary"]:hover,
 .stTextArea > div > div > textarea:focus {
     border-color: var(--primary) !important;
     box-shadow: none !important;
+}
+
+.stTextArea > div > div > textarea:focus-visible {
+    outline: 2px solid var(--primary) !important;
+    outline-offset: 2px !important;
 }
 
 /* Input labels */
@@ -679,12 +709,12 @@ pre, code {
     color: var(--bg);
     font-size: 0.6rem;
     font-weight: 800;
-    padding: 3px 10px;
+    padding: var(--space-1) var(--space-3);
     letter-spacing: 0.05em;
     vertical-align: middle;
-    margin-right: 12px;
+    margin-right: var(--space-3);
     line-height: 1.4;
-    border-radius: 6px;
+    border-radius: 0;
     border: 2px solid var(--bg);
     box-shadow: 0 0 0 1px var(--border-light);
 }
@@ -700,19 +730,19 @@ pre, code {
     display: block;
 }
 
-/* --- SECTION TITLE (01 / IDENTIFICATION) - Rouge Hotaru, pas de cadre gris --- */
+/* --- SECTION TITLE (01 / IDENTIFICATION) - Rouge Hotaru --- */
 .section-title {
     font-size: 1.1rem;
     font-weight: 800;
     letter-spacing: 0.15em;
     text-transform: uppercase;
-    color: rgb(168, 27, 35) !important;
-    margin-bottom: 20px;
-    padding-bottom: 8px;
-    border-bottom: 2px solid rgb(168, 27, 35);
+    color: var(--hotaru-red) !important;
+    margin-bottom: var(--space-6);
+    padding-bottom: var(--space-2);
+    border-bottom: 2px solid var(--hotaru-red);
     display: inline-flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-3);
 }
 
 /* --- SECTION CONTAINER (bordered box) - pas de rectangles noirs --- */
@@ -998,8 +1028,22 @@ pre, code {
 .infra-desc {
     font-size: 0.8rem;
     color: var(--text-secondary);
-    margin-top: 6px;
+    margin-top: var(--space-2);
     line-height: 1.5;
+}
+
+/* Grade badge (cercle couleur dans les tableaux Audit) */
+.grade-badge-circle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 6px;
+    font-size: 0.65rem;
+    font-weight: 800;
+    border-radius: 0;
+    box-sizing: border-box;
 }
 
 /* =============================================================================
@@ -1014,22 +1058,35 @@ pre, code {
 
 .methodo-title {
     font-family: var(--font);
-    font-size: 3rem;
+    font-size: 1.8rem;
     font-weight: 900;
     font-style: italic;
-    letter-spacing: -0.05em;
-    margin-bottom: 0.3rem;
-    color: var(--text);
+    letter-spacing: -0.04em;
+    margin-bottom: var(--space-2);
+    color: var(--hotaru-red);
     text-transform: uppercase;
+    border-bottom: 2px solid var(--hotaru-red);
+    padding-bottom: var(--space-2);
 }
 
 .methodo-subtitle {
-    font-size: 0.7rem;
-    font-weight: 600;
+    font-size: 0.95rem;
+    font-weight: 400;
     color: var(--text-muted);
-    margin-bottom: 4rem;
+    margin-bottom: var(--space-6);
     text-transform: uppercase;
-    letter-spacing: 0.2em;
+    letter-spacing: 0.1em;
+}
+
+/* Audit GEO méthodo : grand titre hero */
+.methodo-container--audit .methodo-title {
+    font-size: 3rem;
+    margin-bottom: 0.2rem;
+}
+
+.methodo-container--audit .methodo-subtitle {
+    font-size: 1.1rem;
+    margin-bottom: var(--space-10);
 }
 
 .methodo-header {
@@ -1037,11 +1094,18 @@ pre, code {
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.15em;
-    color: rgb(168, 27, 35) !important;
-    margin-bottom: 2rem;
-    border-bottom: 2px solid rgb(168, 27, 35);
-    padding-bottom: 8px;
+    color: var(--hotaru-red) !important;
+    margin-bottom: var(--space-6);
+    border-bottom: 2px solid var(--hotaru-red);
+    padding-bottom: var(--space-2);
     width: fit-content;
+}
+
+.methodo-text {
+    font-size: 0.95rem;
+    color: var(--text);
+    line-height: 1.6;
+    margin-bottom: var(--space-5);
 }
 
 .methodo-card {
@@ -1098,8 +1162,10 @@ pre, code {
 .methodo-dot {
     height: 10px;
     width: 10px;
+    min-width: 10px;
+    border-radius: 50%;
     display: inline-block;
-    margin-right: 10px;
+    margin-right: var(--space-3);
 }
 
 .methodo-tips {
@@ -1133,9 +1199,9 @@ pre, code {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 0;
+    padding: var(--space-3) 0;
     border-bottom: 1px solid var(--border);
-    margin-bottom: 24px;
+    margin-bottom: var(--space-6);
 }
 
 .hotaru-header-left {
@@ -1195,9 +1261,9 @@ pre, code {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 24px;
-    padding: 16px 0;
-    margin-top: 48px;
+    gap: var(--space-6);
+    padding: var(--space-4) 0;
+    margin-top: var(--space-12);
     border-top: 1px solid var(--border-light);
     font-size: 0.6rem;
     font-weight: 600;

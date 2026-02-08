@@ -1199,29 +1199,8 @@ def render_interactive_graph(G, show_health=False):
 # =============================================================================
 
 def render_methodologie():
-    """Methodologie Hotaru"""
-
-    st.markdown("""
-    <style>
-        .methodo-container { max-width: 900px; margin: auto; padding: 20px; }
-        .methodo-title { font-size: 3rem; font-weight: 900; letter-spacing: -0.04em; margin-bottom: 0.2rem; color: rgb(168, 27, 35); border-bottom: 2px solid rgb(168, 27, 35); padding-bottom: 8px; }
-        .methodo-subtitle { font-size: 1.1rem; color: rgba(0,0,0,0.5); margin-bottom: 4rem; font-weight: 400; text-transform: uppercase; letter-spacing: 0.1em; }
-        .methodo-header { font-size: 1.1rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.15em; color: rgb(168, 27, 35); margin-bottom: 2rem; border-bottom: 2px solid rgb(168, 27, 35); padding-bottom: 8px; width: fit-content; }
-        .methodo-card { background: #ffffff; border: 1px solid #e2e8f0; padding: 30px; margin-bottom: -1px; transition: all 0.2s ease; }
-        .methodo-card:hover { background: #f8fafc; z-index: 10; position: relative; }
-        .methodo-badge { font-size: 0.65rem; font-weight: 800; color: #64748b; border: 1px solid #e2e8f0; padding: 2px 8px; margin-bottom: 15px; display: inline-block; }
-        .methodo-grade-row { display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid #f1f5f9; }
-        .methodo-grade-letter { font-weight: 800; font-size: 1.2rem; }
-        .methodo-grade-range { font-family: monospace; color: #64748b; }
-        .methodo-health { border: 1px solid #000; padding: 40px; margin: 50px 0; background: #fff; }
-        .methodo-dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; margin-right: 10px; }
-        .methodo-tips { list-style: none; padding: 0; }
-        .methodo-tips li { padding: 15px 0; border-bottom: 1px solid #f1f5f9; color: #000; font-size: 1rem; display: flex; align-items: center; }
-        .methodo-tips li::before { content: ""; width: 12px; height: 1px; background: #000; margin-right: 20px; }
-    </style>
-    """, unsafe_allow_html=True)
-
-    st.markdown('<div class="methodo-container">', unsafe_allow_html=True)
+    """Methodologie Hotaru (styles dans assets/style.css)."""
+    st.markdown('<div class="methodo-container methodo-container--audit">', unsafe_allow_html=True)
     st.markdown('<div class="methodo-title">METHODOLOGIE HOTARU</div>', unsafe_allow_html=True)
     st.markdown('<div class="methodo-subtitle">2026 Framework</div>', unsafe_allow_html=True)
 
