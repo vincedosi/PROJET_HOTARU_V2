@@ -1,4 +1,4 @@
-# HOTARU 蛍
+# HOTARU
 
 **Application SaaS d'Audit SEO GEO avec Intelligence Artificielle**
 
@@ -187,4 +187,4 @@ MIT License - Libre d'utilisation et de modification.
 
 ---
 
-**HOTARU** 蛍 - *Éclairer votre SEO comme une luciole dans la nuit*
+**HOTARU** - *Éclairer votre SEO comme une luciole dans la nuit*

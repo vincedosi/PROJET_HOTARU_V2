@@ -14,6 +14,7 @@
 /* --- CSS VARIABLES --- */
 :root {
     --primary: #000000;
+    --hotaru-red: rgb(168, 27, 35);
     --bg: #FFFFFF;
     --bg-dark: #0A0A0A;
     --text: #000000;
@@ -359,11 +360,15 @@ button[kind="primary"]:hover {
     margin-bottom: 4px !important;
 }
 
-/* Selectbox */
+/* Selectbox - texte lisible (fond clair, texte noir) */
 .stSelectbox > div > div {
     border: 1px solid var(--border-light) !important;
     border-radius: 0 !important;
     background: var(--bg) !important;
+    color: var(--text) !important;
+}
+.stSelectbox [data-baseweb="select"] span {
+    color: var(--text) !important;
 }
 
 .stSelectbox > div > div:focus-within {
@@ -417,6 +422,12 @@ button[kind="primary"]:hover {
     border: 1px solid var(--border-light) !important;
     border-radius: 0 !important;
     padding: 16px !important;
+}
+/* Espace entre l'icône chevron et le texte dans les expanders (ex: tableau GRADES PAGES) */
+.streamlit-expanderHeader svg,
+[data-testid="stExpander"] summary svg {
+    margin-right: 12px !important;
+    vertical-align: middle !important;
 }
 
 .streamlit-expanderHeader:hover {
@@ -639,16 +650,16 @@ pre, code {
     display: block;
 }
 
-/* --- SECTION TITLE (01 / IDENTIFICATION) - Harmonisé: noir, souligné, taille augmentée --- */
+/* --- SECTION TITLE (01 / IDENTIFICATION) - Rouge Hotaru, pas de cadre gris --- */
 .section-title {
     font-size: 1.1rem;
     font-weight: 800;
     letter-spacing: 0.15em;
     text-transform: uppercase;
-    color: #000000 !important;
+    color: rgb(168, 27, 35) !important;
     margin-bottom: 20px;
     padding-bottom: 8px;
-    border-bottom: 2px solid #000000;
+    border-bottom: 2px solid rgb(168, 27, 35);
     display: inline-flex;
     align-items: center;
     gap: 10px;
@@ -953,9 +964,9 @@ pre, code {
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.15em;
-    color: #000000 !important;
+    color: rgb(168, 27, 35) !important;
     margin-bottom: 2rem;
-    border-bottom: 2px solid #000000;
+    border-bottom: 2px solid rgb(168, 27, 35);
     padding-bottom: 8px;
     width: fit-content;
 }

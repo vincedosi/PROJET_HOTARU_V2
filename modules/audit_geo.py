@@ -661,9 +661,10 @@ def render_journal_crawled(results):
 
                 st.markdown(
                     f'<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #f1f5f9;">'
-                    f'<span style="background:{col};color:#fff;padding:2px 8px;font-size:0.65rem;font-weight:800;'
-                    f'min-width:32px;text-align:center;letter-spacing:0.05em;">{grade}</span>'
-                    f'<a href="{url}" target="_blank" style="font-size:0.85rem;font-weight:600;color:#0f172a;'
+                    f'<span class="grade-badge-circle" style="background:{col};color:#fff;border:2px solid #fff;'
+                    f'width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;'
+                    f'font-size:0.65rem;font-weight:800;letter-spacing:0.05em;flex-shrink:0;">{grade}</span>'
+                    f'<a href="{url}" target="_blank" style="font-size:0.85rem;font-weight:600;color:#0f172a;margin-left:8px;'
                     f'text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"'
                     f' onmouseover="this.style.borderBottom=\'1px solid #0f172a\'"'
                     f' onmouseout="this.style.borderBottom=\'none\'">{title}</a>'
@@ -1202,9 +1203,9 @@ def render_methodologie():
     st.markdown("""
     <style>
         .methodo-container { max-width: 900px; margin: auto; padding: 20px; }
-        .methodo-title { font-size: 3rem; font-weight: 900; letter-spacing: -0.04em; margin-bottom: 0.2rem; color: #000; border-bottom: 2px solid #000; padding-bottom: 8px; }
-        .methodo-subtitle { font-size: 1.1rem; color: #94a3b8; margin-bottom: 4rem; font-weight: 400; text-transform: uppercase; letter-spacing: 0.1em; }
-        .methodo-header { font-size: 1.1rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.15em; color: #000; margin-bottom: 2rem; border-bottom: 2px solid #000; padding-bottom: 8px; width: fit-content; }
+        .methodo-title { font-size: 3rem; font-weight: 900; letter-spacing: -0.04em; margin-bottom: 0.2rem; color: rgb(168, 27, 35); border-bottom: 2px solid rgb(168, 27, 35); padding-bottom: 8px; }
+        .methodo-subtitle { font-size: 1.1rem; color: rgba(0,0,0,0.5); margin-bottom: 4rem; font-weight: 400; text-transform: uppercase; letter-spacing: 0.1em; }
+        .methodo-header { font-size: 1.1rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.15em; color: rgb(168, 27, 35); margin-bottom: 2rem; border-bottom: 2px solid rgb(168, 27, 35); padding-bottom: 8px; width: fit-content; }
         .methodo-card { background: #ffffff; border: 1px solid #e2e8f0; padding: 30px; margin-bottom: -1px; transition: all 0.2s ease; }
         .methodo-card:hover { background: #f8fafc; z-index: 10; position: relative; }
         .methodo-badge { font-size: 0.65rem; font-weight: 800; color: #64748b; border: 1px solid #e2e8f0; padding: 2px 8px; margin-bottom: 15px; display: inline-block; }
@@ -1314,25 +1315,31 @@ def render_methodologie():
 def render_audit_geo():
     db = AuditDatabase()
     user_email = st.session_state.user_email
+    all_audits = db.load_user_audits(user_email)
+
+    ws_list = []
+    for a in all_audits:
+        ws_name = str(a.get('workspace', '')).strip()
+        if ws_name and ws_name not in ws_list:
+            ws_list.append(ws_name)
+    if not ws_list:
+        ws_list = ["Nouveau"]
+    else:
+        ws_list = sorted(ws_list) + ["+ Creer Nouveau"]
+
+    # Workspace en haut de la fenêtre principale (pas dans la sidebar)
+    selected_ws = st.selectbox(
+        "Projets (Workspace)",
+        ws_list,
+        key="audit_workspace_select",
+        help="Choisissez le projet / workspace pour filtrer les audits.",
+    )
+    filtered_audits = [a for a in all_audits if str(a.get('workspace', '')).strip() == selected_ws]
 
     tab1, tab2 = st.tabs(["Audit Site", "Methodologie"])
 
     # ========================== TAB 1 : AUDIT ==========================
     with tab1:
-        all_audits = db.load_user_audits(user_email)
-
-        ws_list = []
-        for a in all_audits:
-            ws_name = str(a.get('workspace', '')).strip()
-            if ws_name and ws_name not in ws_list:
-                ws_list.append(ws_name)
-
-        if not ws_list: ws_list = ["Nouveau"]
-        else: ws_list = sorted(ws_list) + ["+ Creer Nouveau"]
-
-        selected_ws = st.sidebar.selectbox("Projets (Workspaces)", ws_list)
-        filtered_audits = [a for a in all_audits if str(a.get('workspace', '')).strip() == selected_ws]
-
         # =================================================================
         # ZONE DE SCAN
         # =================================================================
@@ -1763,4 +1770,5 @@ def render_audit_geo():
 
     # ========================== TAB 2 : METHODOLOGIE ==========================
     with tab2:
-        render_methodologie()
+        with st.container():
+            render_methodologie()

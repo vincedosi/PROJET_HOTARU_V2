@@ -16,8 +16,8 @@ from modules.leaf import render_leaf_tab
 # =============================================================================
 # VERSION
 # =============================================================================
-VERSION = "3.0.0"
-BUILD_DATE = "2026-02-06"
+VERSION = "3.0.1"
+BUILD_DATE = "2026-02-08"
 
 # =============================================================================
 # CONFIGURATION
@@ -52,7 +52,7 @@ def main():
             st.markdown("<div style='padding-top: 80px;'></div>", unsafe_allow_html=True)
             st.markdown(
                 '<div style="display:flex;align-items:center;gap:12px;margin-bottom:32px;">'
-                '<div class="hotaru-header-logo">蛍</div>'
+                '<div class="hotaru-header-logo">H</div>'
                 '<span class="hotaru-header-brand">HOTARU</span>'
                 '</div>',
                 unsafe_allow_html=True,
@@ -77,7 +77,7 @@ def main():
     st.markdown(
         f'<div class="hotaru-header">'
         f'<div class="hotaru-header-left">'
-        f'<div class="hotaru-header-logo">蛍</div>'
+        f'<div class="hotaru-header-logo">H</div>'
         f'<span class="hotaru-header-brand">HOTARU</span>'
         f'</div>'
         f'<div class="hotaru-header-right">'
@@ -116,7 +116,7 @@ def main():
     # FOOTER
     st.markdown(
         f'<div class="hotaru-footer">'
-        f'<span>蛍 HOTARU ENTITY FORGE V2</span>'
+        f'<span>HOTARU ENTITY FORGE V2</span>'
         f'<span>|</span>'
         f'<span>VERSION {VERSION}</span>'
         f'<span>|</span>'
