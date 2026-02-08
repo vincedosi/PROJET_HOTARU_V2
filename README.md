@@ -2,7 +2,7 @@
 
 **SaaS d'audit et d'optimisation pour le web lisible par l'IA**
 
-HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority Index, Master Data (JSON-LD entité), LEAF (JSON-LD par page), RSE & Eco-Score. Multi-utilisateurs avec isolation stricte des données par utilisateur.
+HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority Index, Master Data (JSON-LD entité), LEAF (JSON-LD par page), Eco-Score. Multi-utilisateurs avec isolation stricte des données par utilisateur.
 
 ---
 
@@ -12,7 +12,7 @@ HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority I
 - **Authority Score** : indice de probabilité de citation par les LLMs (5 piliers : Knowledge Graph, Structured Data, Citation Authority, Semantic Completeness, Content Freshness).
 - **Master** : données d’entité (Wikidata + Mistral), génération JSON-LD Organization.
 - **Leaf** : JSON-LD par page, prédictions IA.
-- **RSE & Eco-Score** : calculatrice d’impact carbone (tokens économisés, kWh, gCO₂) et méthodologie scientifique.
+- **Eco-Score** : calculatrice d’impact carbone (tokens économisés, kWh, gCO₂) et méthodologie scientifique.
 
 **Design :** Fond blanc, noir + rouge `rgb(168, 27, 35)`. Titres de section au format `XX / TITRE`, rouge souligné.
 
@@ -42,7 +42,7 @@ PROJET_HOTARU_V2/
 │   ├── authority_score.py      # Authority Score (Analyse | Méthodologie)
 │   ├── master.py               # Master Data (Données | Méthodologie)
 │   ├── leaf.py                 # LEAF Builder (Builder | Méthodologie)
-│   ├── eco_impact.py           # RSE & Eco-Score (Calculatrice | Méthodologie)
+│   ├── eco_impact.py           # Eco-Score (Calculatrice | Méthodologie)
 │   ├── methodologie_blocks.py  # Contenu Méthodologie réutilisable
 │   └── geo_scoring.py          # Scoring GEO
 ├── requirements.txt
@@ -62,7 +62,7 @@ PROJET_HOTARU_V2/
 
 ## Navigation
 
-**Onglets principaux (app.py) :** Home | Audit | Authority Score | Master | Leaf | 🌍 RSE & Eco-Score
+**Onglets principaux (app.py) :** Home | Audit | Authority Score | Master | Leaf | Eco-Score
 
 **Sous-onglets par module :** Chaque module métier a deux sous-onglets (ex. Audit Site | Méthodologie). La Méthodologie est soit dédiée (Audit), soit fournie par `methodologie_blocks.render_methodologie_for_module("authority"|"master"|"leaf")`.
 
@@ -111,7 +111,7 @@ streamlit run app.py
 
 - [x] Navigation SaaS, isolation par user_email
 - [x] Smart Scraping (patterns, SmartScraper), fetch_page
-- [x] Audit GEO, Authority Score, Master, Leaf, RSE & Eco-Score
+- [x] Audit GEO, Authority Score, Master, Leaf, Eco-Score
 - [x] Onglets Méthodologie, design harmonisé
 - [ ] Onglet Paramètres (profil, préférences)
 - [ ] Vault : clés API chiffrées par utilisateur

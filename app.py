@@ -142,7 +142,7 @@ def main():
 
     # NAVIGATION
     tab_home, tab_audit, tab_authority, tab_master, tab_leaf, tab_eco = st.tabs(
-        ["Home", "Audit", "Authority Score", "Master", "Leaf", "🌍 RSE & Eco-Score"]
+        ["Home", "Audit", "Authority Score", "Master", "Leaf", "Eco-Score"]
     )
 
     with tab_home:

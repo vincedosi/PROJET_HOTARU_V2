@@ -1,5 +1,5 @@
 # =============================================================================
-# RSE & ECO-SCORE - HOTARU
+# ECO-SCORE - HOTARU
 # Calculatrice d'impact carbone : réduction des tokens = sobriété numérique
 # =============================================================================
 
@@ -181,11 +181,11 @@ class EcoImpactCalculator:
 # =============================================================================
 
 def render_eco_tab():
-    """Onglet principal RSE & Eco-Score : Calculatrice + Méthodologie."""
+    """Onglet principal Eco-Score : Calculatrice + Méthodologie."""
     import streamlit as st
 
     st.markdown(
-        "<p class='section-title'>🌍 RSE & Eco-Score</p>",
+        "<p class='section-title'>Eco-Score</p>",
         unsafe_allow_html=True,
     )
     st.markdown(

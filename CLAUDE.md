@@ -4,7 +4,7 @@
 
 Ce fichier centralise les instructions pour l’agent (Cursor/Claude). Toute la doc projet (architecture, SaaS, structure, conventions, roadmap) est dans **README.md**. Consulter README.md pour :
 
-- Vision produit et modules (Audit, Authority, Master, Leaf, RSE & Eco-Score)
+- Vision produit et modules (Audit, Authority, Master, Leaf, Eco-Score)
 - Structure du repo et rôles des fichiers
 - Logique SaaS (auth, session_keys, isolation user_email)
 - Navigation et onglets
