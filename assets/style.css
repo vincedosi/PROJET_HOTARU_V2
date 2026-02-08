@@ -237,12 +237,12 @@ hr, .stDivider {
     color: var(--bg) !important;
 }
 
-/* Primary button */
+/* Primary button - texte BLANC (ex: VISUALISER) */
 .stButton > button[kind="primary"],
 .stButton > button[data-testid="stFormSubmitButton"],
 button[kind="primary"] {
     background: var(--primary) !important;
-    color: var(--bg) !important;
+    color: #FFFFFF !important;
     border: 1px solid var(--primary) !important;
     border-radius: 0 !important;
     font-weight: 700 !important;
@@ -588,6 +588,15 @@ pre, code {
     border-radius: 0 !important;
 }
 
+/* Alignement icônes (ex: arrow_right) dans les cellules de tableau */
+.stDataFrame svg,
+.stDataFrame [data-testid="stDataFrame"] svg,
+[data-testid="stDataFrame"] td svg,
+[data-testid="stDataFrame"] th svg {
+    vertical-align: middle !important;
+    display: inline-block;
+}
+
 /* =============================================================================
    15. MULTISELECT
    ============================================================================= */
@@ -614,6 +623,9 @@ pre, code {
     vertical-align: middle;
     margin-right: 12px;
     line-height: 1.4;
+    border-radius: 6px;
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 0 1px var(--border-light);
 }
 
 /* --- LABEL CAPS --- */
@@ -627,17 +639,17 @@ pre, code {
     display: block;
 }
 
-/* --- SECTION TITLE (01 / IDENTIFICATION) --- */
+/* --- SECTION TITLE (01 / IDENTIFICATION) - Harmonisé: noir, souligné, taille augmentée --- */
 .section-title {
-    font-size: 0.65rem;
+    font-size: 1.1rem;
     font-weight: 800;
-    letter-spacing: 0.25em;
+    letter-spacing: 0.15em;
     text-transform: uppercase;
-    color: var(--text-secondary);
+    color: #000000 !important;
     margin-bottom: 20px;
-    padding-bottom: 0;
-    border-bottom: none;
-    display: flex;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #000000;
+    display: inline-flex;
     align-items: center;
     gap: 10px;
 }
@@ -937,13 +949,13 @@ pre, code {
 }
 
 .methodo-header {
-    font-size: 0.65rem;
+    font-size: 1.1rem;
     font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.25em;
-    color: var(--text);
+    letter-spacing: 0.15em;
+    color: #000000 !important;
     margin-bottom: 2rem;
-    border-bottom: 2px solid var(--primary);
+    border-bottom: 2px solid #000000;
     padding-bottom: 8px;
     width: fit-content;
 }

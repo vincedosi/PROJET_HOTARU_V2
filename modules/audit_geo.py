@@ -1202,9 +1202,9 @@ def render_methodologie():
     st.markdown("""
     <style>
         .methodo-container { max-width: 900px; margin: auto; padding: 20px; }
-        .methodo-title { font-size: 2.8rem; font-weight: 800; letter-spacing: -0.04em; margin-bottom: 0.2rem; color: #000; }
+        .methodo-title { font-size: 3rem; font-weight: 900; letter-spacing: -0.04em; margin-bottom: 0.2rem; color: #000; border-bottom: 2px solid #000; padding-bottom: 8px; }
         .methodo-subtitle { font-size: 1.1rem; color: #94a3b8; margin-bottom: 4rem; font-weight: 400; text-transform: uppercase; letter-spacing: 0.1em; }
-        .methodo-header { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.2em; color: #000; margin-bottom: 2rem; border-bottom: 2px solid #000; padding-bottom: 8px; width: fit-content; }
+        .methodo-header { font-size: 1.1rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.15em; color: #000; margin-bottom: 2rem; border-bottom: 2px solid #000; padding-bottom: 8px; width: fit-content; }
         .methodo-card { background: #ffffff; border: 1px solid #e2e8f0; padding: 30px; margin-bottom: -1px; transition: all 0.2s ease; }
         .methodo-card:hover { background: #f8fafc; z-index: 10; position: relative; }
         .methodo-badge { font-size: 0.65rem; font-weight: 800; color: #64748b; border: 1px solid #e2e8f0; padding: 2px 8px; margin-bottom: 15px; display: inline-block; }
@@ -1432,7 +1432,7 @@ def render_audit_geo():
             col1, col2 = st.columns([3, 1])
             choice = col1.selectbox("Charger un audit", list(audit_labels.keys()), label_visibility="collapsed")
 
-            if col2.button("VISUALISER", use_container_width=True):
+            if col2.button("VISUALISER", use_container_width=True, type="primary"):
                 r = audit_labels[choice]
                 raw_data = zlib.decompress(base64.b64decode(r['data_compressed'])).decode('utf-8')
                 data = json.loads(raw_data)
