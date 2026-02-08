@@ -1,184 +1,1167 @@
 /* =============================================================================
-   HOTARU v2 - Design System (Single Source of Truth)
+   HOTARU v3 - BRUTALIST MONOCHROME DESIGN SYSTEM
+   "What doesn't serve the purpose disappears"
+   Palette: #000000 / #FFFFFF / #0A0A0A
+   Typography: Inter - Uppercase - Wide tracking
+   Shapes: Square (border-radius: 0)
+   Borders: 1px solid black - No shadows
    ============================================================================= */
 
+/* --- FONTS & ICONS --- */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
 
-/* --- RESET GLOBAL --- */
-html, body, [class*="css"], .stMarkdown, p, div {
-    font-family: 'Inter', sans-serif !important;
-    color: #0f172a;
+/* --- CSS VARIABLES --- */
+:root {
+    --primary: #000000;
+    --bg: #FFFFFF;
+    --bg-dark: #0A0A0A;
+    --text: #000000;
+    --text-muted: rgba(0, 0, 0, 0.4);
+    --text-secondary: rgba(0, 0, 0, 0.55);
+    --border: #000000;
+    --border-light: rgba(0, 0, 0, 0.12);
+    --border-muted: rgba(0, 0, 0, 0.08);
+    --surface: #FFFFFF;
+    --surface-hover: #FAFAFA;
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-/* --- STRUCTURE --- */
+/* =============================================================================
+   1. GLOBAL RESET & BASE
+   ============================================================================= */
+
+html, body, [class*="css"], .stMarkdown, p, div, span, label, input, textarea, select, button, a {
+    font-family: var(--font) !important;
+    color: var(--text);
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font) !important;
+    color: var(--text) !important;
+    font-weight: 900 !important;
+    text-transform: uppercase;
+    letter-spacing: -0.03em;
+}
+
+h1 {
+    font-style: italic !important;
+    letter-spacing: -0.05em !important;
+}
+
+p, li {
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+
+a {
+    color: var(--text) !important;
+    text-decoration: none !important;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s ease;
+}
+
+a:hover {
+    border-bottom-color: var(--primary) !important;
+}
+
+::selection {
+    background: var(--primary);
+    color: var(--bg);
+}
+
+/* =============================================================================
+   2. STREAMLIT STRUCTURE OVERRIDES
+   ============================================================================= */
+
+/* Main container */
 .block-container {
-    padding-top: 1.5rem !important;
-    padding-bottom: 5rem;
+    padding-top: 1rem !important;
+    padding-bottom: 4rem !important;
     max-width: 95% !important;
 }
 
-/* --- NAVIGATION (st.tabs) --- */
+/* Hide Streamlit chrome */
+#MainMenu { visibility: hidden !important; }
+header[data-testid="stHeader"] { visibility: hidden !important; height: 0 !important; }
+footer { visibility: hidden !important; }
+.stDeployButton { display: none !important; }
+[data-testid="manage-app-button"] { display: none !important; }
+
+/* Remove all default Streamlit decoration */
+.stApp {
+    background-color: var(--bg) !important;
+}
+
+/* Dividers */
+hr, .stDivider {
+    border-color: var(--border-light) !important;
+}
+
+/* =============================================================================
+   3. SIDEBAR - MONOCHROME
+   ============================================================================= */
+
+[data-testid="stSidebar"] {
+    background-color: var(--bg) !important;
+    border-right: 1px solid var(--border) !important;
+}
+
+[data-testid="stSidebar"] .block-container {
+    padding-top: 2rem !important;
+}
+
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--text-muted);
+}
+
+[data-testid="stSidebar"] .stSelectbox > div > div {
+    border: 1px solid var(--border) !important;
+    border-radius: 0 !important;
+    background: var(--bg) !important;
+}
+
+[data-testid="stSidebar"] .stButton > button {
+    background: var(--primary) !important;
+    color: var(--bg) !important;
+    border: none !important;
+    border-radius: 0 !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.1em !important;
+    font-size: 0.7rem !important;
+    padding: 10px 16px !important;
+    width: 100% !important;
+    text-align: left !important;
+}
+
+[data-testid="stSidebar"] .stButton > button:hover {
+    background: var(--bg-dark) !important;
+    color: var(--bg) !important;
+}
+
+/* Collapse button */
+[data-testid="stSidebar"] [data-testid="collapsedControl"] {
+    color: var(--text) !important;
+}
+
+/* =============================================================================
+   4. NAVIGATION TABS
+   ============================================================================= */
+
 .stTabs [data-baseweb="tab-list"] {
-    gap: 24px;
-    background-color: transparent;
-    border-bottom: 1px solid #f1f5f9;
+    gap: 0 !important;
+    background-color: transparent !important;
+    border-bottom: 1px solid var(--border) !important;
+    padding: 0 !important;
 }
 
 .stTabs [data-baseweb="tab"] {
-    height: 45px;
+    height: 48px !important;
     background-color: transparent !important;
     border: none !important;
-    color: #64748b !important;
-    font-weight: 500 !important;
-    font-size: 0.95rem !important;
-    transition: all 0.2s ease;
+    border-bottom: 2px solid transparent !important;
+    border-radius: 0 !important;
+    color: var(--text-muted) !important;
+    font-weight: 600 !important;
+    font-size: 0.7rem !important;
+    letter-spacing: 0.15em !important;
+    text-transform: uppercase !important;
+    padding: 0 20px !important;
+    transition: all 0.15s ease !important;
+    white-space: nowrap !important;
+}
+
+.stTabs [data-baseweb="tab"]:hover {
+    color: var(--text) !important;
+    background-color: transparent !important;
 }
 
 .stTabs [aria-selected="true"] {
-    color: #000000 !important;
-    border-bottom: 2px solid #000000 !important;
+    color: var(--text) !important;
+    border-bottom: 2px solid var(--primary) !important;
+    font-weight: 700 !important;
+    background-color: transparent !important;
 }
 
-/* --- BOUTONS --- */
-.stButton>button {
-    border-radius: 6px;
-    border: 1px solid #e2e8f0;
-    font-weight: 500;
-    transition: all 0.2s;
+/* Tab highlight indicator */
+.stTabs [data-baseweb="tab-highlight"] {
+    background-color: var(--primary) !important;
 }
 
-.stButton>button:hover {
-    border-color: #000;
-    color: #000;
+/* Sub-tabs (nested) */
+.stTabs .stTabs [data-baseweb="tab-list"] {
+    border-bottom: 1px solid var(--border-light) !important;
 }
 
-/* --- INPUTS ZEN --- */
-.stTextInput > div > div > input,
-.stTextArea > div > div > textarea {
-    border: 1px solid #e5e5e5 !important;
+/* =============================================================================
+   5. BUTTONS - BRUTALIST SQUARE
+   ============================================================================= */
+
+/* Default button (secondary) */
+.stButton > button {
+    border: 1px solid var(--border) !important;
     border-radius: 0 !important;
-    font-size: 0.9rem !important;
-    padding: 12px 16px !important;
+    background: transparent !important;
+    color: var(--text) !important;
+    font-weight: 700 !important;
+    font-size: 0.65rem !important;
+    letter-spacing: 0.15em !important;
+    text-transform: uppercase !important;
+    padding: 12px 24px !important;
+    transition: all 0.2s ease !important;
+    box-shadow: none !important;
+    min-height: 44px !important;
 }
 
-.stTextInput > div > div > input:focus,
-.stTextArea > div > div > textarea:focus {
-    border-color: #000000 !important;
+.stButton > button:hover {
+    background: var(--primary) !important;
+    color: var(--bg) !important;
+    border-color: var(--primary) !important;
     box-shadow: none !important;
 }
 
-/* --- MASTER TAB : ZEN DESIGN SYSTEM --- */
-.zen-card {
-    background: #ffffff;
-    border: 1px solid #e5e5e5;
-    padding: 32px;
-    margin-bottom: 24px;
-    transition: all 0.2s ease;
+.stButton > button:focus {
+    box-shadow: none !important;
+    border-color: var(--primary) !important;
+    outline: none !important;
 }
 
-.zen-card:hover {
-    border-color: #000000;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+.stButton > button:active {
+    background: var(--bg-dark) !important;
+    color: var(--bg) !important;
 }
 
-.zen-title {
-    font-size: 3rem;
-    font-weight: 900;
-    letter-spacing: -0.02em;
-    text-transform: uppercase;
-    line-height: 1;
-    margin-bottom: 8px;
+/* Primary button */
+.stButton > button[kind="primary"],
+.stButton > button[data-testid="stFormSubmitButton"],
+button[kind="primary"] {
+    background: var(--primary) !important;
+    color: var(--bg) !important;
+    border: 1px solid var(--primary) !important;
+    border-radius: 0 !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.1em !important;
+    text-transform: uppercase !important;
 }
 
-.zen-subtitle {
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: #666;
-    margin-bottom: 32px;
+.stButton > button[kind="primary"]:hover,
+button[kind="primary"]:hover {
+    background: var(--bg-dark) !important;
+    border-color: var(--bg-dark) !important;
 }
 
+/* Form submit buttons */
+.stFormSubmitButton > button {
+    background: var(--primary) !important;
+    color: var(--bg) !important;
+    border: 1px solid var(--primary) !important;
+    border-radius: 0 !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.1em !important;
+    text-transform: uppercase !important;
+}
+
+.stFormSubmitButton > button:hover {
+    background: var(--bg-dark) !important;
+}
+
+/* Download button */
+.stDownloadButton > button {
+    border: 1px solid var(--border) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: var(--text) !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.15em !important;
+    text-transform: uppercase !important;
+    font-size: 0.65rem !important;
+}
+
+.stDownloadButton > button:hover {
+    background: var(--primary) !important;
+    color: var(--bg) !important;
+}
+
+/* Toggle */
+.stToggle label {
+    font-size: 0.7rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.1em !important;
+}
+
+/* =============================================================================
+   6. INPUTS - UNDERLINE STYLE
+   ============================================================================= */
+
+/* Text inputs */
+.stTextInput > div > div > input {
+    border: 1px solid var(--border-light) !important;
+    border-radius: 0 !important;
+    background: var(--bg) !important;
+    font-size: 0.85rem !important;
+    font-weight: 400 !important;
+    padding: 10px 12px !important;
+    color: var(--text) !important;
+    transition: border-color 0.2s ease !important;
+}
+
+.stTextInput > div > div > input:focus {
+    border-color: var(--primary) !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+.stTextInput > div > div > input::placeholder {
+    color: var(--text-muted) !important;
+    font-weight: 400 !important;
+    text-transform: uppercase !important;
+    font-size: 0.8rem !important;
+    letter-spacing: 0.05em !important;
+}
+
+/* Text areas */
+.stTextArea > div > div > textarea {
+    border: 1px solid var(--border-light) !important;
+    border-radius: 0 !important;
+    background: var(--bg) !important;
+    font-size: 0.85rem !important;
+    padding: 10px 12px !important;
+    color: var(--text) !important;
+    resize: vertical !important;
+}
+
+.stTextArea > div > div > textarea:focus {
+    border-color: var(--primary) !important;
+    box-shadow: none !important;
+}
+
+/* Input labels */
+.stTextInput > label,
+.stTextArea > label,
+.stSelectbox > label,
+.stMultiSelect > label,
+.stDateInput > label,
+.stTimeInput > label,
+.stNumberInput > label,
+.stSlider > label {
+    font-size: 0.6rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.2em !important;
+    color: var(--text-muted) !important;
+    margin-bottom: 4px !important;
+}
+
+/* Selectbox */
+.stSelectbox > div > div {
+    border: 1px solid var(--border-light) !important;
+    border-radius: 0 !important;
+    background: var(--bg) !important;
+}
+
+.stSelectbox > div > div:focus-within {
+    border-color: var(--primary) !important;
+    box-shadow: none !important;
+}
+
+[data-baseweb="select"] {
+    border-radius: 0 !important;
+}
+
+[data-baseweb="select"] > div {
+    border-radius: 0 !important;
+}
+
+/* Select slider */
+.stSlider > div > div > div {
+    color: var(--text) !important;
+}
+
+[data-baseweb="slider"] [role="slider"] {
+    background: var(--primary) !important;
+    border-radius: 0 !important;
+    width: 16px !important;
+    height: 16px !important;
+}
+
+[data-baseweb="slider"] [data-testid="stTickBarMin"],
+[data-baseweb="slider"] [data-testid="stTickBarMax"] {
+    font-size: 0.7rem !important;
+    font-weight: 700 !important;
+}
+
+/* Number input */
+.stNumberInput > div > div > input {
+    border: 1px solid var(--border-light) !important;
+    border-radius: 0 !important;
+}
+
+/* =============================================================================
+   7. EXPANDER - MONOCHROME
+   ============================================================================= */
+
+.streamlit-expanderHeader {
+    font-size: 0.7rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.15em !important;
+    color: var(--text) !important;
+    background: var(--bg) !important;
+    border: 1px solid var(--border-light) !important;
+    border-radius: 0 !important;
+    padding: 16px !important;
+}
+
+.streamlit-expanderHeader:hover {
+    border-color: var(--primary) !important;
+    color: var(--text) !important;
+}
+
+[data-testid="stExpander"] {
+    border: 1px solid var(--border-light) !important;
+    border-radius: 0 !important;
+    overflow: hidden;
+}
+
+[data-testid="stExpander"] summary {
+    font-size: 0.7rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.15em !important;
+    padding: 16px !important;
+}
+
+[data-testid="stExpander"] summary:hover {
+    color: var(--text) !important;
+}
+
+[data-testid="stExpander"] [data-testid="stExpanderDetails"] {
+    border-top: 1px solid var(--border-light) !important;
+    padding: 16px !important;
+}
+
+/* =============================================================================
+   8. METRICS - BRUTALIST
+   ============================================================================= */
+
+[data-testid="stMetric"] {
+    background: var(--bg) !important;
+    border: 1px solid var(--border-light) !important;
+    padding: 16px !important;
+    border-radius: 0 !important;
+}
+
+[data-testid="stMetric"] [data-testid="stMetricLabel"] {
+    font-size: 0.6rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.2em !important;
+    color: var(--text-muted) !important;
+}
+
+[data-testid="stMetric"] [data-testid="stMetricValue"] {
+    font-size: 2rem !important;
+    font-weight: 900 !important;
+    color: var(--text) !important;
+}
+
+/* =============================================================================
+   9. ALERTS & TOASTS - MONOCHROME
+   ============================================================================= */
+
+/* Success */
+.stSuccess, [data-testid="stAlert"][data-type="success"] {
+    background: var(--bg) !important;
+    border: 1px solid var(--primary) !important;
+    border-radius: 0 !important;
+    color: var(--text) !important;
+}
+
+/* Warning */
+.stWarning, [data-testid="stAlert"][data-type="warning"] {
+    background: var(--bg) !important;
+    border: 1px solid var(--text-muted) !important;
+    border-left: 3px solid var(--primary) !important;
+    border-radius: 0 !important;
+    color: var(--text) !important;
+}
+
+/* Error */
+.stError, [data-testid="stAlert"][data-type="error"] {
+    background: var(--bg) !important;
+    border: 1px solid var(--primary) !important;
+    border-left: 3px solid var(--primary) !important;
+    border-radius: 0 !important;
+    color: var(--text) !important;
+}
+
+/* Info */
+.stInfo, [data-testid="stAlert"][data-type="info"] {
+    background: var(--bg) !important;
+    border: 1px solid var(--border-light) !important;
+    border-radius: 0 !important;
+    color: var(--text) !important;
+}
+
+/* Toast */
+[data-testid="stToast"] {
+    background: var(--primary) !important;
+    color: var(--bg) !important;
+    border-radius: 0 !important;
+    border: none !important;
+}
+
+/* =============================================================================
+   10. PROGRESS BAR - BLACK
+   ============================================================================= */
+
+.stProgress > div > div > div {
+    background-color: var(--primary) !important;
+    border-radius: 0 !important;
+}
+
+.stProgress > div > div {
+    background-color: var(--border-muted) !important;
+    border-radius: 0 !important;
+}
+
+/* Spinner */
+.stSpinner > div > div {
+    border-top-color: var(--primary) !important;
+}
+
+/* =============================================================================
+   11. CODE BLOCKS - MONOCHROME
+   ============================================================================= */
+
+.stCodeBlock, [data-testid="stCode"] {
+    border-radius: 0 !important;
+    border: 1px solid var(--border-light) !important;
+}
+
+pre, code {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace !important;
+    border-radius: 0 !important;
+}
+
+/* Caption */
+.stCaption, [data-testid="stCaptionContainer"] {
+    font-size: 0.65rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.1em !important;
+    color: var(--text-muted) !important;
+    text-transform: uppercase !important;
+}
+
+/* =============================================================================
+   12. FORMS
+   ============================================================================= */
+
+[data-testid="stForm"] {
+    border: 1px solid var(--border-light) !important;
+    border-radius: 0 !important;
+    padding: 24px !important;
+    background: var(--bg) !important;
+}
+
+/* =============================================================================
+   13. IMAGE / LOGO
+   ============================================================================= */
+
+[data-testid="stImage"] {
+    border-radius: 0 !important;
+}
+
+/* =============================================================================
+   14. DATA FRAMES / TABLES
+   ============================================================================= */
+
+.stDataFrame {
+    border: 1px solid var(--border-light) !important;
+    border-radius: 0 !important;
+}
+
+/* =============================================================================
+   15. MULTISELECT
+   ============================================================================= */
+
+.stMultiSelect [data-baseweb="tag"] {
+    background: var(--primary) !important;
+    color: var(--bg) !important;
+    border-radius: 0 !important;
+}
+
+/* =============================================================================
+   HOTARU DESIGN TOKENS - CUSTOM CLASSES
+   ============================================================================= */
+
+/* --- STEP BADGE (01, 02, 03...) --- */
+.step-badge {
+    display: inline-block;
+    background: var(--primary);
+    color: var(--bg);
+    font-size: 0.6rem;
+    font-weight: 800;
+    padding: 3px 10px;
+    letter-spacing: 0.05em;
+    vertical-align: middle;
+    margin-right: 12px;
+    line-height: 1.4;
+}
+
+/* --- LABEL CAPS --- */
+.label-caps {
+    font-size: 0.6rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.2em !important;
+    color: var(--text-muted) !important;
+    margin-bottom: 4px;
+    display: block;
+}
+
+/* --- SECTION TITLE (01 / IDENTIFICATION) --- */
 .section-title {
     font-size: 0.65rem;
     font-weight: 800;
-    letter-spacing: 0.3em;
+    letter-spacing: 0.25em;
     text-transform: uppercase;
-    color: #999;
-    margin-bottom: 16px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid #f0f0f0;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+    padding-bottom: 0;
+    border-bottom: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
-.status-badge {
-    display: inline-block;
-    padding: 6px 16px;
+/* --- SECTION CONTAINER (bordered box) --- */
+.section-container {
+    border: 1px solid var(--border);
+    padding: 2rem;
+    background: var(--bg);
+    margin-bottom: 24px;
+}
+
+/* --- SECTION HEADER (black bar with icon and title) --- */
+.section-header {
+    background: var(--primary);
+    color: var(--bg);
+    padding: 12px 20px;
     font-size: 0.65rem;
     font-weight: 800;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.25em;
     text-transform: uppercase;
-    border: 1px solid;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 0;
 }
 
-.status-complete { background: #000; color: #fff; border-color: #000; }
-.status-partial  { background: #fff; color: #000; border-color: #000; }
-.status-failed   { background: #f5f5f5; color: #666; border-color: #ccc; }
+.section-header .material-symbols-outlined,
+.section-header .icon {
+    font-size: 18px;
+}
 
+/* --- ZEN CARD (main container) --- */
+.zen-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 32px;
+    margin-bottom: 24px;
+    transition: border-color 0.2s ease;
+}
+
+.zen-card:hover {
+    border-color: var(--primary);
+    box-shadow: none;
+}
+
+/* --- ZEN TITLE (MASTER DATA) --- */
+.zen-title {
+    font-family: var(--font) !important;
+    font-size: 3.5rem;
+    font-weight: 900;
+    font-style: italic;
+    letter-spacing: -0.05em;
+    text-transform: uppercase;
+    line-height: 1;
+    margin-bottom: 8px;
+    color: var(--text);
+}
+
+/* --- ZEN SUBTITLE --- */
+.zen-subtitle {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 40px;
+}
+
+/* --- ZEN LOGO --- */
+.zen-logo {
+    width: 48px;
+    height: 48px;
+    background: var(--primary);
+    color: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 1.2rem;
+    margin-bottom: 24px;
+}
+
+/* --- ZEN DIVIDER --- */
+.zen-divider {
+    height: 1px;
+    background: var(--border-light);
+    margin: 48px 0;
+}
+
+/* --- ZEN METRIC --- */
 .zen-metric {
     text-align: center;
-    padding: 24px;
-    border: 1px solid #e5e5e5;
+    padding: 28px 20px;
+    border: 1px solid var(--border-light);
+    transition: border-color 0.2s ease;
+}
+
+.zen-metric:hover {
+    border-color: var(--primary);
 }
 
 .zen-metric-value {
     font-size: 3rem;
     font-weight: 900;
     line-height: 1;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
+    color: var(--text);
 }
 
 .zen-metric-label {
-    font-size: 0.65rem;
+    font-size: 0.6rem;
     font-weight: 700;
     letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: #999;
+    color: var(--text-muted);
 }
 
-.zen-divider {
+/* --- STATUS BADGES --- */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 18px;
+    font-size: 0.6rem;
+    font-weight: 800;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    border: 1px solid var(--border);
+}
+
+.status-complete {
+    background: var(--primary);
+    color: var(--bg);
+    border-color: var(--primary);
+}
+
+.status-partial {
+    background: var(--bg);
+    color: var(--text);
+    border-color: var(--border);
+}
+
+.status-failed {
+    background: var(--surface-hover);
+    color: var(--text-secondary);
+    border-color: var(--border-light);
+}
+
+/* =============================================================================
+   HOME PAGE CLASSES
+   ============================================================================= */
+
+.home-container {
+    max-width: 900px;
+    margin: auto;
+    padding: 40px 20px;
+}
+
+.home-hero {
+    font-family: var(--font);
+    font-size: 4rem;
+    font-weight: 900;
+    font-style: italic;
+    letter-spacing: -0.05em;
+    line-height: 1;
+    margin-bottom: 1.5rem;
+    color: var(--text);
+    text-transform: uppercase;
+}
+
+.home-tagline {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    margin-bottom: 3rem;
+    line-height: 1.7;
+    max-width: 600px;
+    font-weight: 400;
+}
+
+.home-section {
+    font-size: 0.6rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.25em;
+    color: var(--text-muted);
+    margin-bottom: 1.5rem;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.home-feature {
+    border: 1px solid var(--border-light);
+    padding: 32px;
+    margin-bottom: -1px;
+    transition: all 0.15s ease;
+}
+
+.home-feature:hover {
+    border-color: var(--primary);
+    background: var(--surface-hover);
+}
+
+.home-feature-title {
+    font-weight: 800;
+    font-size: 0.85rem;
+    margin-bottom: 8px;
+    color: var(--text);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.home-feature-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.home-feature-tag {
+    font-size: 0.55rem;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+}
+
+.home-divider {
     height: 1px;
-    background: #e5e5e5;
-    margin: 48px 0;
+    background: var(--border-light);
+    margin: 3rem 0;
 }
 
-.zen-logo {
-    width: 48px;
-    height: 48px;
-    background: #000;
-    color: #fff;
+/* =============================================================================
+   AUDIT PAGE CLASSES
+   ============================================================================= */
+
+.infra-box {
+    padding: 16px;
+    border-left: 2px solid var(--primary);
+    margin-bottom: 8px;
+    background: var(--surface-hover);
+    border-radius: 0;
+}
+
+.status-ok {
+    color: var(--text);
+    font-weight: 800;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.status-err {
+    color: var(--text);
+    font-weight: 800;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.infra-desc {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-top: 6px;
+    line-height: 1.5;
+}
+
+/* =============================================================================
+   METHODOLOGIE PAGE CLASSES
+   ============================================================================= */
+
+.methodo-container {
+    max-width: 900px;
+    margin: auto;
+    padding: 20px;
+}
+
+.methodo-title {
+    font-family: var(--font);
+    font-size: 3rem;
+    font-weight: 900;
+    font-style: italic;
+    letter-spacing: -0.05em;
+    margin-bottom: 0.3rem;
+    color: var(--text);
+    text-transform: uppercase;
+}
+
+.methodo-subtitle {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 4rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+}
+
+.methodo-header {
+    font-size: 0.65rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.25em;
+    color: var(--text);
+    margin-bottom: 2rem;
+    border-bottom: 2px solid var(--primary);
+    padding-bottom: 8px;
+    width: fit-content;
+}
+
+.methodo-card {
+    background: var(--bg);
+    border: 1px solid var(--border-light);
+    padding: 28px;
+    margin-bottom: -1px;
+    transition: all 0.15s ease;
+}
+
+.methodo-card:hover {
+    border-color: var(--primary);
+    background: var(--surface-hover);
+}
+
+.methodo-badge {
+    font-size: 0.55rem;
+    font-weight: 800;
+    letter-spacing: 0.15em;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-light);
+    padding: 3px 10px;
+    margin-bottom: 14px;
+    display: inline-block;
+    text-transform: uppercase;
+}
+
+.methodo-grade-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border-muted);
+}
+
+.methodo-grade-letter {
+    font-weight: 900;
+    font-size: 1.2rem;
+    color: var(--text);
+}
+
+.methodo-grade-range {
+    font-family: 'SF Mono', 'Consolas', monospace;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.methodo-health {
+    border: 1px solid var(--primary);
+    padding: 40px;
+    margin: 50px 0;
+    background: var(--bg);
+}
+
+.methodo-dot {
+    height: 10px;
+    width: 10px;
+    display: inline-block;
+    margin-right: 10px;
+}
+
+.methodo-tips {
+    list-style: none;
+    padding: 0;
+}
+
+.methodo-tips li {
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border-muted);
+    color: var(--text);
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+}
+
+.methodo-tips li::before {
+    content: "";
+    width: 14px;
+    height: 1px;
+    background: var(--primary);
+    margin-right: 20px;
+    flex-shrink: 0;
+}
+
+/* =============================================================================
+   HEADER BAR (custom top navigation)
+   ============================================================================= */
+
+.hotaru-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+}
+
+.hotaru-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.hotaru-header-logo {
+    width: 32px;
+    height: 32px;
+    background: var(--primary);
+    color: var(--bg);
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: 900;
-    font-size: 1.2rem;
-    margin-bottom: 32px;
+    font-size: 0.8rem;
+    flex-shrink: 0;
 }
 
-/* --- AUDIT TAB : INFRA BOXES --- */
-.infra-box {
-    padding: 15px;
-    border-left: 3px solid #eee;
-    margin-bottom: 10px;
-    background: #f9f9f9;
-    border-radius: 0 4px 4px 0;
+.hotaru-header-brand {
+    font-weight: 900;
+    font-size: 0.85rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text);
 }
 
-.status-ok  { color: #2e7d32; font-weight: 600; font-size: 0.9em; }
-.status-err { color: #c62828; font-weight: 600; font-size: 0.9em; }
-.infra-desc { font-size: 0.85em; color: #666; margin-top: 5px; line-height: 1.4; }
+.hotaru-header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
 
-/* --- HIDE STREAMLIT CHROME --- */
-#MainMenu { visibility: hidden; }
-header    { visibility: hidden; }
-footer    { visibility: hidden; }
-.stDeployButton { display: none; }
+.hotaru-header-version {
+    font-size: 0.6rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+/* =============================================================================
+   FOOTER
+   ============================================================================= */
+
+.hotaru-footer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    padding: 16px 0;
+    margin-top: 48px;
+    border-top: 1px solid var(--border-light);
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.hotaru-footer span {
+    color: var(--text-muted);
+}
+
+/* =============================================================================
+   UTILITY CLASSES
+   ============================================================================= */
+
+.u-mt-0 { margin-top: 0 !important; }
+.u-mt-1 { margin-top: 8px !important; }
+.u-mt-2 { margin-top: 16px !important; }
+.u-mt-3 { margin-top: 24px !important; }
+.u-mt-4 { margin-top: 32px !important; }
+.u-mb-0 { margin-bottom: 0 !important; }
+.u-mb-1 { margin-bottom: 8px !important; }
+.u-mb-2 { margin-bottom: 16px !important; }
+.u-mb-3 { margin-bottom: 24px !important; }
+
+.u-text-center { text-align: center; }
+.u-text-muted { color: var(--text-muted) !important; }
+.u-text-uppercase { text-transform: uppercase; }
+.u-font-mono { font-family: 'SF Mono', 'Consolas', monospace !important; }
+.u-border { border: 1px solid var(--border) !important; }
+.u-border-light { border: 1px solid var(--border-light) !important; }
+
+/* =============================================================================
+   SCROLLBAR - MINIMAL
+   ============================================================================= */
+
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-light);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
+
+/* =============================================================================
+   RESPONSIVE
+   ============================================================================= */
+
+@media (max-width: 768px) {
+    .zen-title, .home-hero, .methodo-title {
+        font-size: 2rem;
+    }
+
+    .zen-metric-value {
+        font-size: 2rem;
+    }
+
+    .section-container, .zen-card {
+        padding: 16px;
+    }
+}

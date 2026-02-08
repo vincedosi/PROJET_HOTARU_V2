@@ -1,6 +1,6 @@
 """
-HOTARU v2 - Module MASTER DATA
-Interface Zen pour l'enrichissement et l'édition des données d'entité
+HOTARU v3 - Module MASTER DATA
+Interface Brutaliste Monochrome pour l'enrichissement et l'edition des donnees d'entite
 """
 
 import os
@@ -17,52 +17,52 @@ def _get_mistral_key():
 
 
 def render_master_tab():
-    """Onglet MASTER - Interface Zen avec champs éditables"""
+    """Onglet MASTER - Interface Brutaliste avec champs editables"""
 
     if "master_data" not in st.session_state:
         st.session_state.master_data = None
 
     # Header
-    st.markdown('<div class="zen-logo">蛍</div>', unsafe_allow_html=True)
     st.markdown('<h1 class="zen-title">MASTER DATA</h1>', unsafe_allow_html=True)
     st.markdown(
-        '<p class="zen-subtitle">Données d\'Entité Permanentes / JSON-LD Foundation</p>',
+        '<p class="zen-subtitle">PERMANENT ENTITY DATA // JSON-LD FOUNDATION</p>',
         unsafe_allow_html=True,
     )
 
     # =========================================================================
-    # ÉTAPE 1 : RECHERCHE & ENRICHISSEMENT
+    # ETAPE 1 : RECHERCHE & ENRICHISSEMENT
     # =========================================================================
 
-    st.markdown('<div class="zen-card">', unsafe_allow_html=True)
     st.markdown(
-        '<p class="section-title">01 / Identification & Enrichissement</p>',
+        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">'
+        '<span class="step-badge">01</span>'
+        '<span class="section-title" style="margin-bottom:0;">IDENTIFICATION & ENRICHISSEMENT</span>'
+        '</div>',
         unsafe_allow_html=True,
     )
+
+    st.markdown('<div class="section-container">', unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns([2, 1, 1])
 
     with col1:
         company_name = st.text_input(
-            "Nom de l'organisation",
-            placeholder="Ex: Airbus, BNP Paribas, Decathlon...",
-            label_visibility="collapsed",
+            "ENTITY NAME",
+            placeholder="ENTITY NAME",
             key="company_search",
         )
 
     with col2:
         qid_manual = st.text_input(
-            "QID Wikidata (optionnel)",
-            placeholder="Ex: Q67",
-            label_visibility="collapsed",
+            "WIKIDATA QID",
+            placeholder="Q-IDENTIFIER",
             key="qid_search",
         )
 
     with col3:
         siren_manual = st.text_input(
-            "SIREN (optionnel)",
-            placeholder="Ex: 351058151",
-            label_visibility="collapsed",
+            "SIRET",
+            placeholder="ID NUMBER",
             key="siren_search",
         )
 
@@ -71,7 +71,7 @@ def render_master_tab():
     col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
 
     with col_btn1:
-        if st.button("RECHERCHER", use_container_width=True, key="search_btn"):
+        if st.button("SEARCH", use_container_width=True, key="search_btn"):
             if company_name or qid_manual or siren_manual:
                 with st.spinner("Interrogation de Wikidata..."):
                     handler = MasterDataHandler()
@@ -82,30 +82,31 @@ def render_master_tab():
                     )
                     st.rerun()
             else:
-                st.error("Entrez au moins un critère")
+                st.error("Entrez au moins un critere")
 
     with col_btn2:
         if st.button(
-            "ENRICHIR MISTRAL",
+            "MISTRAL ENRICH",
             use_container_width=True,
             key="enrich_btn",
+            type="primary",
             disabled=not st.session_state.master_data,
         ):
             mistral_key = _get_mistral_key()
             if mistral_key and st.session_state.master_data.qid:
-                with st.spinner("Mistral enrichit les données..."):
+                with st.spinner("Mistral enrichit les donnees..."):
                     handler = MasterDataHandler()
                     st.session_state.master_data = handler.auto_complete_with_mistral(
                         st.session_state.master_data, mistral_key
                     )
                     st.rerun()
             else:
-                st.error("Clé Mistral ou QID manquant")
+                st.error("Cle Mistral ou QID manquant")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
     # =========================================================================
-    # ÉTAPE 2 : ÉDITION DES DONNÉES
+    # ETAPE 2 : EDITION DES DONNEES
     # =========================================================================
 
     if not st.session_state.master_data:
@@ -113,190 +114,175 @@ def render_master_tab():
 
     master = st.session_state.master_data
 
-    st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
 
-    # Status
-    status_map = {
-        "complete": ("status-complete", "COMPLET"),
-        "partial": ("status-partial", "PARTIEL"),
-        "failed": ("status-failed", "ÉCHEC"),
-    }
-    cls, txt = status_map.get(master.status, ("status-partial", "PARTIEL"))
-    st.markdown(
-        f'<span class="status-badge {cls}">{txt}</span>', unsafe_allow_html=True
-    )
+    # Status + Metrics row
+    col_status, col_m1, col_m2, col_m3 = st.columns([1.2, 1, 1, 1])
 
-    if master.errors:
-        with st.expander("Erreurs détectées"):
+    with col_status:
+        status_map = {
+            "complete": ("status-complete", "COMPLET"),
+            "partial": ("status-partial", "PARTIEL"),
+            "failed": ("status-failed", "ECHEC"),
+        }
+        cls, txt = status_map.get(master.status, ("status-partial", "PARTIEL"))
+        st.markdown(
+            f'<span class="status-badge {cls}">STATUS: {txt}</span>',
+            unsafe_allow_html=True,
+        )
+
+        if master.errors:
+            st.markdown('<br>', unsafe_allow_html=True)
+            st.markdown(
+                '<div style="border:1px solid rgba(0,0,0,0.12);padding:12px;">'
+                '<span class="label-caps">LOGS / ERRORS</span>',
+                unsafe_allow_html=True,
+            )
             for error in master.errors:
-                st.caption(error)
-
-    st.markdown("<br><br>", unsafe_allow_html=True)
-
-    # Metrics
-    col1, col2, col3 = st.columns(3)
+                st.markdown(
+                    f'<div style="font-size:0.75rem;color:rgba(0,0,0,0.55);margin-top:4px;">{error}</div>',
+                    unsafe_allow_html=True,
+                )
+            st.markdown('</div>', unsafe_allow_html=True)
 
     key_fields = [master.brand_name, master.qid, master.site_url]
     social_fields = [
-        master.wikipedia_url,
-        master.linkedin_url,
-        master.twitter_url,
-        master.facebook_url,
-        master.instagram_url,
-        master.youtube_url,
+        master.wikipedia_url, master.linkedin_url, master.twitter_url,
+        master.facebook_url, master.instagram_url, master.youtube_url,
     ]
     contact_fields = [master.phone, master.email, master.street, master.city]
 
     for col, (count, label) in zip(
-        [col1, col2, col3],
+        [col_m1, col_m2, col_m3],
         [
-            (len([f for f in key_fields if f]), "Champs Clés"),
-            (len([f for f in social_fields if f]), "Réseaux Sociaux"),
-            (len([f for f in contact_fields if f]), "Contact & Adresse"),
+            (len([f for f in key_fields if f]), "KEY FIELDS"),
+            (len([f for f in social_fields if f]), "SOCIAL NETS"),
+            (len([f for f in contact_fields if f]), "CONTACT DATA"),
         ],
     ):
         with col:
-            st.markdown('<div class="zen-metric">', unsafe_allow_html=True)
             st.markdown(
-                f'<div class="zen-metric-value">{count}</div>',
+                f'<div class="zen-metric">'
+                f'<div class="zen-metric-value">{count:02d}</div>'
+                f'<div class="zen-metric-label">{label}</div>'
+                f'</div>',
                 unsafe_allow_html=True,
             )
-            st.markdown(
-                f'<div class="zen-metric-label">{label}</div>',
-                unsafe_allow_html=True,
-            )
-            st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+
     st.markdown(
-        '<p class="section-title">02 / Édition des Champs</p>',
+        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">'
+        '<span class="step-badge">02</span>'
+        '<span class="section-title" style="margin-bottom:0;">FIELD MANAGEMENT</span>'
+        '</div>',
         unsafe_allow_html=True,
     )
 
-    # IDENTITÉ
-    st.markdown('<div class="zen-card">', unsafe_allow_html=True)
-    st.markdown("**Identité**")
+    # IDENTITE
+    st.markdown(
+        '<div class="section-container" style="padding:0;margin-bottom:24px;">'
+        '<div class="section-header">IDENTITY</div>'
+        '<div style="padding:24px;">',
+        unsafe_allow_html=True,
+    )
 
     col1, col2 = st.columns(2)
     with col1:
         master.brand_name = st.text_input(
-            "Nom commercial", value=master.brand_name, key="edit_brand"
+            "TRADE NAME", value=master.brand_name, key="edit_brand"
         )
         master.legal_name = st.text_input(
-            "Raison sociale", value=master.legal_name, key="edit_legal"
+            "LEGAL NAME", value=master.legal_name, key="edit_legal"
         )
         org_types = [
-            "Corporation",
-            "LocalBusiness",
-            "EducationalOrganization",
-            "GovernmentOrganization",
-            "NGO",
+            "Corporation", "LocalBusiness", "EducationalOrganization",
+            "GovernmentOrganization", "NGO",
         ]
         idx = org_types.index(master.org_type) if master.org_type in org_types else 0
-        master.org_type = st.selectbox("Type", org_types, index=idx, key="edit_type")
+        master.org_type = st.selectbox(
+            "ORGANIZATION TYPE", org_types, index=idx, key="edit_type"
+        )
 
     with col2:
         master.description = st.text_area(
-            "Description", value=master.description, height=100, key="edit_desc"
+            "DESCRIPTION", value=master.description, height=100, key="edit_desc"
         )
         master.slogan = st.text_input(
-            "Slogan", value=master.slogan, key="edit_slogan"
+            "SLOGAN", value=master.slogan, key="edit_slogan"
         )
 
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown('</div></div>', unsafe_allow_html=True)
 
     # IDENTIFIANTS
-    st.markdown('<div class="zen-card">', unsafe_allow_html=True)
-    st.markdown("**Identifiants**")
+    st.markdown(
+        '<div class="section-container" style="padding:0;margin-bottom:24px;">'
+        '<div class="section-header">IDENTIFIERS</div>'
+        '<div style="padding:24px;">',
+        unsafe_allow_html=True,
+    )
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.text_input("Wikidata QID", value=master.qid, disabled=True, key="view_qid")
+        st.text_input("WIKIDATA", value=master.qid, disabled=True, key="view_qid")
         master.siren = st.text_input("SIREN", value=master.siren, key="edit_siren")
     with col2:
         master.siret = st.text_input("SIRET", value=master.siret, key="edit_siret")
         master.lei = st.text_input("LEI", value=master.lei, key="edit_lei")
     with col3:
         master.site_url = st.text_input(
-            "Site web", value=master.site_url, key="edit_site"
+            "WEBSITE", value=master.site_url, key="edit_site"
         )
         master.ticker_symbol = st.text_input(
-            "Ticker", value=master.ticker_symbol, key="edit_ticker"
+            "TICKER", value=master.ticker_symbol, key="edit_ticker"
         )
 
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown('</div></div>', unsafe_allow_html=True)
 
-    # ADRESSE & CONTACT
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown('<div class="zen-card">', unsafe_allow_html=True)
-        st.markdown("**Adresse**")
-        master.street = st.text_input("Rue", value=master.street, key="edit_street")
-        col_city, col_zip = st.columns([2, 1])
-        master.city = col_city.text_input("Ville", value=master.city, key="edit_city")
-        master.zip_code = col_zip.text_input(
-            "Code postal", value=master.zip_code, key="edit_zip"
-        )
-        master.region = st.text_input(
-            "Région", value=master.region, key="edit_region"
-        )
-        master.country = st.text_input(
-            "Pays", value=master.country, key="edit_country"
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with col2:
-        st.markdown('<div class="zen-card">', unsafe_allow_html=True)
-        st.markdown("**Contact**")
-        master.phone = st.text_input(
-            "Téléphone", value=master.phone, placeholder="+33 1 23 45 67 89", key="edit_phone"
-        )
-        master.email = st.text_input(
-            "Email", value=master.email, placeholder="contact@exemple.fr", key="edit_email"
-        )
-        master.fax = st.text_input("Fax", value=master.fax, key="edit_fax")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    # RÉSEAUX SOCIAUX
-    st.markdown('<div class="zen-card">', unsafe_allow_html=True)
-    st.markdown("**Réseaux Sociaux**")
+    # RESEAUX SOCIAUX
+    st.markdown(
+        '<div class="section-container" style="padding:0;margin-bottom:24px;">'
+        '<div class="section-header">SOCIAL PRESENCE</div>'
+        '<div style="padding:24px;">',
+        unsafe_allow_html=True,
+    )
 
     col1, col2 = st.columns(2)
     with col1:
-        master.wikipedia_url = st.text_input(
-            "Wikipedia", value=master.wikipedia_url, key="edit_wiki"
-        )
         master.linkedin_url = st.text_input(
-            "LinkedIn", value=master.linkedin_url, key="edit_linkedin"
+            "LINKEDIN", value=master.linkedin_url, key="edit_linkedin"
         )
         master.twitter_url = st.text_input(
-            "Twitter/X", value=master.twitter_url, key="edit_twitter"
+            "X / TWITTER", value=master.twitter_url, key="edit_twitter"
         )
         master.facebook_url = st.text_input(
-            "Facebook", value=master.facebook_url, key="edit_facebook"
+            "FACEBOOK", value=master.facebook_url, key="edit_facebook"
         )
     with col2:
-        master.instagram_url = st.text_input(
-            "Instagram", value=master.instagram_url, key="edit_instagram"
-        )
         master.youtube_url = st.text_input(
-            "YouTube", value=master.youtube_url, key="edit_youtube"
+            "YOUTUBE", value=master.youtube_url, key="edit_youtube"
         )
         master.tiktok_url = st.text_input(
-            "TikTok", value=master.tiktok_url, key="edit_tiktok"
+            "TIKTOK", value=master.tiktok_url, key="edit_tiktok"
+        )
+        master.instagram_url = st.text_input(
+            "INSTAGRAM", value=master.instagram_url, key="edit_instagram"
         )
 
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown('</div></div>', unsafe_allow_html=True)
 
     # VISUELS
-    st.markdown('<div class="zen-card">', unsafe_allow_html=True)
-    st.markdown("**Visuels**")
+    st.markdown(
+        '<div class="section-container" style="padding:0;margin-bottom:24px;">'
+        '<div class="section-header">VISUAL ASSETS</div>'
+        '<div style="padding:24px;">',
+        unsafe_allow_html=True,
+    )
 
     col1, col2 = st.columns([2, 1])
     with col1:
         master.logo_url = st.text_input(
-            "URL du logo", value=master.logo_url, key="edit_logo"
+            "LOGO URL", value=master.logo_url, key="edit_logo"
         )
     with col2:
         if master.logo_url:
@@ -304,42 +290,94 @@ def render_master_tab():
                 st.image(master.logo_url, width=150)
             except Exception:
                 st.caption("Impossible de charger l'image")
+        else:
+            if st.button("PREVIEW", use_container_width=True, key="preview_logo"):
+                pass
 
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown('</div></div>', unsafe_allow_html=True)
 
     # CORPORATE
-    with st.expander("Données corporate (optionnel)"):
+    with st.expander("OPTIONAL CORPORATE DATA"):
         col1, col2, col3 = st.columns(3)
         with col1:
             master.founding_date = st.text_input(
-                "Date de création", value=master.founding_date, placeholder="YYYY-MM-DD", key="edit_founding"
+                "DATE DE CREATION", value=master.founding_date,
+                placeholder="YYYY-MM-DD", key="edit_founding"
             )
             master.num_employees = st.text_input(
-                "Nombre d'employés", value=master.num_employees, key="edit_employees"
+                "NOMBRE D'EMPLOYES", value=master.num_employees, key="edit_employees"
             )
         with col2:
             master.founder_name = st.text_input(
-                "Fondateur", value=master.founder_name, key="edit_founder"
+                "FONDATEUR", value=master.founder_name, key="edit_founder"
             )
             master.parent_org = st.text_input(
-                "Organisation mère", value=master.parent_org, key="edit_parent"
+                "ORGANISATION MERE", value=master.parent_org, key="edit_parent"
             )
         with col3:
             master.annual_revenue = st.text_input(
-                "Chiffre d'affaires", value=master.annual_revenue, key="edit_revenue"
+                "CHIFFRE D'AFFAIRES", value=master.annual_revenue, key="edit_revenue"
             )
             master.stock_exchange = st.text_input(
-                "Bourse", value=master.stock_exchange, key="edit_exchange"
+                "BOURSE", value=master.stock_exchange, key="edit_exchange"
             )
+
+    # ADRESSE & CONTACT
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown(
+            '<div class="section-container" style="padding:0;margin-bottom:24px;">'
+            '<div class="section-header">ADDRESS</div>'
+            '<div style="padding:24px;">',
+            unsafe_allow_html=True,
+        )
+        master.street = st.text_input("RUE", value=master.street, key="edit_street")
+        col_city, col_zip = st.columns([2, 1])
+        master.city = col_city.text_input("VILLE", value=master.city, key="edit_city")
+        master.zip_code = col_zip.text_input(
+            "CODE POSTAL", value=master.zip_code, key="edit_zip"
+        )
+        master.region = st.text_input(
+            "REGION", value=master.region, key="edit_region"
+        )
+        master.country = st.text_input(
+            "PAYS", value=master.country, key="edit_country"
+        )
+        st.markdown('</div></div>', unsafe_allow_html=True)
+
+    with col2:
+        st.markdown(
+            '<div class="section-container" style="padding:0;margin-bottom:24px;">'
+            '<div class="section-header">CONTACT</div>'
+            '<div style="padding:24px;">',
+            unsafe_allow_html=True,
+        )
+        master.phone = st.text_input(
+            "TELEPHONE", value=master.phone,
+            placeholder="+33 1 23 45 67 89", key="edit_phone"
+        )
+        master.email = st.text_input(
+            "EMAIL", value=master.email,
+            placeholder="contact@exemple.fr", key="edit_email"
+        )
+        master.fax = st.text_input("FAX", value=master.fax, key="edit_fax")
+        master.wikipedia_url = st.text_input(
+            "WIKIPEDIA", value=master.wikipedia_url, key="edit_wiki"
+        )
+        st.markdown('</div></div>', unsafe_allow_html=True)
 
     st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
 
     # =====================================================================
-    # ÉTAPE 3 : GÉNÉRATION JSON-LD
+    # ETAPE 3 : GENERATION JSON-LD
     # =====================================================================
 
     st.markdown(
-        '<p class="section-title">03 / Génération du JSON-LD Master</p>',
+        '<div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:20px;">'
+        '<span class="step-badge">03</span>'
+        '<span class="section-title" style="margin-bottom:0;">COMPILATION</span>'
+        '</div>',
         unsafe_allow_html=True,
     )
 
@@ -347,23 +385,23 @@ def render_master_tab():
 
     with col2:
         if st.button(
-            "GÉNÉRER LE JSON-LD",
+            "GENERER LE JSON-LD",
             type="primary",
             use_container_width=True,
             key="generate_btn",
         ):
-            with st.spinner("Génération en cours..."):
+            with st.spinner("Generation en cours..."):
                 builder = TemplateBuilder()
                 jsonld_master = builder.generate_jsonld(
                     master_data=master, dynamic_data=None, page_data=None
                 )
                 st.session_state.jsonld_master = jsonld_master
-                st.success("JSON-LD Master généré")
+                st.success("JSON-LD Master genere")
                 st.rerun()
 
     if "jsonld_master" in st.session_state and st.session_state.jsonld_master:
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown('<div class="zen-card">', unsafe_allow_html=True)
+        st.markdown('<div class="section-container">', unsafe_allow_html=True)
 
         col1, col2 = st.columns([3, 1])
 
@@ -374,15 +412,15 @@ def render_master_tab():
 
         with col2:
             st.download_button(
-                label="TÉLÉCHARGER",
+                label="TELECHARGER",
                 data=st.session_state.jsonld_master,
                 file_name=f"master_{master.brand_name.lower().replace(' ', '_')}.json",
                 mime="application/ld+json",
                 use_container_width=True,
             )
 
-            st.metric("Lignes", len(st.session_state.jsonld_master.split("\n")))
-            st.metric("Taille", f"{len(st.session_state.jsonld_master)} chars")
+            st.metric("LIGNES", len(st.session_state.jsonld_master.split("\n")))
+            st.metric("TAILLE", f"{len(st.session_state.jsonld_master)} chars")
 
             if st.button("NOUVEAU", use_container_width=True, key="reset_btn"):
                 st.session_state.master_data = None

@@ -50,10 +50,13 @@ def main():
         _, col_login, _ = st.columns([1, 1.2, 1])
         with col_login:
             st.markdown("<div style='padding-top: 80px;'></div>", unsafe_allow_html=True)
-            if os.path.exists("assets/logo.png"):
-                st.image("assets/logo.png", use_container_width=True)
-
-            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown(
+                '<div style="display:flex;align-items:center;gap:12px;margin-bottom:32px;">'
+                '<div class="hotaru-header-logo">蛍</div>'
+                '<span class="hotaru-header-brand">HOTARU</span>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
 
             with st.form("login_form"):
                 email = st.text_input("EMAIL", placeholder="admin@hotaru.com")
@@ -71,26 +74,28 @@ def main():
         return
 
     # HEADER
-    c_logo, c_version, _, c_user = st.columns([2, 2, 3, 1])
-    with c_logo:
-        if os.path.exists("assets/logo.png"):
-            st.image("assets/logo.png", width=140)
-    with c_version:
-        st.markdown(
-            f"<div style='padding-top: 15px; color: #64748b; font-size: 0.85rem;'>"
-            f"v{VERSION} | {BUILD_DATE}</div>",
-            unsafe_allow_html=True,
-        )
+    st.markdown(
+        f'<div class="hotaru-header">'
+        f'<div class="hotaru-header-left">'
+        f'<div class="hotaru-header-logo">蛍</div>'
+        f'<span class="hotaru-header-brand">HOTARU</span>'
+        f'</div>'
+        f'<div class="hotaru-header-right">'
+        f'<span class="hotaru-header-version">V {VERSION} // {BUILD_DATE}</span>'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    c_spacer, c_user = st.columns([6, 1])
     with c_user:
         if st.button("LOGOUT", use_container_width=True):
             st.session_state.clear()
             st.rerun()
 
-    st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
-
     # NAVIGATION
     tab_home, tab_audit, tab_authority, tab_master, tab_leaf = st.tabs(
-        ["HOME", "AUDIT", "AUTHORITY SCORE", "MASTER", "LEAF"]
+        ["Home", "Audit", "Authority Score", "Master", "Leaf"]
     )
 
     with tab_home:
@@ -109,8 +114,16 @@ def main():
         render_leaf_tab()
 
     # FOOTER
-    st.divider()
-    st.caption(f"Hotaru Strategic v{VERSION} | {BUILD_DATE}")
+    st.markdown(
+        f'<div class="hotaru-footer">'
+        f'<span>蛍 HOTARU ENTITY FORGE V2</span>'
+        f'<span>|</span>'
+        f'<span>VERSION {VERSION}</span>'
+        f'<span>|</span>'
+        f'<span>BUILD {BUILD_DATE}</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 
 if __name__ == "__main__":
