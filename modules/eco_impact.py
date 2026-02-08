@@ -28,8 +28,6 @@ except ImportError:
 KWH_PER_1K_TOKENS = 0.0004
 # I_Carbone : intensité carbone moyenne mondiale (gCO2/kWh)
 GCO2_PER_KWH = 475
-# Équivalence : 1 recharge smartphone ~ 0.012 kWh
-KWH_PER_SMARTPHONE_CHARGE = 0.012
 
 
 class EcoImpactCalculator:
@@ -151,7 +149,6 @@ class EcoImpactCalculator:
                 "tokens_saved": 0,
                 "kwh_saved": 0.0,
                 "co2_saved": 0.0,
-                "smartphone_charges": 0.0,
             }
         try:
             tokens_dirty = self.get_dirty_tokens(url)
@@ -164,12 +161,10 @@ class EcoImpactCalculator:
                 "tokens_saved": 0,
                 "kwh_saved": 0.0,
                 "co2_saved": 0.0,
-                "smartphone_charges": 0.0,
             }
         tokens_saved = max(0, tokens_dirty - tokens_clean)
         kwh_saved = (tokens_saved / 1000.0) * KWH_PER_1K_TOKENS
         co2_saved = kwh_saved * GCO2_PER_KWH
-        smartphone_charges = kwh_saved / KWH_PER_SMARTPHONE_CHARGE if KWH_PER_SMARTPHONE_CHARGE else 0
 
         return {
             "error": None,
@@ -178,7 +173,6 @@ class EcoImpactCalculator:
             "tokens_saved": tokens_saved,
             "kwh_saved": round(kwh_saved, 6),
             "co2_saved": round(co2_saved, 2),
-            "smartphone_charges": round(smartphone_charges, 1),
         }
 
 
@@ -233,15 +227,13 @@ def _render_calculatrice():
         st.markdown("---")
         st.markdown("##### Métriques clés")
 
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Tokens économisés", f"{result['tokens_saved']:,}")
         with col2:
             st.metric("Énergie épargnée (kWh)", f"{result['kwh_saved']:.6f}")
         with col3:
             st.metric("gCO₂ évité", f"{result['co2_saved']:.2f}")
-        with col4:
-            st.metric("Équivalence", f"~{result['smartphone_charges']:.0f} recharges smartphone")
 
         st.markdown("##### Comparatif : Poids cognitif")
         fig = go.Figure(
@@ -261,12 +253,6 @@ def _render_calculatrice():
             yaxis_title="Nombre de tokens",
         )
         st.plotly_chart(fig, use_container_width=True)
-
-        st.markdown(
-            f"<p style='font-size:0.9rem; color: var(--text-muted);'>"
-            f"Ce gain équivaut à environ <strong>{result['smartphone_charges']:.0f} recharges de smartphone</strong>.</p>",
-            unsafe_allow_html=True,
-        )
 
 
 def _render_methodologie():
@@ -353,7 +339,6 @@ $$
 #### **Sources des coefficients :**
 - **E_Token (0,0004 kWh/1000 tokens)** : Basé sur les benchmarks NVIDIA H100 pour l'inférence GPT-4 (2023)
 - **I_Carbone (475g CO₂/kWh)** : Mix électrique mondial moyen (IEA 2024)
-- **Équivalence smartphone** : Batterie 3000 mAh = 0,012 kWh
 
 #### **Ce que nous NE mesurons PAS :**
 - L'empreinte carbone de **l'entraînement** des modèles (90% de l'impact total de l'IA)
@@ -387,8 +372,3 @@ Documentation technique disponible sur demande.
 #### 💬 Questions ou corrections ?
 Feedback scientifique bienvenu.
 """)
-
-
-def render_eco_tab_standalone():
-    """Point d'entrée pour app.py."""
-    return render_eco_tab()

@@ -1,190 +1,127 @@
 # HOTARU
 
-**Application SaaS d'Audit SEO GEO avec Intelligence Artificielle**
+**SaaS d'audit et d'optimisation pour le web lisible par l'IA**
 
-HOTARU (firefly/luciole en japonais) est une application Streamlit conçue pour analyser la structure de sites web et optimiser leur architecture d'information grâce à l'IA.
-
----
-
-## 🎯 Objectif
-
-Créer un outil SaaS permettant aux professionnels du SEO de :
-- Scanner automatiquement la structure d'un site web
-- Détecter les patterns d'URL (pages produits, articles, fiches locales...)
-- Visualiser l'architecture sous forme de graphe interactif
-- Optimiser le regroupement des pages avec Mistral AI
+HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority Index, Master Data (JSON-LD entité), LEAF (JSON-LD par page), RSE & Eco-Score. Multi-utilisateurs avec isolation stricte des données par utilisateur.
 
 ---
 
-## ✨ Fonctionnalités
+## Vision produit
 
-### 1. Navigation SaaS
-- Sidebar fixe avec navigation entre modules
-- Dashboard, Audit GEO, Rapports, Paramètres
-- Vault d'API sécurisé (clés stockées en session uniquement)
-- Design Zen japonais (blanc pur, accents dorés)
+- **Audit GEO** : structure du site, graphe interactif, patterns d’URL, renommage IA (Mistral).
+- **Authority Score** : indice de probabilité de citation par les LLMs (5 piliers : Knowledge Graph, Structured Data, Citation Authority, Semantic Completeness, Content Freshness).
+- **Master** : données d’entité (Wikidata + Mistral), génération JSON-LD Organization.
+- **Leaf** : JSON-LD par page, prédictions IA.
+- **RSE & Eco-Score** : calculatrice d’impact carbone (tokens économisés, kWh, gCO₂) et méthodologie scientifique.
 
-### 2. Smart Scraping
-- Détection automatique du sitemap
-- **Smart Sampling** : détection de patterns d'URL via regex
-  - Ex: `/produit/*`, `/cirfa/*`, `/blog/*`
-  - Analyse de seulement 3 spécimens par pattern
-  - Héritage des scores pour les autres pages du pattern
-- Économie de tokens API et de temps d'analyse
-
-### 3. Optimisation IA (Mistral)
-- Catégorisation intelligente des URLs
-- Renommage des pages en labels lisibles
-- Création de clusters sémantiques
-- Barre de progression et logs en temps réel
-
-### 4. Visualisation
-- Graphe interactif (streamlit-agraph)
-- Nœuds cliquables vers les URLs
-- Code couleur selon le score SEO
-- Groupement des pages similaires
+**Design :** Fond blanc, noir + rouge `rgb(168, 27, 35)`. Titres de section au format `XX / TITRE`, rouge souligné.
 
 ---
 
-## 🏗️ Architecture
+## Structure du projet
 
 ```
 PROJET_HOTARU_V2/
-├── app.py                  # Point d'entrée, navigation SaaS
-├── requirements.txt        # Dépendances Python
+├── app.py                      # Point d’entrée : auth, header, tabs, footer
 ├── assets/
-│   ├── style.css          # CSS Zen Design
-│   └── logo.png           # Logo (optionnel)
+│   ├── logo.png
+│   └── style.css               # Design system (noir, rouge, section-title, etc.)
 ├── core/
-│   ├── auth.py            # Authentification
-│   ├── database.py        # Connexion Google Sheets
-│   ├── scraping.py        # Smart Scraper avec patterns
-│   └── ai_clustering.py   # Intégration Mistral AI
+│   ├── auth.py                 # AuthManager (Google Sheets users)
+│   ├── database.py             # AuditDatabase (audits, load_user_audits, save_audit)
+│   ├── session_keys.py         # Clés de session SaaS
+│   ├── scraping.py             # SmartScraper (crawl) + fetch_page(url) pour une page
+│   └── ai_clustering.py        # Renommage clusters (Mistral)
+├── engine/
+│   ├── master_handler.py       # MasterDataHandler, Wikidata + Mistral
+│   ├── dynamic_handler.py      # Prédictions Mistral (LEAF)
+│   └── template_builder.py     # Génération JSON-LD
 ├── modules/
-│   ├── dashboard.py       # Page d'accueil
-│   ├── audit_geo.py       # Module principal d'audit
-│   ├── reports.py         # Rapports et exports
-│   └── settings.py        # Paramètres
-└── .streamlit/
-    └── secrets.toml       # Configuration (API keys, etc.)
+│   ├── home.py                 # Page d’accueil
+│   ├── audit_geo.py            # Audit GEO (workspace, onglets Audit Site | Méthodologie)
+│   ├── authority_score.py      # Authority Score (Analyse | Méthodologie)
+│   ├── master.py               # Master Data (Données | Méthodologie)
+│   ├── leaf.py                 # LEAF Builder (Builder | Méthodologie)
+│   ├── eco_impact.py           # RSE & Eco-Score (Calculatrice | Méthodologie)
+│   ├── methodologie_blocks.py  # Contenu Méthodologie réutilisable
+│   └── geo_scoring.py          # Scoring GEO
+├── requirements.txt
+└── README.md                   # Ce fichier
 ```
 
 ---
 
-## 🚀 Installation
+## SaaS : authentification et isolation
 
-### Prérequis
-- Python 3.9+
-- Compte Streamlit Cloud (pour déploiement)
-- Clé API Mistral (gratuite sur console.mistral.ai)
+- **Login :** `core.auth.AuthManager` — email + mot de passe, hash en Google Sheets (onglet `users`).
+- **Session :** `st.session_state` avec `authenticated`, `user_email`, `user_role` (clés dans `core.session_keys`).
+- **Isolation :** `AuditDatabase.load_user_audits(user_email)` filtre strictement par `user_email`. Un utilisateur ne voit que ses audits.
+- **Usage :** `get_current_user_email()`, `is_authenticated()`, `is_admin()` depuis `core.session_keys`.
 
-### Local
+---
+
+## Navigation
+
+**Onglets principaux (app.py) :** Home | Audit | Authority Score | Master | Leaf | 🌍 RSE & Eco-Score
+
+**Sous-onglets par module :** Chaque module métier a deux sous-onglets (ex. Audit Site | Méthodologie). La Méthodologie est soit dédiée (Audit), soit fournie par `methodologie_blocks.render_methodologie_for_module("authority"|"master"|"leaf")`.
+
+---
+
+## Base de données (Google Sheets)
+
+- **Onglet `users` :** email, password_hash, created_at, last_login, role.
+- **Onglet `audits` :** audit_id, user_email, workspace, date, site_url, nb_pages, data_compressed, nom_site. Filtrage obligatoire par `user_email`.
+
+---
+
+## Installation
+
+**Prérequis :** Python 3.9+, clé API Mistral (optionnel), Google Sheets pour auth/audits.
 
 ```bash
-# Cloner le repo
-git clone https://github.com/votrecompte/PROJET_HOTARU_V2.git
+git clone https://github.com/vincedosi/PROJET_HOTARU_V2.git
 cd PROJET_HOTARU_V2
-
-# Installer les dépendances
 pip install -r requirements.txt
-
-# Lancer l'application
 streamlit run app.py
 ```
 
-### Streamlit Cloud
-
-1. Connectez votre repo GitHub à Streamlit Cloud
-2. Configurez les secrets dans les paramètres de l'app
-3. Déployez !
+**Configuration :** Fichier `.streamlit/secrets.toml` (GCP service account, URL du spreadsheet). Les clés API (Mistral, etc.) peuvent être en session ou dans les secrets.
 
 ---
 
-## ⚙️ Configuration
+## Conventions de code
 
-### Secrets Streamlit (.streamlit/secrets.toml)
-
-```toml
-[gcp_service_account]
-type = "service_account"
-project_id = "votre-projet"
-private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-client_email = "compte@projet.iam.gserviceaccount.com"
-
-[spreadsheet]
-url = "https://docs.google.com/spreadsheets/d/..."
-```
-
-### Clé API Mistral
-
-La clé API Mistral est saisie directement dans l'interface et stockée uniquement en session (non persistée pour des raisons de sécurité).
+- **Session :** Utiliser `core.session_keys` et `get_current_user_email()` pour les audits.
+- **Fetch d’une page :** `core.scraping.fetch_page(url, timeout=15)` — utilisé par eco_impact et réutilisable ailleurs.
+- **Titres de section :** Classe CSS `.section-title`, format texte `XX / TITRE`.
+- **Version :** `app.py` (VERSION, BUILD_DATE avec date+heure à chaque run).
 
 ---
 
-## 📊 Smart Sampling
+## Design system
 
-Le système de Smart Sampling détecte automatiquement les patterns d'URL répétitifs :
-
-| Pattern détecté | Exemple | Action |
-|----------------|---------|--------|
-| `/produit/*` | 500 fiches produits | Analyse 3 spécimens |
-| `/cirfa/*` | 200 centres CIRFA | Analyse 3 spécimens |
-| `/blog/*` | 100 articles | Analyse 3 spécimens |
-| Pages uniques | Contact, À propos | Analyse complète |
-
-**Avantage** : Un site de 500 pages peut être analysé avec seulement ~30 requêtes HTTP au lieu de 500.
+- **Couleurs :** Fond `#FFFFFF`, texte `#000000`, accent rouge `rgb(168, 27, 35)`.
+- **Scores :** Vert (bon), orange (moyen), rouge (à améliorer).
+- **Typographie :** Inter, uppercase pour labels, wide tracking.
 
 ---
 
-## 🎨 Design System
+## Roadmap
 
-### Couleurs
-- **Fond** : Blanc pur `#FFFFFF`
-- **Texte** : Noir pur `#000000`
-- **Accent** : Or `#FFD700` (éléments actifs uniquement)
-- **Scores** :
-  - Vert `#22C55E` (bon, 70+)
-  - Orange `#F97316` (moyen, 40-69)
-  - Rouge `#EF4444` (à améliorer, <40)
-
-### Typographie
-- Police sans-serif légère (Inter, system fonts)
-- Hiérarchie claire avec tailles définies
+- [x] Navigation SaaS, isolation par user_email
+- [x] Smart Scraping (patterns, SmartScraper), fetch_page
+- [x] Audit GEO, Authority Score, Master, Leaf, RSE & Eco-Score
+- [x] Onglets Méthodologie, design harmonisé
+- [ ] Onglet Paramètres (profil, préférences)
+- [ ] Vault : clés API chiffrées par utilisateur
+- [ ] Rôle admin (stats globales, gestion comptes)
+- [ ] Export PDF, API REST
 
 ---
 
-## 🔒 Sécurité
+## Licence
 
-- Clés API stockées en session uniquement (non persistées)
-- Authentification via Google Sheets
-- Pas de stockage de données sensibles côté client
+MIT — libre d’utilisation et de modification.
 
----
-
-## 📝 Roadmap
-
-- [x] Navigation SaaS sidebar
-- [x] Smart Scraping avec patterns
-- [x] Intégration Mistral AI
-- [x] Graphe interactif cliquable
-- [x] Barre de progression IA
-- [ ] Export PDF des rapports
-- [ ] Historique des audits
-- [ ] Mode comparaison avant/après
-- [ ] API REST pour intégration externe
-
----
-
-## 🤝 Contribution
-
-Les contributions sont bienvenues ! N'hésitez pas à ouvrir une issue ou une PR.
-
----
-
-## 📄 Licence
-
-MIT License - Libre d'utilisation et de modification.
-
----
-
-**HOTARU** - *Éclairer votre SEO comme une luciole dans la nuit*
+**HOTARU** — *Éclairer votre SEO comme une luciole dans la nuit*
