@@ -1336,7 +1336,7 @@ def render_audit_geo():
     )
     filtered_audits = [a for a in all_audits if str(a.get('workspace', '')).strip() == selected_ws]
 
-    tab1, tab2 = st.tabs(["Audit Site", "Methodologie"])
+    tab1, tab2 = st.tabs(["Audit Site", "Méthodologie"])
 
     # ========================== TAB 1 : AUDIT ==========================
     with tab1:
@@ -1768,7 +1768,8 @@ def render_audit_geo():
 
         render_interactive_graph(G, show_health=expert_on)
 
-    # ========================== TAB 2 : METHODOLOGIE ==========================
+    # ========================== TAB 2 : MÉTHODOLOGIE ==========================
     with tab2:
+        st.markdown("")  # ancrage pour affichage de l'onglet
         with st.container():
             render_methodologie()

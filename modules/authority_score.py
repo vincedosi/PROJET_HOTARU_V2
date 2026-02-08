@@ -890,10 +890,7 @@ def render_authority_score():
 
     # === INPUTS ===
     st.markdown(
-        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">'
-        '<span class="step-badge">01</span>'
-        '<span class="section-title" style="margin-bottom:0;">ANALYSE</span>'
-        '</div>',
+        '<p class="section-title">01 / ANALYSE</p>',
         unsafe_allow_html=True,
     )
 
@@ -1053,10 +1050,7 @@ def render_authority_score():
 
     # === BREAKDOWN DES 5 PILIERS ===
     st.markdown(
-        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">'
-        '<span class="step-badge">02</span>'
-        '<span class="section-title" style="margin-bottom:0;">DETAIL PAR PILIER</span>'
-        '</div>',
+        '<p class="section-title">02 / DÉTAIL PAR PILIER</p>',
         unsafe_allow_html=True,
     )
 
@@ -1100,10 +1094,7 @@ def render_authority_score():
 
     # === DETAILS PAR PILIER (EXPANDERS) ===
     st.markdown(
-        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">'
-        '<span class="step-badge">03</span>'
-        '<span class="section-title" style="margin-bottom:0;">DONNEES DETAILLEES</span>'
-        '</div>',
+        '<p class="section-title">03 / DONNÉES DÉTAILLÉES</p>',
         unsafe_allow_html=True,
     )
 
@@ -1234,10 +1225,7 @@ def render_authority_score():
     if recommendations:
         st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
         st.markdown(
-            '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">'
-            '<span class="step-badge">04</span>'
-            '<span class="section-title" style="margin-bottom:0;">RECOMMANDATIONS PRIORITAIRES</span>'
-            '</div>',
+            '<p class="section-title">04 / RECOMMANDATIONS PRIORITAIRES</p>',
             unsafe_allow_html=True,
         )
 

@@ -34,10 +34,7 @@ def render_master_tab():
     # =========================================================================
 
     st.markdown(
-        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">'
-        '<span class="step-badge">01</span>'
-        '<span class="section-title" style="margin-bottom:0;">IDENTIFICATION & ENRICHISSEMENT</span>'
-        '</div>',
+        '<p class="section-title">01 / IDENTIFICATION & ENRICHISSEMENT</p>',
         unsafe_allow_html=True,
     )
 
@@ -172,10 +169,7 @@ def render_master_tab():
     st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
 
     st.markdown(
-        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">'
-        '<span class="step-badge">02</span>'
-        '<span class="section-title" style="margin-bottom:0;">FIELD MANAGEMENT</span>'
-        '</div>',
+        '<p class="section-title">02 / FIELD MANAGEMENT</p>',
         unsafe_allow_html=True,
     )
 
@@ -374,10 +368,7 @@ def render_master_tab():
     # =====================================================================
 
     st.markdown(
-        '<div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:20px;">'
-        '<span class="step-badge">03</span>'
-        '<span class="section-title" style="margin-bottom:0;">COMPILATION</span>'
-        '</div>',
+        '<p class="section-title">03 / COMPILATION</p>',
         unsafe_allow_html=True,
     )
 
