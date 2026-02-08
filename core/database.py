@@ -50,6 +50,7 @@ class AuditDatabase:
             self.sheet = None
 
     def load_user_audits(self, user_email):
+        """Charge uniquement les audits de l'utilisateur connecté (isolation SaaS)."""
         if not self.sheet:
             return []
 
@@ -60,9 +61,14 @@ class AuditDatabase:
 
             data_rows = all_rows[1:]
             user_audits = []
+            email_normalized = (user_email or "").strip().lower()
 
             for row in data_rows:
                 if len(row) < 2:
+                    continue
+                # Isolation SaaS : ne retourner que les lignes de cet utilisateur
+                row_email = (row[1] or "").strip().lower()
+                if row_email != email_normalized:
                     continue
 
                 workspace_value = row[2] if len(row) > 2 else ""

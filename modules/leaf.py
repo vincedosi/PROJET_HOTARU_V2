@@ -28,6 +28,16 @@ def render_leaf_tab():
     )
     st.markdown("---")
 
+    tab_builder, tab_methodo = st.tabs(["Builder", "Méthodologie"])
+    with tab_builder:
+        _render_leaf_builder_content()
+    with tab_methodo:
+        from modules.methodologie_blocks import render_methodologie_for_module
+        render_methodologie_for_module("leaf")
+
+
+def _render_leaf_builder_content():
+    """Contenu de l'onglet Builder (LEAF)."""
     if "master_data" not in st.session_state or not st.session_state.master_data:
         st.warning("Vous devez d'abord créer le JSON-LD MASTER dans l'onglet précédent")
         return

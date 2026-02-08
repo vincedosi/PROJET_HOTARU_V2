@@ -876,7 +876,7 @@ def _interpretation_color(score):
 
 
 def render_authority_score():
-    """Rendu principal de l'onglet Authority Score"""
+    """Rendu principal de l'onglet Authority Score (SaaS)."""
 
     st.markdown(
         '<h1 class="zen-title">AUTHORITY SCORE</h1>',
@@ -888,6 +888,16 @@ def render_authority_score():
         unsafe_allow_html=True,
     )
 
+    tab_analyse, tab_methodo = st.tabs(["Analyse", "Méthodologie"])
+    with tab_analyse:
+        _render_authority_analyse_content()
+    with tab_methodo:
+        from modules.methodologie_blocks import render_methodologie_for_module
+        render_methodologie_for_module("authority")
+
+
+def _render_authority_analyse_content():
+    """Contenu de l'onglet Analyse (Authority Score)."""
     # === INPUTS ===
     st.markdown(
         '<p class="section-title">01 / ANALYSE</p>',

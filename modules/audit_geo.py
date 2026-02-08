@@ -16,6 +16,7 @@ from pyvis.network import Network
 import streamlit.components.v1 as components
 from bs4 import BeautifulSoup
 from core.database import AuditDatabase
+from core.session_keys import get_current_user_email
 from core.scraping import SmartScraper
 
 # =============================================================================
@@ -1314,8 +1315,8 @@ def render_methodologie():
 
 def render_audit_geo():
     db = AuditDatabase()
-    user_email = st.session_state.user_email
-    all_audits = db.load_user_audits(user_email)
+    user_email = get_current_user_email()
+    all_audits = db.load_user_audits(user_email or "")
 
     ws_list = []
     for a in all_audits:

@@ -29,6 +29,16 @@ def render_master_tab():
         unsafe_allow_html=True,
     )
 
+    tab_donnees, tab_methodo = st.tabs(["Données", "Méthodologie"])
+    with tab_donnees:
+        _render_master_data_content()
+    with tab_methodo:
+        from modules.methodologie_blocks import render_methodologie_for_module
+        render_methodologie_for_module("master")
+
+
+def _render_master_data_content():
+    """Contenu de l'onglet Données (Master)."""
     # =========================================================================
     # ETAPE 1 : RECHERCHE & ENRICHISSEMENT
     # =========================================================================

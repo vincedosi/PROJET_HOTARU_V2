@@ -7,6 +7,12 @@ import os
 import streamlit as st
 
 from core.auth import AuthManager
+from core.session_keys import (
+    SESSION_AUTHENTICATED,
+    SESSION_USER_EMAIL,
+    SESSION_USER_ROLE,
+    ROLE_USER,
+)
 from modules.home import render_home
 from modules.audit_geo import render_audit_geo
 from modules.authority_score import render_authority_score
@@ -42,11 +48,11 @@ def load_styles():
 def main():
     load_styles()
 
-    if "authenticated" not in st.session_state:
-        st.session_state.authenticated = False
+    if SESSION_AUTHENTICATED not in st.session_state:
+        st.session_state[SESSION_AUTHENTICATED] = False
 
     # LOGIN
-    if not st.session_state.authenticated:
+    if not st.session_state[SESSION_AUTHENTICATED]:
         _, col_login, _ = st.columns([1, 1.2, 1])
         with col_login:
             st.markdown("<div style='padding-top: 80px;'></div>", unsafe_allow_html=True)
@@ -66,8 +72,8 @@ def main():
                 if submit:
                     auth = AuthManager()
                     if auth.login(email, password):
-                        st.session_state.authenticated = True
-                        st.session_state.user_email = email
+                        st.session_state[SESSION_AUTHENTICATED] = True
+                        st.session_state[SESSION_USER_EMAIL] = email
                         st.rerun()
                     else:
                         st.error("Invalid credentials.")
