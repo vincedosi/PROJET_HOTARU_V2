@@ -6,8 +6,9 @@
 import re
 import json
 
-import requests
 from bs4 import BeautifulSoup
+
+from core.scraping import fetch_page
 
 try:
     import tiktoken
@@ -30,11 +31,6 @@ GCO2_PER_KWH = 475
 # Équivalence : 1 recharge smartphone ~ 0.012 kWh
 KWH_PER_SMARTPHONE_CHARGE = 0.012
 
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-)
-
 
 class EcoImpactCalculator:
     """
@@ -44,8 +40,6 @@ class EcoImpactCalculator:
 
     def __init__(self, timeout=15):
         self.timeout = timeout
-        self.session = requests.Session()
-        self.session.headers.update({"User-Agent": USER_AGENT})
         self._enc = None
 
     def _get_encoding(self):
@@ -61,22 +55,14 @@ class EcoImpactCalculator:
         enc = self._get_encoding()
         return len(enc.encode(text))
 
-    def _fetch_html(self, url: str) -> str:
-        if not url.startswith(("http://", "https://")):
-            url = "https://" + url
-        r = self.session.get(url, timeout=self.timeout)
-        r.raise_for_status()
-        r.encoding = r.apparent_encoding or "utf-8"
-        return r.text
-
     def get_dirty_tokens(self, url: str) -> int:
         """
         Récupère le HTML complet, extrait tout le texte visible (menu, footer, etc.)
         et compte les tokens (poids cognitif "sale").
         """
         try:
-            html = self._fetch_html(url)
-        except requests.RequestException:
+            html = fetch_page(url, timeout=self.timeout)
+        except Exception:
             return 0
         soup = BeautifulSoup(html, "html.parser")
         for tag in soup(["script", "style", "noscript"]):
@@ -118,8 +104,8 @@ class EcoImpactCalculator:
         Si pas de JSON-LD, on simule ~10% de la taille du texte brut comme "structure".
         """
         try:
-            html = self._fetch_html(url)
-        except requests.RequestException:
+            html = fetch_page(url, timeout=self.timeout)
+        except Exception:
             return 0
         soup = BeautifulSoup(html, "html.parser")
         for tag in soup(["script", "style", "noscript"]):

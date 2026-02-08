@@ -386,3 +386,21 @@ class SmartScraper:
     
     def get_pattern_summary(self):
         return self.analyze_patterns(self.results)
+
+
+def fetch_page(url: str, timeout: int = 15) -> str:
+    """
+    Récupère le HTML d'une seule page (sans crawler).
+    Utilisé par eco_impact, authority, leaf, etc.
+    Lève requests.RequestException en cas d'erreur.
+    """
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    })
+    r = session.get(url, timeout=timeout)
+    r.raise_for_status()
+    r.encoding = r.apparent_encoding or "utf-8"
+    return r.text
