@@ -222,9 +222,12 @@ hr, .stDivider {
 
 .stButton > button:hover {
     background: var(--primary) !important;
-    color: var(--bg) !important;
+    color: #FFFFFF !important;
     border-color: var(--primary) !important;
     box-shadow: none !important;
+}
+.stButton > button:hover * {
+    color: #FFFFFF !important;
 }
 
 .stButton > button:focus {
@@ -238,10 +241,50 @@ hr, .stDivider {
     color: var(--bg) !important;
 }
 
-/* Primary button - texte BLANC (ex: VISUALISER) */
+/* Primary button - texte BLANC (ex: VISUALISER) - tous onglets */
 .stButton > button[kind="primary"],
 .stButton > button[data-testid="stFormSubmitButton"],
-button[kind="primary"] {
+.stButton > button[data-testid="stBaseButton-primary"],
+button[kind="primary"],
+[data-testid="stBaseButton-primary"] {
+    background: var(--primary) !important;
+    color: #FFFFFF !important;
+    border: 1px solid var(--primary) !important;
+    border-radius: 0 !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.1em !important;
+    text-transform: uppercase !important;
+}
+/* Enfants (span/texte) des boutons primary : blanc */
+.stButton > button[kind="primary"] *,
+.stButton > button[data-testid="stBaseButton-primary"] *,
+[data-testid="stBaseButton-primary"] * {
+    color: #FFFFFF !important;
+}
+
+.stButton > button[kind="primary"]:hover,
+.stButton > button[data-testid="stBaseButton-primary"]:hover,
+button[kind="primary"]:hover,
+[data-testid="stBaseButton-primary"]:hover {
+    background: var(--bg-dark) !important;
+    border-color: var(--bg-dark) !important;
+    color: #FFFFFF !important;
+}
+[data-testid="stBaseButton-primary"]:hover * {
+    color: #FFFFFF !important;
+}
+/* Wrapper Streamlit (div) : cibler le bouton interne */
+[data-testid="stBaseButton-primary"] button {
+    background: var(--primary) !important;
+    color: #FFFFFF !important;
+}
+[data-testid="stBaseButton-primary"] button * {
+    color: #FFFFFF !important;
+}
+
+/* Form submit buttons - texte blanc sur fond noir */
+.stFormSubmitButton > button,
+.stFormSubmitButton > button * {
     background: var(--primary) !important;
     color: #FFFFFF !important;
     border: 1px solid var(--primary) !important;
@@ -251,25 +294,10 @@ button[kind="primary"] {
     text-transform: uppercase !important;
 }
 
-.stButton > button[kind="primary"]:hover,
-button[kind="primary"]:hover {
+.stFormSubmitButton > button:hover,
+.stFormSubmitButton > button:hover * {
     background: var(--bg-dark) !important;
-    border-color: var(--bg-dark) !important;
-}
-
-/* Form submit buttons */
-.stFormSubmitButton > button {
-    background: var(--primary) !important;
-    color: var(--bg) !important;
-    border: 1px solid var(--primary) !important;
-    border-radius: 0 !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.1em !important;
-    text-transform: uppercase !important;
-}
-
-.stFormSubmitButton > button:hover {
-    background: var(--bg-dark) !important;
+    color: #FFFFFF !important;
 }
 
 /* Download button */
@@ -284,9 +312,10 @@ button[kind="primary"]:hover {
     font-size: 0.65rem !important;
 }
 
-.stDownloadButton > button:hover {
+.stDownloadButton > button:hover,
+.stDownloadButton > button:hover * {
     background: var(--primary) !important;
-    color: var(--bg) !important;
+    color: #FFFFFF !important;
 }
 
 /* Toggle */
@@ -327,7 +356,13 @@ button[kind="primary"]:hover {
     letter-spacing: 0.05em !important;
 }
 
-/* Text areas */
+/* Text areas - fond blanc, texte noir (eviter noir sur noir) */
+.stTextArea,
+.stTextArea > div,
+.stTextArea > div > div {
+    background: var(--bg) !important;
+    color: var(--text) !important;
+}
 .stTextArea > div > div > textarea {
     border: 1px solid var(--border-light) !important;
     border-radius: 0 !important;
@@ -384,9 +419,16 @@ button[kind="primary"]:hover {
     border-radius: 0 !important;
 }
 
-/* Select slider */
+/* Select slider - labels et valeur lisibles (pas noir sur noir) */
+.stSlider,
+.stSlider > div,
+.stSlider > div > div,
 .stSlider > div > div > div {
     color: var(--text) !important;
+    background: transparent !important;
+}
+.stSlider label {
+    color: var(--text-muted) !important;
 }
 
 [data-baseweb="slider"] [role="slider"] {
@@ -397,9 +439,11 @@ button[kind="primary"]:hover {
 }
 
 [data-baseweb="slider"] [data-testid="stTickBarMin"],
-[data-baseweb="slider"] [data-testid="stTickBarMax"] {
+[data-baseweb="slider"] [data-testid="stTickBarMax"],
+[data-baseweb="slider"] span {
     font-size: 0.7rem !important;
     font-weight: 700 !important;
+    color: var(--text) !important;
 }
 
 /* Number input */
