@@ -7,11 +7,11 @@ import os
 import streamlit as st
 
 from core.auth import AuthManager
+from core.database import AuditDatabase
 from core.session_keys import (
     SESSION_AUTHENTICATED,
     SESSION_USER_EMAIL,
-    SESSION_USER_ROLE,
-    ROLE_USER,
+    get_current_user_email,
 )
 from modules.home import render_home
 from modules.audit_geo import render_audit_geo
@@ -93,7 +93,20 @@ def main():
         unsafe_allow_html=True,
     )
 
-    c_spacer, c_user = st.columns([6, 1])
+    # Workspace (niveau LOGOUT) + LOGOUT
+    db = AuditDatabase()
+    all_audits = db.load_user_audits(get_current_user_email() or "")
+    ws_set = {str(a.get("workspace", "")).strip() or "Non classé" for a in all_audits}
+    ws_list = ["Nouveau"] if not ws_set else sorted(ws_set) + ["+ Creer Nouveau"]
+    c_ws, c_user = st.columns([2, 1])
+    with c_ws:
+        st.selectbox(
+            "Projets (Workspace)",
+            ws_list,
+            key="audit_workspace_select",
+            label_visibility="collapsed",
+            help="Choisissez le projet / workspace pour filtrer les audits.",
+        )
     with c_user:
         if st.button("LOGOUT", use_container_width=True):
             st.session_state.clear()

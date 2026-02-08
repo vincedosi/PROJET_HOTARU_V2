@@ -423,7 +423,13 @@ button[kind="primary"]:hover {
     border-radius: 0 !important;
     padding: 16px !important;
 }
-/* Espace entre l'icône chevron et le texte dans les expanders (ex: tableau GRADES PAGES) */
+/* Masquer l'icône expander qui s'affiche comme "_arrow_right" sur le libellé (06 JOURNAUX, etc.) */
+.streamlit-expanderHeader > div:first-child,
+.streamlit-expanderHeader > span:first-child,
+[data-testid="stExpander"] summary > div:first-child,
+[data-testid="stExpander"] summary > span:first-child {
+    display: none !important;
+}
 .streamlit-expanderHeader svg,
 [data-testid="stExpander"] summary svg {
     margin-right: 12px !important;

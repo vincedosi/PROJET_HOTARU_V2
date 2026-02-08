@@ -1318,24 +1318,9 @@ def render_audit_geo():
     user_email = get_current_user_email()
     all_audits = db.load_user_audits(user_email or "")
 
-    ws_list = []
-    for a in all_audits:
-        ws_name = str(a.get('workspace', '')).strip()
-        if ws_name and ws_name not in ws_list:
-            ws_list.append(ws_name)
-    if not ws_list:
-        ws_list = ["Nouveau"]
-    else:
-        ws_list = sorted(ws_list) + ["+ Creer Nouveau"]
-
-    # Workspace en haut de la fenêtre principale (pas dans la sidebar)
-    selected_ws = st.selectbox(
-        "Projets (Workspace)",
-        ws_list,
-        key="audit_workspace_select",
-        help="Choisissez le projet / workspace pour filtrer les audits.",
-    )
-    filtered_audits = [a for a in all_audits if str(a.get('workspace', '')).strip() == selected_ws]
+    # Workspace géré dans le header (app.py), au niveau du LOGOUT
+    selected_ws = st.session_state.get("audit_workspace_select", "Nouveau")
+    filtered_audits = [a for a in all_audits if (str(a.get('workspace', '')).strip() or "Non classé") == selected_ws]
 
     tab1, tab2 = st.tabs(["Audit Site", "Méthodologie"])
 
