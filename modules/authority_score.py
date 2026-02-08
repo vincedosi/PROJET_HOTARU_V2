@@ -851,17 +851,17 @@ class AuthorityScoreAnalyzer:
 # INTERFACE STREAMLIT
 # =============================================================================
 def _score_color(score):
-    """Retourne la couleur selon le score"""
+    """Retourne la couleur selon le score - monochrome"""
     if score >= 70:
-        return "#10b981"
+        return "#000000"
     elif score >= 40:
-        return "#FFA500"
+        return "rgba(0,0,0,0.55)"
     else:
-        return "#FF4B4B"
+        return "rgba(0,0,0,0.25)"
 
 
 def _score_status(score):
-    """Retourne l'icone de statut"""
+    """Retourne le statut"""
     if score >= 70:
         return "FORT"
     elif score >= 40:
@@ -871,50 +871,50 @@ def _score_status(score):
 
 
 def _interpretation_color(score):
-    """Couleur pour l'interpretation globale"""
-    if score >= 80:
-        return "#10b981"
-    elif score >= 60:
-        return "#3b82f6"
-    elif score >= 40:
-        return "#FFA500"
-    else:
-        return "#FF4B4B"
+    """Couleur pour l'interpretation globale - monochrome"""
+    return "#000000"
 
 
 def render_authority_score():
     """Rendu principal de l'onglet Authority Score"""
 
     st.markdown(
-        '<p style="font-size:0.6rem;font-weight:800;letter-spacing:0.25em;'
-        'text-transform:uppercase;color:#94a3b8;margin-bottom:8px;">AI AUTHORITY INDEX</p>',
+        '<h1 class="zen-title">AUTHORITY SCORE</h1>',
         unsafe_allow_html=True,
     )
     st.markdown(
-        '<p style="font-size:0.85rem;color:#64748b;margin-bottom:24px;">'
-        "Mesure la probabilite qu'une entite soit citee par les moteurs IA (ChatGPT, Claude, Gemini, Perplexity).</p>",
+        '<p class="zen-subtitle">'
+        "AI AUTHORITY INDEX // MESURE LA PROBABILITE DE CITATION PAR LES LLMS</p>",
         unsafe_allow_html=True,
     )
 
     # === INPUTS ===
-    st.markdown('<div style="border:1px solid #e2e8f0;padding:24px;margin-bottom:24px;">', unsafe_allow_html=True)
+    st.markdown(
+        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">'
+        '<span class="step-badge">01</span>'
+        '<span class="section-title" style="margin-bottom:0;">ANALYSE</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="section-container">', unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
     with col1:
         entity_name = st.text_input(
-            "Nom de l'entite",
+            "ENTITY NAME",
             placeholder="Ex: Nike, Coca-Cola, LVMH...",
             key="authority_entity_name",
         )
     with col2:
         website_url = st.text_input(
-            "Site web",
+            "WEBSITE",
             placeholder="https://www.example.com",
             key="authority_website_url",
         )
 
     competitors = st.text_area(
-        "URLs concurrents (une par ligne, optionnel)",
+        "COMPETITORS (ONE URL PER LINE)",
         placeholder="https://www.concurrent1.com\nhttps://www.concurrent2.com",
         height=80,
         key="authority_competitors",
@@ -922,12 +922,13 @@ def render_authority_score():
 
     st.markdown("</div>", unsafe_allow_html=True)
 
+    st.markdown("<br>", unsafe_allow_html=True)
+
     if st.button("CALCULER L'AUTHORITY SCORE", use_container_width=True, type="primary"):
         if not entity_name or not website_url:
             st.warning("Veuillez renseigner le nom de l'entite et le site web.")
             return
 
-        # Normaliser l'URL
         url = website_url.strip()
         if not url.startswith("http"):
             url = "https://" + url
@@ -939,8 +940,6 @@ def render_authority_score():
         with st.spinner("Analyse en cours..."):
             progress = st.progress(0, "Pilier 1/5 : Knowledge Graph Coverage...")
 
-            # On lance l'analyse complete
-            # Simuler la progression par pilier
             progress.progress(0.10, "Pilier 1/5 : Knowledge Graph (Wikidata)...")
             result = {"breakdown": {}}
 
@@ -978,7 +977,6 @@ def render_authority_score():
                 cf = {"score": 0, "details": {}, "error": str(e)}
             result["breakdown"]["content_freshness"] = cf
 
-            # Score final
             bd = result["breakdown"]
             overall = round(
                 bd["knowledge_graph"]["score"] * 0.30
@@ -1025,24 +1023,20 @@ def render_authority_score():
     overall = result["overall_score"]
     bd = result["breakdown"]
 
-    st.markdown('<div style="height:2px;background:#0f172a;margin:32px 0;"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
 
     # === ERREURS ===
     for pillar_name, error_msg in result.get("errors", []):
         st.warning(f"Pilier {pillar_name} : analyse partielle ({error_msg})")
 
     # === SCORE GLOBAL ===
-    score_col = _interpretation_color(overall)
-
     st.markdown(
-        f'<div style="text-align:center;padding:40px 0;">'
-        f'<div style="font-size:0.6rem;font-weight:800;letter-spacing:0.25em;text-transform:uppercase;'
-        f'color:#94a3b8;margin-bottom:16px;">AI AUTHORITY INDEX</div>'
-        f'<div style="font-size:6rem;font-weight:900;line-height:1;color:{score_col};letter-spacing:-0.04em;">'
+        f'<div style="text-align:center;padding:48px 0;">'
+        f'<span class="label-caps" style="margin-bottom:16px;display:block;">AI AUTHORITY INDEX</span>'
+        f'<div style="font-size:7rem;font-weight:900;line-height:1;color:#000;letter-spacing:-0.05em;font-style:italic;">'
         f'{overall}</div>'
-        f'<div style="font-size:1rem;font-weight:600;color:#94a3b8;margin-top:8px;">/100</div>'
-        f'<div style="display:inline-block;padding:8px 24px;margin-top:16px;font-size:0.65rem;font-weight:800;'
-        f'letter-spacing:0.15em;text-transform:uppercase;background:{score_col};color:#fff;">'
+        f'<div style="font-size:0.85rem;font-weight:600;color:rgba(0,0,0,0.4);margin-top:8px;">/100</div>'
+        f'<div class="step-badge" style="margin-top:20px;padding:8px 24px;font-size:0.6rem;">'
         f'{result["interpretation"]}</div>'
         f'</div>',
         unsafe_allow_html=True,
@@ -1050,8 +1044,8 @@ def render_authority_score():
 
     if entity:
         st.markdown(
-            f'<p style="text-align:center;font-size:0.85rem;color:#64748b;margin-top:8px;">'
-            f'Entite analysee : <strong>{entity}</strong></p>',
+            f'<p style="text-align:center;font-size:0.8rem;color:rgba(0,0,0,0.4);margin-top:4px;">'
+            f'Entite analysee : <strong style="color:#000;">{entity}</strong></p>',
             unsafe_allow_html=True,
         )
 
@@ -1059,8 +1053,10 @@ def render_authority_score():
 
     # === BREAKDOWN DES 5 PILIERS ===
     st.markdown(
-        '<p style="font-size:0.6rem;font-weight:800;letter-spacing:0.25em;text-transform:uppercase;'
-        'color:#94a3b8;margin-bottom:20px;">DETAIL PAR PILIER</p>',
+        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">'
+        '<span class="step-badge">02</span>'
+        '<span class="section-title" style="margin-bottom:0;">DETAIL PAR PILIER</span>'
+        '</div>',
         unsafe_allow_html=True,
     )
 
@@ -1081,21 +1077,20 @@ def render_authority_score():
 
         st.markdown(
             f'<div style="display:flex;align-items:center;gap:16px;padding:16px 0;'
-            f'border-bottom:1px solid #f1f5f9;">'
-            f'<div style="min-width:200px;">'
-            f'<span style="font-weight:700;font-size:0.85rem;color:#0f172a;">{display_name}</span>'
-            f'<span style="font-size:0.7rem;color:#94a3b8;margin-left:8px;">({weight})</span>'
+            f'border-bottom:1px solid rgba(0,0,0,0.08);">'
+            f'<div style="min-width:220px;">'
+            f'<span style="font-weight:800;font-size:0.7rem;color:#000;letter-spacing:0.05em;text-transform:uppercase;">{display_name}</span>'
+            f'<span style="font-size:0.6rem;color:rgba(0,0,0,0.4);margin-left:8px;">({weight})</span>'
             f'</div>'
-            f'<div style="flex:1;background:#f1f5f9;height:8px;position:relative;">'
+            f'<div style="flex:1;background:rgba(0,0,0,0.06);height:6px;position:relative;">'
             f'<div style="position:absolute;left:0;top:0;height:100%;width:{pct*100}%;background:{color};"></div>'
             f'</div>'
             f'<div style="min-width:50px;text-align:right;">'
-            f'<span style="font-weight:800;font-size:0.9rem;color:{color};">{pscore}</span>'
-            f'<span style="font-size:0.7rem;color:#94a3b8;">/100</span>'
+            f'<span style="font-weight:900;font-size:0.9rem;color:#000;">{pscore}</span>'
+            f'<span style="font-size:0.65rem;color:rgba(0,0,0,0.4);">/100</span>'
             f'</div>'
             f'<div style="min-width:70px;">'
-            f'<span style="display:inline-block;padding:2px 8px;font-size:0.6rem;font-weight:800;'
-            f'letter-spacing:0.1em;background:{color};color:#fff;">{status}</span>'
+            f'<span class="step-badge" style="font-size:0.55rem;">{status}</span>'
             f'</div>'
             f'</div>',
             unsafe_allow_html=True,
@@ -1105,149 +1100,153 @@ def render_authority_score():
 
     # === DETAILS PAR PILIER (EXPANDERS) ===
     st.markdown(
-        '<p style="font-size:0.6rem;font-weight:800;letter-spacing:0.25em;text-transform:uppercase;'
-        'color:#94a3b8;margin-bottom:16px;">DONNEES DETAILLEES</p>',
+        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">'
+        '<span class="step-badge">03</span>'
+        '<span class="section-title" style="margin-bottom:0;">DONNEES DETAILLEES</span>'
+        '</div>',
         unsafe_allow_html=True,
     )
 
     # Pilier 1 : Knowledge Graph
-    with st.expander(f"Knowledge Graph Coverage  ({bd['knowledge_graph']['score']}/100)", expanded=False):
+    with st.expander(f"KNOWLEDGE GRAPH COVERAGE  ({bd['knowledge_graph']['score']}/100)", expanded=False):
         kg_d = bd["knowledge_graph"].get("details", {})
         if kg_d.get("qid"):
             st.markdown(
-                f'<div style="padding:12px;border:1px solid #e2e8f0;margin-bottom:8px;">'
-                f'<span style="font-size:0.7rem;font-weight:700;color:#94a3b8;">QID Wikidata</span><br>'
-                f'<span style="font-size:0.9rem;font-weight:700;color:#0f172a;">'
+                f'<div style="padding:12px;border:1px solid rgba(0,0,0,0.12);margin-bottom:12px;">'
+                f'<span class="label-caps">QID WIKIDATA</span>'
+                f'<div style="font-size:0.9rem;font-weight:700;color:#000;margin-top:4px;">'
                 f'<a href="https://www.wikidata.org/wiki/{kg_d["qid"]}" target="_blank" '
-                f'style="color:#0f172a;text-decoration:none;border-bottom:1px solid #0f172a;">'
-                f'{kg_d["qid"]}</a></span>'
+                f'style="color:#000;border-bottom:1px solid #000;">'
+                f'{kg_d["qid"]}</a></div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Proprietes", kg_d.get("nb_properties", 0))
+                st.metric("PROPRIETES", kg_d.get("nb_properties", 0))
             with col2:
-                st.metric("References", kg_d.get("nb_references", 0))
+                st.metric("REFERENCES", kg_d.get("nb_references", 0))
             with col3:
-                st.metric("IDs externes", kg_d.get("nb_external_ids", 0))
+                st.metric("IDS EXTERNES", kg_d.get("nb_external_ids", 0))
             with col4:
-                st.metric("Wikipedia", "Oui" if kg_d.get("has_wikipedia") else "Non")
+                st.metric("WIKIPEDIA", "OUI" if kg_d.get("has_wikipedia") else "NON")
         else:
             st.markdown(
-                '<p style="font-size:0.85rem;color:#FF4B4B;font-weight:600;">'
+                '<p style="font-size:0.8rem;color:#000;font-weight:700;">'
                 "Entite non trouvee dans Wikidata.</p>",
                 unsafe_allow_html=True,
             )
 
     # Pilier 2 : Structured Data
-    with st.expander(f"Structured Data Footprint  ({bd['structured_data']['score']}/100)", expanded=False):
+    with st.expander(f"STRUCTURED DATA FOOTPRINT  ({bd['structured_data']['score']}/100)", expanded=False):
         sd_d = bd["structured_data"].get("details", {})
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Pages analysees", sd_d.get("pages_analyzed", 0))
+            st.metric("PAGES ANALYSEES", sd_d.get("pages_analyzed", 0))
         with col2:
-            st.metric("Pages avec JSON-LD", sd_d.get("pages_with_jsonld", 0))
+            st.metric("PAGES AVEC JSON-LD", sd_d.get("pages_with_jsonld", 0))
         with col3:
             st.metric("% JSON-LD", f'{sd_d.get("jsonld_percentage", 0)}%')
 
         types = sd_d.get("schema_types", [])
         if types:
             st.markdown(
-                '<p style="font-size:0.7rem;font-weight:700;color:#94a3b8;margin-top:12px;">TYPES SCHEMA.ORG</p>',
+                '<span class="label-caps" style="margin-top:12px;">TYPES SCHEMA.ORG</span>',
                 unsafe_allow_html=True,
             )
             types_html = " ".join(
-                f'<span style="display:inline-block;padding:3px 10px;margin:2px;font-size:0.7rem;'
-                f'font-weight:600;border:1px solid #e2e8f0;color:#0f172a;">{t}</span>'
+                f'<span style="display:inline-block;padding:3px 10px;margin:2px;font-size:0.65rem;'
+                f'font-weight:700;border:1px solid rgba(0,0,0,0.12);color:#000;letter-spacing:0.05em;">{t}</span>'
                 for t in types
             )
             st.markdown(types_html, unsafe_allow_html=True)
 
         if sd_d.get("has_organization"):
             st.markdown(
-                '<p style="font-size:0.8rem;color:#10b981;font-weight:600;margin-top:8px;">'
+                '<p style="font-size:0.75rem;color:#000;font-weight:700;margin-top:8px;">'
                 "Type Organization detecte</p>",
                 unsafe_allow_html=True,
             )
 
     # Pilier 3 : Citation Authority
-    with st.expander(f"Citation Authority  ({bd['citation_authority']['score']}/100)", expanded=False):
+    with st.expander(f"CITATION AUTHORITY  ({bd['citation_authority']['score']}/100)", expanded=False):
         ca_d = bd["citation_authority"].get("details", {})
         col1, col2 = st.columns(2)
         with col1:
-            st.metric("References Wikipedia", ca_d.get("wikipedia_references", 0))
+            st.metric("REFERENCES WIKIPEDIA", ca_d.get("wikipedia_references", 0))
         with col2:
-            st.metric("Score backlinks", ca_d.get("backlink_estimate", 0))
+            st.metric("SCORE BACKLINKS", ca_d.get("backlink_estimate", 0))
 
         social = ca_d.get("social_presence", {})
         if social:
             st.markdown(
-                '<p style="font-size:0.7rem;font-weight:700;color:#94a3b8;margin-top:12px;">PRESENCE SOCIALE</p>',
+                '<span class="label-caps" style="margin-top:12px;">PRESENCE SOCIALE</span>',
                 unsafe_allow_html=True,
             )
             social_html = ""
             for platform, present in social.items():
-                color = "#10b981" if present else "#e2e8f0"
-                text_color = "#fff" if present else "#94a3b8"
+                bg = "#000" if present else "transparent"
+                text_c = "#fff" if present else "rgba(0,0,0,0.4)"
+                border = "#000" if present else "rgba(0,0,0,0.12)"
                 social_html += (
-                    f'<span style="display:inline-block;padding:3px 10px;margin:2px;font-size:0.65rem;'
-                    f'font-weight:700;letter-spacing:0.1em;text-transform:uppercase;'
-                    f'background:{color};color:{text_color};">{platform}</span>'
+                    f'<span style="display:inline-block;padding:3px 10px;margin:2px;font-size:0.6rem;'
+                    f'font-weight:800;letter-spacing:0.1em;text-transform:uppercase;'
+                    f'background:{bg};color:{text_c};border:1px solid {border};">{platform}</span>'
                 )
             st.markdown(social_html, unsafe_allow_html=True)
 
     # Pilier 4 : Semantic Completeness
-    with st.expander(f"Semantic Completeness  ({bd['semantic_completeness']['score']}/100)", expanded=False):
+    with st.expander(f"SEMANTIC COMPLETENESS  ({bd['semantic_completeness']['score']}/100)", expanded=False):
         sc_d = bd["semantic_completeness"].get("details", {})
         col1, col2 = st.columns(2)
         with col1:
-            st.metric("Concepts uniques", sc_d.get("unique_concepts", 0))
+            st.metric("CONCEPTS UNIQUES", sc_d.get("unique_concepts", 0))
         with col2:
-            st.metric("Score couverture", f'{sc_d.get("coverage_score", 0)}%')
+            st.metric("SCORE COUVERTURE", f'{sc_d.get("coverage_score", 0)}%')
 
         top_terms = sc_d.get("top_terms", [])
         if top_terms:
             st.markdown(
-                '<p style="font-size:0.7rem;font-weight:700;color:#94a3b8;margin-top:12px;">TOP TERMES</p>',
+                '<span class="label-caps" style="margin-top:12px;">TOP TERMES</span>',
                 unsafe_allow_html=True,
             )
             terms_html = " ".join(
-                f'<span style="display:inline-block;padding:2px 8px;margin:2px;font-size:0.7rem;'
-                f'color:#64748b;border:1px solid #e2e8f0;">{t}</span>'
+                f'<span style="display:inline-block;padding:2px 8px;margin:2px;font-size:0.65rem;'
+                f'color:rgba(0,0,0,0.55);border:1px solid rgba(0,0,0,0.12);">{t}</span>'
                 for t in top_terms[:15]
             )
             st.markdown(terms_html, unsafe_allow_html=True)
 
     # Pilier 5 : Content Freshness
-    with st.expander(f"Content Freshness  ({bd['content_freshness']['score']}/100)", expanded=False):
+    with st.expander(f"CONTENT FRESHNESS  ({bd['content_freshness']['score']}/100)", expanded=False):
         cf_d = bd["content_freshness"].get("details", {})
         col1, col2, col3 = st.columns(3)
         with col1:
             avg_age = cf_d.get("avg_age_days")
-            st.metric("Age moyen (jours)", round(avg_age) if avg_age is not None else "N/A")
+            st.metric("AGE MOYEN (JOURS)", round(avg_age) if avg_age is not None else "N/A")
         with col2:
-            st.metric("Derniere publication", cf_d.get("last_publication", "N/A"))
+            st.metric("DERNIERE PUBLICATION", cf_d.get("last_publication", "N/A"))
         with col3:
-            st.metric("Pages avec dates", cf_d.get("pages_with_dates", 0))
+            st.metric("PAGES AVEC DATES", cf_d.get("pages_with_dates", 0))
 
     # === RECOMMANDATIONS ===
     recommendations = result.get("recommendations", [])
     if recommendations:
-        st.markdown('<div style="height:2px;background:#0f172a;margin:32px 0;"></div>', unsafe_allow_html=True)
+        st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
         st.markdown(
-            '<p style="font-size:0.6rem;font-weight:800;letter-spacing:0.25em;text-transform:uppercase;'
-            'color:#94a3b8;margin-bottom:16px;">RECOMMANDATIONS PRIORITAIRES</p>',
+            '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">'
+            '<span class="step-badge">04</span>'
+            '<span class="section-title" style="margin-bottom:0;">RECOMMANDATIONS PRIORITAIRES</span>'
+            '</div>',
             unsafe_allow_html=True,
         )
 
         for i, reco in enumerate(recommendations, 1):
             st.markdown(
-                f'<div style="padding:16px;border:1px solid #e2e8f0;border-left:3px solid #0f172a;'
+                f'<div style="padding:16px;border:1px solid rgba(0,0,0,0.12);border-left:3px solid #000;'
                 f'margin-bottom:8px;">'
-                f'<div style="font-size:0.6rem;font-weight:800;letter-spacing:0.15em;color:#94a3b8;'
-                f'margin-bottom:6px;">ACTION {i}</div>'
-                f'<div style="font-size:0.85rem;color:#0f172a;line-height:1.5;">{reco}</div>'
+                f'<span class="label-caps">ACTION {i}</span>'
+                f'<div style="font-size:0.85rem;color:#000;line-height:1.6;margin-top:6px;">{reco}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
