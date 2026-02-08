@@ -715,12 +715,35 @@ pre, code {
     gap: 10px;
 }
 
-/* --- SECTION CONTAINER (bordered box) --- */
+/* --- SECTION CONTAINER (bordered box) - pas de rectangles noirs --- */
 .section-container {
     border: 1px solid var(--border);
     padding: 2rem;
-    background: var(--bg);
+    background: var(--bg) !important;
     margin-bottom: 24px;
+}
+.section-container .stTextInput > div,
+.section-container .stTextArea > div,
+.section-container .stTextInput > div > div,
+.section-container .stTextArea > div > div {
+    background: var(--bg) !important;
+}
+/* Pas de rectangles noirs vides : colonnes et inputs toujours fond clair */
+[data-testid="column"] {
+    background: var(--bg) !important;
+}
+.stTextInput,
+.stTextInput > div,
+.stTextInput > div > div,
+.stTextArea,
+.stTextArea > div,
+.stTextArea > div > div {
+    background: var(--bg) !important;
+}
+.stTextInput > div > div > input,
+.stTextArea > div > div > textarea {
+    background: var(--bg) !important;
+    color: var(--text) !important;
 }
 
 /* --- SECTION HEADER (black bar with icon and title) --- */
@@ -1132,6 +1155,14 @@ pre, code {
     font-weight: 900;
     font-size: 0.8rem;
     flex-shrink: 0;
+}
+
+.hotaru-header-logo-img {
+    height: 36px;
+    width: auto;
+    max-width: 140px;
+    object-fit: contain;
+    display: block;
 }
 
 .hotaru-header-brand {

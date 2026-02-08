@@ -69,10 +69,10 @@ def render_home():
 
     st.markdown('<div class="home-divider"></div>', unsafe_allow_html=True)
 
-    # Note de version
+    # Note de version (date/heure réelle affichée dans l'en-tête)
     st.markdown(
         '<p class="home-tagline" style="font-size:0.8rem; color:rgba(0,0,0,0.5); margin-bottom:2rem;">'
-        '<strong>Version 3.0.1</strong> (2026-02-08) &mdash; Harmonisation titres, workspace principal, palette noir & rouge.'
+        '<strong>V 3.0.1</strong> &mdash; Date et heure de build dans l\'en-tête. Harmonisation titres, workspace, palette noir & rouge.'
         '</p>',
         unsafe_allow_html=True,
     )

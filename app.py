@@ -3,7 +3,10 @@ HOTARU v2 - Main Application Router
 The AI-Readable Web - GEO Audit & JSON-LD Generator
 """
 
+import base64
 import os
+from datetime import datetime
+
 import streamlit as st
 
 from core.auth import AuthManager
@@ -20,10 +23,10 @@ from modules.master import render_master_tab
 from modules.leaf import render_leaf_tab
 
 # =============================================================================
-# VERSION
+# VERSION (date + heure à chaque run / déploiement)
 # =============================================================================
 VERSION = "3.0.1"
-BUILD_DATE = "2026-02-08"
+BUILD_DATE = datetime.now().strftime("%Y-%m-%d %H:%M")
 
 # =============================================================================
 # CONFIGURATION
@@ -42,6 +45,15 @@ def load_styles():
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 
+def get_logo_base64():
+    """Logo pour le header (assets/logo.png) en base64."""
+    path = "assets/logo.png"
+    if not os.path.exists(path):
+        return None
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode()
+
+
 # =============================================================================
 # MAIN
 # =============================================================================
@@ -56,13 +68,21 @@ def main():
         _, col_login, _ = st.columns([1, 1.2, 1])
         with col_login:
             st.markdown("<div style='padding-top: 80px;'></div>", unsafe_allow_html=True)
-            st.markdown(
-                '<div style="display:flex;align-items:center;gap:12px;margin-bottom:32px;">'
-                '<div class="hotaru-header-logo">H</div>'
-                '<span class="hotaru-header-brand">HOTARU</span>'
-                '</div>',
-                unsafe_allow_html=True,
-            )
+            logo_b64 = get_logo_base64()
+            if logo_b64:
+                st.markdown(
+                    '<div class="hotaru-header-left" style="margin-bottom:32px;">'
+                    f'<img src="data:image/png;base64,{logo_b64}" class="hotaru-header-logo-img" alt="Hotaru" />'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    '<div class="hotaru-header-left" style="margin-bottom:32px;">'
+                    '<span class="hotaru-header-brand">HOTARU</span>'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
 
             with st.form("login_form"):
                 email = st.text_input("EMAIL", placeholder="admin@hotaru.com")
@@ -79,13 +99,20 @@ def main():
                         st.error("Invalid credentials.")
         return
 
-    # HEADER
+    # HEADER (logo.png au lieu de H sur fond noir)
+    logo_b64 = get_logo_base64()
+    if logo_b64:
+        header_left = (
+            f'<img src="data:image/png;base64,{logo_b64}" class="hotaru-header-logo-img" alt="Hotaru" />'
+        )
+    else:
+        header_left = (
+            '<div class="hotaru-header-logo">H</div>'
+            '<span class="hotaru-header-brand">HOTARU</span>'
+        )
     st.markdown(
         f'<div class="hotaru-header">'
-        f'<div class="hotaru-header-left">'
-        f'<div class="hotaru-header-logo">H</div>'
-        f'<span class="hotaru-header-brand">HOTARU</span>'
-        f'</div>'
+        f'<div class="hotaru-header-left">{header_left}</div>'
         f'<div class="hotaru-header-right">'
         f'<span class="hotaru-header-version">V {VERSION} // {BUILD_DATE}</span>'
         f'</div>'
