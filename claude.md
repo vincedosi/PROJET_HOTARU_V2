@@ -1,109 +1,124 @@
-🏮 PROJECT HOTARU V3 - MASTER INSTRUCTIONS (SaaS & Smart Architecture)
-1. VISION & DESIGN SYSTEM ("ZEN JAPONAIS")
-Philosophie : Minimalisme radical. Tout ce qui n'est pas essentiel disparaît.
+# 🏮 PROJECT HOTARU V3 - MASTER INSTRUCTIONS (SaaS & Smart Architecture)
 
-Palette : Fond 100% Blanc (#FFFFFF), Textes et Lignes Noir Pur (#000000).
+---
 
-Composants :
+## 1. VISION & DESIGN SYSTEM ("ZEN JAPONAIS" / BRUTALIST)
 
-Boutons : Fond blanc, bordure noire fine (1px), coins arrondis, texte noir. (Inversion noir/blanc au survol).
+**Philosophie :** Minimalisme radical. Tout ce qui n'est pas essentiel disparaît.
 
-Inputs : Lignes simples (border-bottom only) ou contours très fins.
+**Palette :** Fond 100% Blanc (#FFFFFF), Textes et Lignes Noir Pur (#000000).
 
-Sidebar : Fond blanc pur. Logo assets/logo.png centré en haut.
+**Composants :**
+- **Boutons :** Fond blanc, bordure noire fine (1px), texte noir. Inversion noir/blanc au survol. (Implémenté en **carré** dans `assets/style.css` : `border-radius: 0`.)
+- **Inputs :** Contours fins (1px solid var(--border-light)), style underline / focus noir.
+- **Sidebar :** Fond blanc, bordure droite noire (CSS présent ; sidebar Streamlit est collapsed par défaut dans `app.py`).
+- **Layout :** Navigation par **onglets (Tabs)** en zone principale : Home, Audit, Authority Score, Master, Leaf.
 
-Layout : Navigation par onglets persistants (Tabs) gérés via st.session_state.
+**Fichiers :** `app.py` (router), `assets/style.css` (design system), `assets/logo.png` (logo).
 
-2. NAVIGATION & SÉCURITÉ (SaaS)
-A. Structure de la Sidebar
-En-tête : Logo Hotaru.
+---
 
-Menu :
+## 2. NAVIGATION & SÉCURITÉ (SaaS)
 
-🔍 AUDIT GEO (Cœur du système)
+### A. Structure actuelle (implémentée)
 
-🛠️ TRANSFORMATION (Module futur)
+- **Authentification :** Page login (email + mot de passe), puis session. Déconnexion via bouton LOGOUT en haut à droite.
+- **Pas de sidebar menu.** Zone principale :
+  - **Header** : Logo 蛍 + HOTARU, version (V 3.0.0), bouton LOGOUT.
+  - **Tabs :** Home | Audit | Authority Score | Master | Leaf.
+- **Pied de page :** HOTARU ENTITY FORGE V2, version, build.
 
-⚙️ PARAMÈTRES (Clés & Profil)
+**Cible spec (non implémentée telle quelle) :** Sidebar avec menu 🔍 AUDIT GEO, 🛠️ TRANSFORMATION, ⚙️ PARAMÈTRES, et pied de page sidebar avec avatar + Déconnexion.
 
-Pied de page : Avatar utilisateur + Bouton Déconnexion.
+### B. Gestion des données (Data Isolation)
 
-B. Gestion des Données (Data Isolation)
-Cloisonnement : Un utilisateur ne voit QUE ses propres audits. Filtrage strict par user_id dans toutes les requêtes Database.
+- **Auth :** `core/auth.py` — Google Sheets onglet `users` (email, password_hash, created_at, last_login, role). Filtrage par email en session (`st.session_state.user_email`).
+- **Audits :** `core/database.py` — Onglet `audits`. `load_user_audits(user_email)` et `save_audit(...)` filtrent / enregistrent par `user_email`. Pas de colonne `user_id` (on utilise l’email).
+- **Admin :** Le rôle `role` est stocké en session (`st.session_state.user_role`) ; logique "admin voit stats globales" à brancher si besoin.
 
-Admin : Seul le rôle 'admin' peut voir les statistiques globales.
+### C. Le "Vault" (Clés API) — **NON IMPLÉMENTÉ**
 
-C. Le "Vault" (Clés API)
-Problème : Ne plus demander les clés à chaque session.
+- **Actuel :** Clés API (Mistral, etc.) lues uniquement via **Streamlit secrets** : `st.secrets["mistral"]["api_key"]`. Aucun onglet Paramètres, pas de colonne `api_vault` dans la table `users`.
+- **Spec :** Onglet Paramètres avec formulaire (Mistral, OpenAI) → chiffrement → stockage dans colonne `api_vault` (Google Sheets) → déchiffrement au login et chargement en session.
 
-Solution :
+---
 
-Dans l'onglet Paramètres, formulaire pour entrer les clés (Mistral, OpenAI).
+## 3. CŒUR DU SYSTÈME : AUDIT GEO & SMART ARCHITECT
 
-Chiffrer les clés avant de les stocker dans la colonne api_vault de Google Sheets (Table users).
+### État implémenté
 
-Au login, déchiffrer silencieusement et charger dans la session.
+- **Crawl / Scraper :** `core/scraping.py` — `SmartScraper` :
+  - Multi-URLs de départ, même domaine.
+  - Crawl par liens internes (pas de "Sitemap First" dans ce module ; `modules/authority_score.py` utilise sitemap pour son propre flux).
+  - Détection SPA/React → bascule Selenium si besoin.
+  - `analyze_patterns(pages)` : regroupement par **premier segment de chemin** (ex. `/blog`, `/produit`), avec comptage et échantillons.
+- **Renommage IA :** `core/ai_clustering.py` — `get_naming_prompt()`, `analyze_clusters_with_mistral(cluster_data)` : envoi des groupes à Mistral, parsing ligne par ligne (ID: Nom). **Non branché** dans `modules/audit_geo.py` (audit_geo utilise `_call_mistral` pour robots.txt, analyses texte, etc., mais pas pour le renommage des clusters du graphe).
+- **Audit GEO :** `modules/audit_geo.py` — Crawl (SmartScraper), vérifs (robots, meta, sitemap mention, etc.), graphe (pyvis/networkx), sauvegarde / chargement d’audits via `core/database.py`. Pas de "Smart Architect" unifié (sitemap first + clustering regex + Mistral renaming) dans ce module.
 
-3. CŒUR DU SYSTÈME : LE "SMART ARCHITECT" (Phase 1)
-Objectif : Cartographier un site sans le scorer. Transformer 1000 URLs en un organigramme lisible de ~15 clusters nommés.
+### Spec Phase 1 "Smart Architect" (objectif)
 
-Étape A : Découverte & Clustering (Code Python)
-Sitemap First : Tenter de lire sitemap.xml. Si échec, crawler les liens internes.
+- **A. Découverte :** Sitemap First, sinon crawl liens. Pattern matching (regex) sur URLs → clusters virtuels. Smart sampling : si cluster > 5 pages, garder 3 spécimens pour l’IA.
+- **B. Renommage :** Mistral pour un nom de catégorie par groupe (ex. "Fiches Produits", "Blog"). Nœud du graphe = "📦 Fiches Produits (540 pages)".
+- **C. UX :** Graphe interactif (fond blanc, nœuds rectangulaires), clic → panneau avec URLs échantillons ; expander "Journal d’activité" avec logs type [INFO] / [IA].
 
-Pattern Matching (Regex) :
+---
 
-Analyser les URLs pour trouver des répétitions (/produit/id-1, /produit/id-2).
+## 4. DATABASE & VERSIONING (Google Sheets)
 
-Regrouper ces URLs dans des "Clusters Virtuels".
+### Schéma actuel
 
-Smart Sampling :
+- **Table `users` (auth) :** email, password_hash, created_at, last_login, role. (Pas de colonne api_vault.)
+- **Table `audits` :** audit_id, user_email, workspace, date, site_url, nb_pages, data_compressed, nom_site. (`data_compressed` = JSON des résultats compressé en base64/zlib.)
 
-Si un cluster > 5 pages : Ne garder que 3 spécimens pour l'analyse.
+**Save/Load :** Bouton "Sauvegarder l’architecture" dans l’audit ; tableau des audits passés avec "Charger" (dashboard dans l’onglet Audit). Implémenté dans `audit_geo.py` + `database.py`.
 
-Les autres sont comptabilisés mais ignorés (Économie massive de tokens).
+**Spec :** Colonnes audit_id, user_id, site_url, timestamp, graph_data_json (compressé), status (Structure Only / Scored). En pratique : user_email au lieu de user_id, pas de colonne status.
 
-Étape B : Renommage Intelligent (API Mistral)
-Ne pas calculer de score GEO maintenant. Utiliser l'IA uniquement pour structurer.
+---
 
-Prompt Système : "Tu es un Architecte de l'Information. Analyse ces 3 URLs et titres d'un même groupe. Donne un nom de catégorie court et descriptif (ex: 'Fiches Produits', 'Blog', 'Mentions Légales'). Réponds uniquement le nom."
+## 5. STRUCTURE DU PROJET (scan du code)
 
-Résultat : Le nœud du graphe s'appellera "📦 Fiches Produits (540 pages)" et non une URL brute.
+```
+PROJET_HOTARU_V2/
+├── app.py                 # Point d’entrée : auth, header, tabs, injection CSS
+├── assets/
+│   ├── logo.png
+│   └── style.css          # Design system Brutalist (monochrome, Inter, bordures 1px)
+├── core/
+│   ├── auth.py            # AuthManager (Google Sheets users, login/register/change_password)
+│   ├── database.py        # AuditDatabase (audits : save/load par user_email)
+│   ├── scraping.py       # SmartScraper (crawl, analyze_patterns par path)
+│   └── ai_clustering.py   # Renommage clusters via Mistral (non branché dans audit_geo)
+├── engine/
+│   ├── master_handler.py  # MasterDataHandler, enrichissement Wikidata + Mistral
+│   ├── dynamic_handler.py # DynamicDataHandler (prédictions Mistral pour LEAF)
+│   └── template_builder.py
+├── modules/
+│   ├── home.py            # Landing / dashboard (présentation des 4 modules)
+│   ├── audit_geo.py       # Audit GEO (crawl, graphe, save/load, robots/LLM)
+│   ├── authority_score.py # AI Authority Index (5 piliers, sitemap utilisé ici)
+│   ├── geo_scoring.py
+│   ├── master.py          # Master Data (Wikidata + Mistral, JSON-LD entité)
+│   └── leaf.py            # Leaf Builder (JSON-LD par page, Mistral)
+├── requirements.txt
+├── README.md
+└── CLAUDE.md              # Ce fichier
+```
 
-Étape C : Visualisation & UX
-Graphe Interactif :
+**Secrets attendus (Streamlit) :** `gcp_service_account`, `sheet_url`, `mistral.api_key`.
 
-Fond blanc. Nœuds rectangulaires.
+---
 
-Labels : Le nom généré par Mistral.
+## 6. INSTRUCTIONS DE CODAGE (priorités)
 
-Clic : Ouvre un panneau latéral listant les 3 URLs échantillons (cliquables).
+| Élément | État | Action |
+|--------|------|--------|
+| Architecture app.py + CSS | ✅ Fait | — |
+| Navigation (tabs) | ✅ Fait | Optionnel : ajouter sidebar menu (AUDIT GEO, TRANSFORMATION, PARAMÈTRES) si souhaité |
+| Vault (clés API en GSheets) | ❌ Non fait | Ajouter onglet Paramètres, colonne api_vault dans users, chiffrement/déchiffrement au login |
+| Data isolation (user_email) | ✅ Fait | — |
+| Core Scraper (crawl + patterns) | ✅ Fait | Optionnel : "Sitemap First" dans scraping ou audit_geo |
+| AI Engine (renommage catégories) | ✅ Code prêt dans ai_clustering | Brancher dans audit_geo (clusters → Mistral → labels graphe) |
+| Save/Load audits | ✅ Fait | — |
 
-Console de Logs (Effet Hacker) :
-
-Afficher un st.expander("Journal d'activité") qui montre les logs en temps réel :
-
-[INFO] Cluster détecté : /blog/* (120 pages)
-
-[IA] Mistral a renommé le cluster -> "Actualités"
-
-4. DATABASE & VERSIONING (Google Sheets)
-Table audits :
-
-Colonnes : audit_id, user_id, site_url, timestamp, graph_data_json (Compressé), status (Structure Only / Scored).
-
-Save/Load :
-
-Bouton "Sauvegarder l'architecture" après l'analyse Mistral.
-
-Dashboard d'accueil (Onglet Audit) : Tableau des audits passés avec bouton "Charger".
-
-5. INSTRUCTIONS DE CODAGE IMMÉDIATES
-Architecture : Crée la navigation app.py et l'injection CSS assets/style.css.
-
-Settings : Implémente le "Vault" pour sécuriser les clés API dans GSheets.
-
-Core Scraper : Code la logique de Clustering/Sampling (Regex) + Lecture Sitemap.
-
-AI Engine : Implémente uniquement le prompt de "Renommage de catégorie".
-
-EXÉCUTION : Commence par la structure SaaS (Nav + Vault) puis attaque le Smart Scraper.
+**EXÉCUTION recommandée :** 1) Vault (Paramètres + api_vault) si besoin de ne plus dépendre des secrets par déploiement. 2) Brancher `ai_clustering.analyze_clusters_with_mistral` dans le flux Audit GEO pour le Smart Architect (renommage des nœuds du graphe).
