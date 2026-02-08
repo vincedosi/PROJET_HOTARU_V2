@@ -290,46 +290,116 @@ def _render_methodologie():
     st.markdown("---")
 
     st.markdown("""
-## La Physique de la Donnée : Pourquoi structurer, c'est dépolluer
+## La Physique de la Donnée : Pourquoi structurer, c'est optimiser
 
-### 1. Le Problème : L'Obésité Numérique et l'IA
+### 1. Le Problème : L'Obésité Numérique des LLMs
 
-Les modèles de langage (LLM) comme **GPT-4** ou **Claude** ne « lisent » pas les pages web comme des humains. Ils doivent **tokeniser** (découper) le code brut.
+Les modèles de langage (GPT-4, Claude, Gemini) ne « lisent » pas comme des humains. Ils **tokenisent** le code HTML brut avant de l'analyser.
 
-Un site web classique non optimisé est rempli de **bruit** :
-- balises HTML complexes,
-- scripts JS,
-- CSS in-line.
+**Un site web classique non optimisé contient :**
+- Des balises HTML complexes (nav, footer, aside)
+- Des scripts JavaScript inline
+- Du CSS embarqué
+- Des menus, breadcrumbs, widgets
 
-**Conséquence :** Pour trouver une information simple (ex. le prix d'un produit), l'IA doit traiter des **milliers de tokens inutiles**.
+**Conséquence :** Pour extraire une information simple (prix, horaires, localisation), un LLM doit traiter **des milliers de tokens parasites**.
 
-**Impact :** *Plus de tokens = Plus de cycles GPU = Plus d'électricité consommée.*
+**Impact direct :**
+
+*Plus de tokens = Plus de cycles GPU = Plus d'électricité = Plus de CO₂*
 
 ---
 
-### 2. La Solution HOTARU : Le Signal Pur
+### 2. La Solution HOTARU : Signal vs. Bruit
 
-HOTARU restructure l'information via le **JSON-LD** et le format **llms.txt**. Nous éliminons le bruit pour ne garder que le **signal sémantique**.
+HOTARU structure l'information via :
+- **JSON-LD** (données sémantiques au format Schema.org)
+- **Extraction du contenu principal** (titre, H1, paragraphes clés)
+- **Suppression du bruit** (scripts, CSS, navigation)
+
+**Résultat :** L'IA accède directement au "signal pur" sans traiter le superflu.
 
 ---
 
 ### 3. La Formule d'Impact Carbone
 
-Notre calculatrice se base sur la réduction de la charge cognitive des serveurs d'inférence (Data Centers).
+Notre calculatrice mesure la **réduction de charge cognitive** des serveurs d'inférence.
 
 $$
 \\Delta_{CO_2} = (Tokens_{Bruts} - Tokens_{Optimisés}) \\times E_{Token} \\times I_{Carbone}
 $$
 
-- **Tokens** : Unité de base de lecture des LLMs (env. 0,75 mot).
-- **E_Token** : Énergie moyenne pour traiter 1000 tokens (inférence NVIDIA H100).
-- **I_Carbone** : Intensité carbone moyenne mondiale du kWh.
+**Avec :**
+- **Tokens** : Unité de lecture des LLMs (~0,75 mot)
+- **E_Token** : Énergie pour traiter 1000 tokens en inférence (NVIDIA H100)
+- **I_Carbone** : Intensité carbone du mix électrique mondial
 
 ---
 
-### Conclusion
+### 4. Ordres de Grandeur & Honnêteté Scientifique
 
-En structurant vos données avec **HOTARU**, vous ne gagnez pas seulement en visibilité IA. Vous participez activement à la **Sobriété Numérique**.
+#### **Impact par requête (estimation) :**
+- Site non optimisé : ~5000 tokens
+- Site HOTARU : ~500 tokens
+- **Économie : 4500 tokens**
+
+**En CO₂ :**
+- 4500 tokens ≈ 0,0001 kWh (H100)
+- × 475g CO₂/kWh (mix mondial)
+- = **~0,05g CO₂ économisé par requête**
+
+#### **Pour économiser 1 kg de CO₂ :**
+- Il faut **20 000 requêtes optimisées**
+- Équivalent à **~250 emails** (4g CO₂/email)
+
+#### **Donc oui, l'impact individuel est faible.**
+
+**MAIS :**
+- Si 10 000 entreprises optimisent leurs sites
+- Et que chacune reçoit 1000 requêtes IA/jour
+- **Économie annuelle : ~180 tonnes de CO₂**
+- Équivalent à **~30 vols Paris-New York**
+
+---
+
+### 5. Méthodologie & Limites
+
+#### **Sources des coefficients :**
+- **E_Token (0,0004 kWh/1000 tokens)** : Basé sur les benchmarks NVIDIA H100 pour l'inférence GPT-4 (2023)
+- **I_Carbone (475g CO₂/kWh)** : Mix électrique mondial moyen (IEA 2024)
+- **Équivalence smartphone** : Batterie 3000 mAh = 0,012 kWh
+
+#### **Ce que nous NE mesurons PAS :**
+- L'empreinte carbone de **l'entraînement** des modèles (90% de l'impact total de l'IA)
+- Les variations selon le **data center** (France = 60g CO₂/kWh, Pologne = 700g)
+- Les variations selon le **modèle** (GPT-4 ≠ Claude ≠ Gemini)
+
+#### **Mise à jour :**
+Nous révisons nos coefficients **trimestriellement** selon les nouvelles publications scientifiques.
+
+---
+
+### Conclusion : Sobriété Numérique à l'Échelle
+
+HOTARU ne va pas "sauver la planète" à lui seul.
+
+**Mais :**
+- Multiplié par des milliers d'organisations
+- Cet effet marginal devient un **standard de sobriété**
+- Une infrastructure AI plus efficiente = Moins de serveurs nécessaires
+
+**En structurant vos données, vous :**
+1. Gagnez en visibilité IA (GEO)
+2. Réduisez la charge des data centers
+3. Participez à un écosystème numérique plus sobre
+
+---
+
+#### 📊 Méthodologie complète & sources
+Documentation technique disponible sur demande.
+
+#### 💬 Questions ou corrections ?
+Feedback scientifique bienvenu.
 """)
 
 
