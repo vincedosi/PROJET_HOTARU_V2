@@ -637,12 +637,11 @@ def render_journal_crawled(results):
         unsafe_allow_html=True
     )
 
-    # En-tete de tableau
+    # En-tete de tableau (GRADE PAGE = grade + titre page ; PATH = chemin)
     st.markdown(
-        '<div style="display:flex;align-items:center;padding:10px 0;border-bottom:2px solid #0f172a;margin-bottom:4px;">'
-        '<span style="font-size:0.6rem;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;color:#0f172a;width:50px;">GRADE</span>'
-        '<span style="font-size:0.6rem;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;color:#0f172a;flex:1;">PAGE</span>'
-        '<span style="font-size:0.6rem;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;color:#0f172a;width:300px;text-align:right;">PATH</span>'
+        '<div class="journal-table-header" style="display:flex;align-items:center;padding:10px 0;border-bottom:2px solid #0f172a;margin-bottom:4px;">'
+        '<span class="journal-col-grade-page" style="font-size:0.7rem;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;color:#0f172a;flex:1;min-width:0;">GRADE PAGE</span>'
+        '<span class="journal-col-path" style="font-size:0.7rem;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;color:#0f172a;width:300px;text-align:right;flex-shrink:0;">PATH</span>'
         '</div>',
         unsafe_allow_html=True
     )
@@ -657,21 +656,24 @@ def render_journal_crawled(results):
                     sc, grade = score_data, 'N/A'
 
                 col = _grade_color(grade)
-                title = p.get('title', 'Sans titre')
                 url = p.get('url', '')
                 path = urlparse(url).path or '/'
+                raw_title = (p.get('title') or '').strip()
+                title = raw_title if raw_title else (path if path != '/' else 'Sans titre')
+                if title == '/' or not title:
+                    title = 'Sans titre'
 
                 st.markdown(
-                    f'<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #f1f5f9;">'
+                    f'<div class="journal-table-row" style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #f1f5f9;">'
                     f'<span class="grade-badge-circle" style="background:{col};color:#fff;border:2px solid #fff;'
                     f'width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;'
                     f'font-size:0.65rem;font-weight:800;letter-spacing:0.05em;flex-shrink:0;">{grade}</span>'
-                    f'<a href="{url}" target="_blank" style="font-size:0.85rem;font-weight:600;color:#0f172a;margin-left:8px;'
-                    f'text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"'
+                    f'<span class="journal-page-title" style="font-size:0.85rem;font-weight:600;color:#0f172a;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
+                    f'<a href="{url}" target="_blank" style="color:#0f172a;text-decoration:none;"'
                     f' onmouseover="this.style.borderBottom=\'1px solid #0f172a\'"'
-                    f' onmouseout="this.style.borderBottom=\'none\'">{title}</a>'
+                    f' onmouseout="this.style.borderBottom=\'none\'">{title}</a></span>'
                     f'<span style="font-size:0.7rem;color:#94a3b8;font-family:\'Courier New\',monospace;'
-                    f'max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;">{path}</span>'
+                    f'width:300px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;">{path}</span>'
                     f'</div>',
                     unsafe_allow_html=True
                 )

@@ -1056,6 +1056,24 @@ pre, code {
     box-sizing: border-box;
 }
 
+/* 06 JOURNAUX – en-tête et titres GRADE PAGE toujours visibles */
+.journal-table-header {
+    display: flex !important;
+    visibility: visible !important;
+}
+.journal-table-header .journal-col-grade-page,
+.journal-table-header .journal-col-path {
+    visibility: visible !important;
+}
+.journal-table-header .journal-col-grade-page { flex: 1; }
+.journal-table-row .journal-page-title,
+.journal-table-row .journal-page-title a {
+    visibility: visible !important;
+    color: #0f172a !important;
+    font-size: 0.85rem !important;
+    font-weight: 600 !important;
+}
+
 /* =============================================================================
    METHODOLOGIE PAGE CLASSES
    ============================================================================= */
