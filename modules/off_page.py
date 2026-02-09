@@ -172,9 +172,9 @@ def _fetch_off_page_mentions(brand: str, max_results_per_source: int = 5) -> Lis
 
 
 def render_off_page_audit() -> None:
-    """Interface principale de l'audit Off-Page (module autonome)."""
+    """Interface principale de l'audit Off-Page."""
     st.markdown(
-        '<p class="section-title">01 / RÉPUTATION OFF-PAGE</p>',
+        '<p class="section-title">02 / AUDIT EXTERNE</p>',
         unsafe_allow_html=True,
     )
 
@@ -182,6 +182,7 @@ def render_off_page_audit() -> None:
         "Nom de la marque",
         placeholder="Ex: BMW, Zapier, Hotaru...",
         label_visibility="collapsed",
+        key="offpage_brand_input",
     )
 
     if not HAS_GOOGLESEARCH:
@@ -199,6 +200,7 @@ def render_off_page_audit() -> None:
         "LANCER L'ANALYSE OFF-PAGE",
         type="primary",
         use_container_width=True,
+        key="offpage_launch_btn",
     ):
         if not brand or not brand.strip():
             st.warning("Veuillez saisir un nom de marque.")
@@ -247,7 +249,7 @@ def render_off_page_audit() -> None:
         else:
             st.write("Aucune mention détectée pour l'instant.")
 
-        if st.button("SAUVEGARDER DATA (GOOGLE SHEETS)", use_container_width=True):
+        if st.button("SAUVEGARDER DATA (GOOGLE SHEETS)", use_container_width=True, key="offpage_save_btn"):
             payload = {"external_data": mentions}
             st.success(
                 "Payload prêt pour envoi vers Google Sheets (colonne 'externe') :\n\n"

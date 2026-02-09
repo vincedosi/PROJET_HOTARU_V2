@@ -18,6 +18,7 @@ from bs4 import BeautifulSoup
 from core.database import AuditDatabase
 from core.session_keys import get_current_user_email
 from core.scraping import SmartScraper
+from modules.off_page import render_off_page_audit
 
 # =============================================================================
 # CONSTANTE API MISTRAL
@@ -1301,19 +1302,17 @@ def render_audit_geo():
     selected_ws = st.session_state.get("audit_workspace_select", "Nouveau")
     filtered_audits = [a for a in all_audits if (str(a.get('workspace', '')).strip() or "Non classé") == selected_ws]
 
-    tab1, tab2 = st.tabs(["Audit Site", "Méthodologie"])
+    tab1, tab2, tab3 = st.tabs(["Audit Site", "Audit Externe", "Méthodologie"])
 
-    # ========================== TAB 1 : AUDIT ==========================
+    # ========================== TAB 1 : AUDIT SITE ==========================
     with tab1:
         # =================================================================
         # ZONE DE SCAN
         # =================================================================
         st.markdown(
             '<p class="section-title">01 / NOUVELLE ANALYSE</p>',
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
-
-        st.markdown('<div class="zen-card">', unsafe_allow_html=True)
 
         c1, c2 = st.columns([3, 1])
 
@@ -1343,9 +1342,8 @@ def render_audit_geo():
                 if not urls:
                     st.markdown(
                         '<p style="color:#FF4B4B;font-weight:700;font-size:0.85rem;">Veuillez entrer au moins une URL.</p>',
-                        unsafe_allow_html=True
+                        unsafe_allow_html=True,
                     )
-                    st.markdown('</div>', unsafe_allow_html=True)
                     return
 
                 domains = [urlparse(url).netloc for url in urls]
@@ -1353,9 +1351,8 @@ def render_audit_geo():
                     st.markdown(
                         f'<p style="color:#FF4B4B;font-weight:700;font-size:0.85rem;">'
                         f'Toutes les URLs doivent etre du meme domaine. Trouve : {", ".join(set(domains))}</p>',
-                        unsafe_allow_html=True
+                        unsafe_allow_html=True,
                     )
-                    st.markdown('</div>', unsafe_allow_html=True)
                     return
 
                 base_url = urls[0]
@@ -1374,20 +1371,20 @@ def render_audit_geo():
                 bar.progress(0.95, "Verification accessibilite IA (Frontend + API)...")
                 ai_access = check_ai_accessibility(base_url, res)
 
-                st.session_state.update({
-                    "results": res,
-                    "clusters": scr.get_pattern_summary(),
-                    "target_url": base_url,
-                    "start_urls": urls,
-                    "current_ws": ws_in if ws_in else "Non classe",
-                    "crawl_stats": stats.get('stats', {}),
-                    "filtered_log": stats.get('filtered_log', []),
-                    "duplicate_log": stats.get('duplicate_log', []),
-                    "ai_accessibility": ai_access
-                })
+                st.session_state.update(
+                    {
+                        "results": res,
+                        "clusters": scr.get_pattern_summary(),
+                        "target_url": base_url,
+                        "start_urls": urls,
+                        "current_ws": ws_in if ws_in else "Non classe",
+                        "crawl_stats": stats.get("stats", {}),
+                        "filtered_log": stats.get("filtered_log", []),
+                        "duplicate_log": stats.get("duplicate_log", []),
+                        "ai_accessibility": ai_access,
+                    }
+                )
                 st.rerun()
-
-        st.markdown('</div>', unsafe_allow_html=True)
 
         # =================================================================
         # ARCHIVES
@@ -1733,8 +1730,12 @@ def render_audit_geo():
 
         render_interactive_graph(G, show_health=expert_on)
 
-    # ========================== TAB 2 : MÉTHODOLOGIE ==========================
+    # ========================== TAB 2 : AUDIT EXTERNE ==========================
     with tab2:
+        render_off_page_audit()
+
+    # ========================== TAB 3 : MÉTHODOLOGIE ==========================
+    with tab3:
         st.markdown("")  # ancrage pour affichage de l'onglet
         with st.container():
             render_methodologie()
