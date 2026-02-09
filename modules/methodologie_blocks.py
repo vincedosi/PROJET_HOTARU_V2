@@ -1,4 +1,107 @@
 """
+HOTARU - Bloc Méthodologie (Authority Score)
+Contenu Markdown unique affiché dans l'onglet Méthodologie des modules concernés.
+"""
+
+import streamlit as st
+
+METHODOLOGIE_AUTHORITY_MD = """
+## Synthèse : L'AI Authority Index en bref
+
+L'indice repose sur une réalité technique : les IA ne \"devinent\" pas qui est une autorité, elles compilent des preuves structurées et citées. Notre algorithme scanne **5 piliers stratégiques** pour calculer un score sur 100 :
+
+1. **Knowledge Graph (30%)** : L'entité existe-t-elle dans la base de données universelle (Wikidata) ?
+2. **Données Structurées (25%)** : Le site parle-t-il le \"langage machine\" (JSON-LD) ?
+3. **Autorité de Citation (20%)** : La marque est-elle référencée par des tiers de confiance (Wikipedia, réseaux sociaux) ?
+4. **Complétude Sémantique (15%)** : Le contenu couvre-t-il tout le champ lexical de son expertise ?
+5. **Fraîcheur (10%)** : Les informations sont-elles à jour pour éviter les hallucinations ?
+
+**Objectif :** Plus le score est élevé, plus la probabilité que l'IA cite votre marque comme référence lors d'une requête utilisateur est forte.
+
+---
+
+## Méthodologie Détaillée
+
+### 1. Couverture Knowledge Graph (Poids : 30%)
+
+C’est le socle de l'identité numérique. Les LLMs utilisent des bases de connaissances comme **Wikidata** pour relier les concepts entre eux.
+
+* **Ce que le code vérifie :** La présence d'un identifiant unique (**QID**).
+* **Indicateurs de performance :**
+  * Nombre de propriétés renseignées (ex: fondateur, date de création).
+  * Présence d'un lien vers une page Wikipedia associée.
+  * Nombre de \"claims\" (affirmations) sourcées par des références externes.
+
+* **Impact IA :** Une entité absente de Wikidata est souvent considérée comme une \"simple chaîne de caractères\" et non comme une entité réelle par les modèles d'IA.
+
+### 2. Empreinte des Données Structurées (Poids : 25%)
+
+Les LLMs préfèrent les données organisées. Le balisage **Schema.org** en format **JSON-LD** permet d'injecter du sens directement dans le code sans ambiguïté.
+
+* **Ce que le code vérifie :** Il scanne jusqu'à 50 pages du site pour détecter les scripts `ld+json`.
+* **Indicateurs de performance :**
+  * Pourcentage de pages balisées.
+  * Diversité des types utilisés (`Organization`, `Article`, `FAQPage`, `Product`).
+  * Présence cruciale du type `Organization` sur la page d'accueil.
+
+* **Impact IA :** Cela aide l'IA à extraire des faits précis (prix, auteur, localisation) sans risque d'erreur d'interprétation.
+
+### 3. Autorité de Citation & Confiance (Poids : 20%)
+
+Ici, on mesure la preuve sociale et la crédibilité technique.
+
+* **Ce que le code vérifie :**
+  * **Mentions Wikipedia :** Recherche via l'API Wikipedia pour voir si le nom de l'entité apparaît dans des articles existants.
+  * **Signaux de Réassurance :** Analyse de la page d'accueil à la recherche de mentions légales, politiques de confidentialité, et coordonnées (email/téléphone).
+  * **Présence Sociale :** Détection des liens vers LinkedIn, Twitter, Facebook, etc.
+
+* **Impact IA :** Les modèles sont entraînés pour privilégier les sources qui affichent des signaux de confiance (E-E-A-T).
+
+### 4. Complétude Sémantique (Poids : 15%)
+
+L'IA évalue si vous êtes un expert en observant la richesse de votre vocabulaire métier.
+
+* **Ce que le code vérifie :** Extraction des termes clés via un algorithme de traitement de texte (**TF-IDF**).
+* **Indicateurs de performance :**
+  * Nombre de concepts uniques identifiés.
+  * **Analyse concurrentielle :** Si des URLs concurrentes sont fournies, le code compare le \"recouvrement\" sémantique.
+
+* **Impact IA :** Un contenu pauvre ou trop généraliste sera jugé moins pertinent qu'un site couvrant tout le spectre sémantique d'une thématique.
+
+### 5. Fraîcheur du Contenu (Poids : 10%)
+
+Une donnée périmée est une donnée risquée pour une IA.
+
+* **Ce que le code vérifie :** Analyse du fichier `sitemap.xml` et des balises `lastmod`.
+* **Indicateurs de performance :**
+  * Âge moyen des pages en jours.
+  * Date de la dernière publication détectée.
+
+* **Impact IA :** Les modèles récents (avec accès web) privilégient les informations à jour pour répondre aux questions d'actualité.
+
+---
+
+## Interprétation des Résultats
+
+| Score | Niveau d'Autorité | Impact LLM |
+| --- | --- | --- |
+| **80 - 100** | **Forte** | Référence prioritaire. Très haute probabilité de citation directe. |
+| **60 - 79** | **Moyenne** | Autorité reconnue. Citation probable sur des requêtes spécifiques. |
+| **40 - 59** | **Faible** | Présence détectée mais manque de preuves de confiance ou de structure. |
+| **0 - 39** | **Très Faible** | \"Bruit de fond\". L'IA connaît le nom mais ne peut pas confirmer l'autorité. |
+
+---
+"""
+
+
+def render_methodologie_for_module(module_key: str | None = None) -> None:
+    """
+    Affiche la méthodologie Authority Score sous forme de Markdown riche.
+    module_key est ignoré pour l'instant : le contenu est identique pour tous les modules qui l'appellent.
+    """
+    st.markdown(METHODOLOGIE_AUTHORITY_MD)
+
+"""
 HOTARU - Blocs Méthodologie réutilisables (SaaS).
 Chaque module (Audit, Authority, Master, Leaf) peut afficher son onglet Méthodologie.
 """
