@@ -1,6 +1,6 @@
 """
-HOTARU - Module Off-Page Reputation (V3.2 - Zero-Ban Edition)
-Scan optimisé avec cache intelligent et protection anti-détection maximale.
+HOTARU - Module Off-Page Reputation (V3.3 - Debug Edition)
+Version avec logs détaillés pour diagnostiquer les blocages Google
 """
 
 import streamlit as st
@@ -104,70 +104,122 @@ def build_reputation_graph(brand: str, mentions: List[Dict]):
     
     return G
 
-def _safe_google_search(query: str, max_results: int = 3) -> List[Dict]:
+def _safe_google_search_debug(query: str, max_results: int = 3, debug_container=None) -> List[Dict]:
     """
-    Recherche Google avec protection anti-ban MAXIMALE
+    VERSION DEBUG - Affiche tous les détails du processus
     
-    TIMING CRITIQUE:
-    - sleep_interval=4.0 : délai ENTRE chaque résultat (mode safe)
-    - Pause aléatoire après chaque appel : 3-6 sec
+    Args:
+        query: Requête Google
+        max_results: Nombre max de résultats
+        debug_container: Container Streamlit pour afficher les logs
     """
     results = []
     
-    try:
-        # Paramètres ultra-conservateurs
-        search_gen = search(
-            query,
-            num_results=max_results,
-            advanced=True,
-            sleep_interval=4.0,  # ✅ 4 SECONDES (mode safe)
-            timeout=15
-        )
+    # Conteneur pour les logs si non fourni
+    if debug_container is None:
+        debug_container = st.expander("🔍 Logs de Debug", expanded=True)
+    
+    with debug_container:
+        st.markdown(f"**🎯 Query lancée :** `{query}`")
+        st.markdown(f"**⏱️ Timeout :** 20 secondes")
+        st.markdown(f"**💤 Sleep interval :** 4.0 secondes")
+        st.markdown("---")
         
-        for res in search_gen:
-            results.append({
-                "title": res.title or "Sans titre",
-                "description": res.description or "",
-                "url": res.url
-            })
+        try:
+            start_time = time.time()
             
-            # Sécurité supplémentaire
-            if len(results) >= max_results:
-                break
+            # Tentative de recherche
+            st.markdown("🔄 **Initialisation de la recherche Google...**")
+            
+            search_gen = search(
+                query,
+                num_results=max_results,
+                advanced=True,
+                sleep_interval=4.0,
+                timeout=20  # ✅ Timeout augmenté
+            )
+            
+            st.markdown("✅ **Générateur créé. Extraction des résultats...**")
+            
+            # Extraction des résultats
+            for idx, res in enumerate(search_gen):
+                result_time = time.time() - start_time
                 
-    except Exception as e:
-        # Log silencieux, pas de crash
-        pass
+                st.markdown(
+                    f"""
+                    <div style="background:#f0fdf4; border-left:3px solid #10b981; padding:8px; margin:8px 0; border-radius:4px;">
+                        <strong>✓ Résultat {idx+1}</strong> (après {result_time:.1f}s)<br>
+                        <span style="font-size:0.85rem; color:#059669;">📄 Titre: {res.title or 'N/A'}</span><br>
+                        <span style="font-size:0.75rem; color:#64748b; font-family:monospace;">🔗 URL: {res.url}</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+                
+                results.append({
+                    "title": res.title or "Sans titre",
+                    "description": res.description or "",
+                    "url": res.url
+                })
+                
+                if len(results) >= max_results:
+                    st.markdown(f"🎯 **Limite atteinte** ({max_results} résultats)")
+                    break
+            
+            total_time = time.time() - start_time
+            
+            # Résumé final
+            if results:
+                st.success(f"✅ **{len(results)} résultat(s) trouvé(s)** en {total_time:.1f}s")
+            else:
+                st.warning("⚠️ **Aucun résultat retourné** (peut être un blocage Google)")
+                    
+        except Exception as e:
+            error_time = time.time() - start_time
+            st.error(
+                f"""
+                ❌ **Erreur après {error_time:.1f}s**
+                
+                **Type:** `{type(e).__name__}`
+                
+                **Message:** {str(e)}
+                
+                **Causes possibles:**
+                - Google détecte un bot et bloque
+                - Timeout dépassé (réseau lent)
+                - CAPTCHA invisible demandé
+                - Rate limit atteint
+                """
+            )
     
     return results
 
-@st.cache_data(ttl=3600, show_spinner=False)  # ✅ Cache 1 heure
-def _cached_scan(brand: str, scan_mode: str) -> Dict:
+@st.cache_data(ttl=3600, show_spinner=False)
+def _cached_scan_debug(brand: str, scan_mode: str, enable_debug: bool = False) -> Dict:
     """
-    Scanner AVEC CACHE - évite les scans répétés
+    Scanner AVEC CACHE et mode debug optionnel
     
-    Returns:
-        Dict avec 'results', 'timestamp', 'mode'
+    Args:
+        brand: Nom de la marque
+        scan_mode: Mode de scan (safe/balanced/fast)
+        enable_debug: Active les logs détaillés
     """
     # Configuration selon mode
     configs = {
         "fast": {
             "sources": 6,
             "results_per_source": 2,
-            "base_delay": (2.0, 3.5),
             "between_sources": (3.0, 5.0)
         },
         "balanced": {
             "sources": 8,
             "results_per_source": 3,
-            "base_delay": (2.5, 4.0),
             "between_sources": (4.0, 7.0)
         },
-        "safe": {  # ✅ MODE PAR DÉFAUT
+        "safe": {
             "sources": 10,
             "results_per_source": 3,
-            "base_delay": (3.0, 5.0),
-            "between_sources": (5.0, 9.0)  # Pauses longues
+            "between_sources": (5.0, 9.0)
         }
     }
     
@@ -181,12 +233,48 @@ def _cached_scan(brand: str, scan_mode: str) -> Dict:
     
     results = []
     
+    # Conteneur de debug global
+    if enable_debug:
+        debug_master = st.container()
+    
     for domain, meta in sorted_sources:
         source_name = meta["label"]
         
         # Query Google
         query = f'"{brand}" site:{domain}'
-        found = _safe_google_search(query, max_results=config["results_per_source"])
+        
+        if enable_debug:
+            with debug_master:
+                st.markdown(f"### 🔍 Scan de {source_name}")
+            
+            found = _safe_google_search_debug(
+                query, 
+                max_results=config["results_per_source"],
+                debug_container=debug_master
+            )
+        else:
+            # Mode silencieux (version originale sans logs)
+            found = []
+            try:
+                search_gen = search(
+                    query,
+                    num_results=config["results_per_source"],
+                    advanced=True,
+                    sleep_interval=4.0,
+                    timeout=20
+                )
+                
+                for res in search_gen:
+                    found.append({
+                        "title": res.title or "Sans titre",
+                        "description": res.description or "",
+                        "url": res.url
+                    })
+                    
+                    if len(found) >= config["results_per_source"]:
+                        break
+            except:
+                pass
         
         # Traitement résultats
         for item in found:
@@ -198,8 +286,11 @@ def _cached_scan(brand: str, scan_mode: str) -> Dict:
                 "url": item['url']
             })
         
-        # PAUSE CRITIQUE entre sources
+        # PAUSE entre sources
         delay = random.uniform(*config["between_sources"])
+        if enable_debug:
+            with debug_master:
+                st.info(f"⏸️ Pause de {delay:.1f}s avant la prochaine source...")
         time.sleep(delay)
     
     return {
@@ -208,10 +299,9 @@ def _cached_scan(brand: str, scan_mode: str) -> Dict:
         "mode": scan_mode
     }
 
-def _scan_with_ui(brand: str, status_container, log_container, scan_mode: str = "safe"):
+def _scan_with_ui(brand: str, status_container, log_container, scan_mode: str = "safe", debug_mode: bool = False):
     """
     Wrapper UI pour le scan caché
-    Affiche l'animation pendant que le cache travaille
     """
     logs = []
     
@@ -224,7 +314,7 @@ def _scan_with_ui(brand: str, status_container, log_container, scan_mode: str = 
     
     config_ui = configs.get(scan_mode, configs["safe"])
     
-    # Tri sources (même logique que _cached_scan)
+    # Tri sources
     sorted_sources = sorted(
         SOURCE_CONFIG.items(),
         key=lambda x: x[1].get('priority', 99)
@@ -233,19 +323,62 @@ def _scan_with_ui(brand: str, status_container, log_container, scan_mode: str = 
     total = len(sorted_sources)
     progress_bar = status_container.progress(0, text=f"Initialisation // Mode {config_ui['label']} (ETA: {config_ui['eta']})...")
     
-    # Simulation visuelle pendant le scan
-    for i, (domain, meta) in enumerate(sorted_sources):
-        source_name = meta["label"]
+    if not debug_mode:
+        # Animation normale
+        for i, (domain, meta) in enumerate(sorted_sources):
+            source_name = meta["label"]
+            
+            progress_bar.progress(i / total, text=f"Scan : {source_name}... [{i+1}/{total}]")
+            
+            log_html = f"<span style='color:#64748b'>[●]</span> Interrogation de {source_name}..."
+            logs.append(log_html)
+            
+            log_display = "<br>".join(logs[-8:])
+            log_container.markdown(
+                f"""
+                <div style="background:#0f172a; color:#cbd5e1; padding:16px; border-radius:8px; 
+                            font-family:'Courier New'; font-size:0.85rem; line-height:1.6; 
+                            border:1px solid #334155; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
+                    <div style="border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:8px; 
+                                color:#94a3b8; font-weight:700; letter-spacing:0.05em;">
+                        > HOTARU_SCAN_PROTOCOL // V3.3_DEBUG // {config_ui['label']}
+                    </div>
+                    {log_display}
+                    <div style="margin-top:8px; color:#10b981; font-weight:bold;">
+                        <span style="animation: blink 1s infinite;">▮</span> Scan en cours...
+                    </div>
+                </div>
+                <style>
+                    @keyframes blink {{ 0%, 49% {{ opacity: 1; }} 50%, 100% {{ opacity: 0; }} }}
+                </style>
+                """,
+                unsafe_allow_html=True
+            )
+            
+            time.sleep(0.3)
+    
+    # Appel du scan (avec ou sans debug)
+    scan_data = _cached_scan_debug(brand, scan_mode, enable_debug=debug_mode)
+    
+    if not debug_mode:
+        # Logs finaux
+        logs = []
+        results_by_source = {}
+        for r in scan_data["results"]:
+            results_by_source.setdefault(r['source'], 0)
+            results_by_source[r['source']] += 1
         
-        # Mise à jour UI
-        progress_bar.progress(i / total, text=f"Scan : {source_name}... [{i+1}/{total}]")
+        for domain, meta in sorted_sources:
+            source_name = meta["label"]
+            count = results_by_source.get(source_name, 0)
+            
+            if count > 0:
+                log_html = f"<span style='color:#10b981'>[✓]</span> {count} mentions sur {source_name}"
+            else:
+                log_html = f"<span style='color:#64748b'>[○]</span> Aucune donnée sur {source_name}"
+            logs.append(log_html)
         
-        # Log visuel (simulation)
-        log_html = f"<span style='color:#64748b'>[●]</span> Interrogation de {source_name}..."
-        logs.append(log_html)
-        
-        # Affichage terminal
-        log_display = "<br>".join(logs[-8:])
+        log_display = "<br>".join(logs)
         log_container.markdown(
             f"""
             <div style="background:#0f172a; color:#cbd5e1; padding:16px; border-radius:8px; 
@@ -253,89 +386,41 @@ def _scan_with_ui(brand: str, status_container, log_container, scan_mode: str = 
                         border:1px solid #334155; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
                 <div style="border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:8px; 
                             color:#94a3b8; font-weight:700; letter-spacing:0.05em;">
-                    > HOTARU_SCAN_PROTOCOL // V3.2_ZERO_BAN // {config_ui['label']}
+                    > SCAN TERMINÉ // {scan_data['timestamp']}
                 </div>
                 {log_display}
-                <div style="margin-top:8px; color:#10b981; font-weight:bold;">
-                    <span style="animation: blink 1s infinite;">▮</span> Scan en cours...
+                <div style="margin-top:12px; color:#10b981; font-weight:bold;">
+                    ✓ {len(scan_data['results'])} mentions extraites
                 </div>
             </div>
-            <style>
-                @keyframes blink {{ 0%, 49% {{ opacity: 1; }} 50%, 100% {{ opacity: 0; }} }}
-            </style>
             """,
             unsafe_allow_html=True
         )
         
-        # Pause visuelle (rapide, juste pour l'effet)
-        time.sleep(0.3)
-    
-    # Appel du scan caché (avec cache)
-    scan_data = _cached_scan(brand, scan_mode)
-    
-    # Mise à jour finale des logs avec vrais résultats
-    logs = []
-    results_by_source = {}
-    for r in scan_data["results"]:
-        results_by_source.setdefault(r['source'], 0)
-        results_by_source[r['source']] += 1
-    
-    for domain, meta in sorted_sources:
-        source_name = meta["label"]
-        count = results_by_source.get(source_name, 0)
-        
-        if count > 0:
-            log_html = f"<span style='color:#10b981'>[✓]</span> {count} mentions sur {source_name}"
-        else:
-            log_html = f"<span style='color:#64748b'>[○]</span> Aucune donnée sur {source_name}"
-        logs.append(log_html)
-    
-    # Affichage final
-    log_display = "<br>".join(logs)
-    log_container.markdown(
-        f"""
-        <div style="background:#0f172a; color:#cbd5e1; padding:16px; border-radius:8px; 
-                    font-family:'Courier New'; font-size:0.85rem; line-height:1.6; 
-                    border:1px solid #334155; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
-            <div style="border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:8px; 
-                        color:#94a3b8; font-weight:700; letter-spacing:0.05em;">
-                > SCAN TERMINÉ // {scan_data['timestamp']}
-            </div>
-            {log_display}
-            <div style="margin-top:12px; color:#10b981; font-weight:bold;">
-                ✓ {len(scan_data['results'])} mentions extraites
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-    
-    # Fin
-    progress_bar.progress(1.0, text="✓ Scan terminé avec succès")
-    time.sleep(1.5)
-    status_container.empty()
+        progress_bar.progress(1.0, text="✓ Scan terminé avec succès")
+        time.sleep(1.5)
+        status_container.empty()
     
     return scan_data["results"]
 
 def render_off_page_audit():
-    """Interface principale avec cache intégré"""
+    """Interface principale avec mode debug"""
     st.markdown('<p class="section-title">01 / AUDIT DE RÉPUTATION (OFF-PAGE)</p>', unsafe_allow_html=True)
     
-    # Warning si module manquant
     if not HAS_GOOGLESEARCH:
-        st.error("❌ Module `googlesearch-python` requis. Installez avec : `pip install googlesearch-python`")
+        st.error("❌ Module `googlesearch-python` requis.")
         st.code("pip install googlesearch-python", language="bash")
         return
     
-    # Info cache
+    # Info
     st.markdown(
         '<p style="font-size:0.75rem;color:#94a3b8;font-style:italic;margin-bottom:16px;">'
-        '🛡️ Scan ultra-sécurisé avec cache intelligent (1h). Les scans répétés utilisent les données en cache.</p>', 
+        '🛡️ Scan ultra-sécurisé avec cache intelligent (1h). Active le mode DEBUG pour diagnostiquer les problèmes.</p>', 
         unsafe_allow_html=True
     )
     
     # Input zone
-    col1, col2, col3 = st.columns([3, 1, 1])
+    col1, col2, col3, col4 = st.columns([2.5, 1, 1, 0.5])
     
     brand_input = col1.text_input(
         "Marque", 
@@ -346,16 +431,18 @@ def render_off_page_audit():
     
     scan_mode = col2.selectbox(
         "Mode",
-        options=["safe", "balanced", "fast"],  # ✅ Safe en premier (défaut)
+        options=["safe", "balanced", "fast"],
         format_func=lambda x: {"fast": "⚡ Rapide", "balanced": "⚖️ Équilibré", "safe": "🛡️ Sûr"}[x],
         label_visibility="collapsed",
-        index=0  # ✅ Safe par défaut
+        index=0
     )
+    
+    # ✅ NOUVEAU : Toggle Debug
+    debug_mode = col4.checkbox("🐛", help="Active les logs détaillés pour diagnostiquer les problèmes")
     
     # Session state
     if 'offpage_results' not in st.session_state:
         st.session_state['offpage_results'] = []
-        st.session_state['offpage_cached'] = False
     
     # Action
     scan_button = col3.button("SCANNER", type="primary", use_container_width=True)
@@ -364,14 +451,14 @@ def render_off_page_audit():
         if not brand_input:
             st.warning("⚠️ Nom de marque requis")
         else:
+            if debug_mode:
+                st.info("🐛 **Mode DEBUG activé** - Les logs détaillés s'afficheront ci-dessous")
+            
             status_box = st.empty()
             log_box = st.empty()
             
-            # Vérification cache
-            cache_key = f"{brand_input}_{scan_mode}"
-            
-            # Scan avec UI
-            results = _scan_with_ui(brand_input, status_box, log_box, scan_mode)
+            # Scan avec ou sans debug
+            results = _scan_with_ui(brand_input, status_box, log_box, scan_mode, debug_mode)
             
             st.session_state['offpage_results'] = results
             st.session_state['offpage_brand'] = brand_input
@@ -381,7 +468,14 @@ def render_off_page_audit():
             if results:
                 st.success(f"✓ {len(results)} mentions trouvées • Données en cache pour 1h")
             else:
-                st.info("Aucune mention trouvée. Essayez le mode 'Sûr' ou attendez quelques minutes avant de rescanner.")
+                st.warning(
+                    "⚠️ **Aucune mention trouvée**\n\n"
+                    "**Solutions :**\n"
+                    "- Active le mode 🐛 DEBUG pour voir les détails\n"
+                    "- Essaye une autre marque (ex: 'Nike', 'Apple')\n"
+                    "- Attends 5-10 minutes (Google peut bloquer temporairement)\n"
+                    "- Vérifie ta connexion internet"
+                )
     
     # RÉSULTATS
     results = st.session_state.get('offpage_results', [])
@@ -432,7 +526,6 @@ def render_off_page_audit():
                 )
         
         with tab_export:
-            # Export JSON
             export_data = {
                 "brand": brand_name,
                 "scan_mode": st.session_state.get('offpage_mode', 'safe'),
@@ -463,9 +556,26 @@ def render_off_page_audit():
                 unsafe_allow_html=True
             )
     
-    # Bouton reset cache (admin)
+    # Options avancées
     with st.expander("⚙️ Options avancées"):
-        if st.button("🗑️ Vider le cache", help="Force un nouveau scan même si des données sont en cache"):
-            _cached_scan.clear()
+        col_a, col_b = st.columns(2)
+        
+        if col_a.button("🗑️ Vider le cache", help="Force un nouveau scan"):
+            _cached_scan_debug.clear()
             st.session_state['offpage_results'] = []
-            st.success("Cache vidé. Le prochain scan sera complet.")
+            st.success("Cache vidé.")
+        
+        if col_b.button("📋 Tester une requête", help="Test rapide d'une source"):
+            if brand_input:
+                test_query = f'"{brand_input}" site:reddit.com'
+                st.code(test_query, language="text")
+                
+                with st.spinner("Test en cours..."):
+                    test_results = _safe_google_search_debug(test_query, max_results=2)
+                
+                if test_results:
+                    st.success(f"✅ {len(test_results)} résultats trouvés")
+                else:
+                    st.error("❌ Aucun résultat (blocage probable)")
+            else:
+                st.warning("Entrez une marque d'abord")
