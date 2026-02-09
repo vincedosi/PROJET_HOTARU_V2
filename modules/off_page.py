@@ -1,7 +1,7 @@
 """
-HOTARU - Module Off-Page Reputation (V3.4 - SerpAPI Edition)
-Scanner de réputation off-page avec SerpAPI (100% fiable)
-Clé API à configurer dans Streamlit Cloud : Settings → Secrets
+HOTARU - Module Off-Page Reputation (V3.5 - Production Ready)
+Scanner de réputation off-page avec SerpAPI
+Clé API configurée dans Streamlit Secrets
 """
 
 import streamlit as st
@@ -300,7 +300,7 @@ def _scan_with_ui(brand: str, status_container, log_container, scan_mode: str, a
                         border:1px solid #334155; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
                 <div style="border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:8px; 
                             color:#94a3b8; font-weight:700; letter-spacing:0.05em;">
-                    > HOTARU_SCAN_PROTOCOL // V3.4_SERPAPI // {config_ui['label']}
+                    > HOTARU_SCAN_PROTOCOL // V3.5_SERPAPI // {config_ui['label']}
                 </div>
                 {log_display}
                 <div style="margin-top:8px; color:#10b981; font-weight:bold;">
@@ -369,32 +369,68 @@ def render_off_page_audit():
     """
     st.markdown('<p class="section-title">01 / AUDIT DE RÉPUTATION (OFF-PAGE)</p>', unsafe_allow_html=True)
     
-    # ✅ LECTURE DE LA CLÉ DEPUIS STREAMLIT SECRETS
-    try:
-        api_key = st.secrets["SERPAPI_KEY"]
-    except (KeyError, FileNotFoundError):
+    # ✅ DIAGNOSTIC + LECTURE DE LA CLÉ
+    api_key = None
+    
+    # Debug : afficher les clés disponibles
+    with st.expander("🔍 Diagnostic Secrets (DEBUG)", expanded=False):
+        st.write("**Clés disponibles dans st.secrets:**", list(st.secrets.keys()))
+        st.write("**SERPAPI_KEY présente?**", "SERPAPI_KEY" in st.secrets)
+        
+        # Test toutes les variantes possibles
+        possible_keys = [
+            ("SERPAPI_KEY", lambda: st.secrets["SERPAPI_KEY"]),
+            ("serpapi.SERPAPI_KEY", lambda: st.secrets["serpapi"]["SERPAPI_KEY"]),
+            ("serpapi_key", lambda: st.secrets.get("serpapi_key")),
+            ("SERP_API_KEY", lambda: st.secrets.get("SERP_API_KEY"))
+        ]
+        
+        for key_name, getter in possible_keys:
+            try:
+                test_val = getter()
+                if test_val:
+                    st.success(f"✅ Trouvé via: `{key_name}` = {test_val[:10]}...")
+                    if not api_key:  # Prendre la première qui marche
+                        api_key = test_val
+            except:
+                st.info(f"❌ Pas trouvé via: `{key_name}`")
+    
+    # Lecture de la clé (méthode principale)
+    if not api_key:
+        try:
+            api_key = st.secrets["SERPAPI_KEY"]
+        except:
+            try:
+                api_key = st.secrets["serpapi"]["SERPAPI_KEY"]
+            except:
+                pass
+    
+    # Si toujours pas de clé
+    if not api_key:
         st.error(
             """
-            ❌ **Clé API SerpAPI manquante**
+            ❌ **Clé API SerpAPI introuvable**
             
-            **Configuration requise :**
-            
-            1. Va dans **Settings → Secrets** de ton app Streamlit
-            2. Ajoute cette ligne :
+            **Dans Settings → Secrets, assure-toi d'avoir exactement :**
 ```toml
             SERPAPI_KEY = "ta_clé_ici"
 ```
             
-            3. Obtiens une clé gratuite (100 requêtes/mois) :
-            👉 [serpapi.com/users/sign_up](https://serpapi.com/users/sign_up)
+            **OU si tu as une section [serpapi] :**
+```toml
+            [serpapi]
+            SERPAPI_KEY = "ta_clé_ici"
+```
+            
+            📌 [Obtenir une clé gratuite (100 requêtes/mois)](https://serpapi.com/users/sign_up)
             """
         )
         return
     
     # Confirmation visuelle
     st.markdown(
-        '<p style="font-size:0.75rem;color:#10b981;font-weight:600;margin-bottom:16px;">'
-        '✓ Clé SerpAPI configurée (100 requêtes gratuites/mois)</p>', 
+        f'<p style="font-size:0.75rem;color:#10b981;font-weight:600;margin-bottom:16px;">'
+        f'✓ Clé SerpAPI configurée ({api_key[:8]}...)</p>', 
         unsafe_allow_html=True
     )
     
