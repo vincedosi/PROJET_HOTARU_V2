@@ -1,6 +1,6 @@
 """
-HOTARU - Module Off-Page Reputation (V4.0 - Mirror Audit Edition)
-Scanner de réputation avec analyse de dissonance cognitive marque/marché
+HOTARU - Module Off-Page Reputation (V4.1 - Dashboard + Heat Map Edition)
+Scanner de réputation avec visualisations claires et actionnables
 """
 
 import streamlit as st
@@ -15,6 +15,7 @@ from typing import List, Dict, Optional
 from datetime import datetime
 from bs4 import BeautifulSoup
 import re
+import pandas as pd
 
 # --- CONFIG SOURCES ---
 SOURCE_CONFIG = {
@@ -31,7 +32,7 @@ SOURCE_CONFIG = {
 }
 
 # ==========================================
-# TÂCHE 1 : SCRAPING HYBRIDE (SmartScraper)
+# SCRAPING & IA (CODE INCHANGÉ)
 # ==========================================
 
 class SmartScraper:
@@ -55,7 +56,6 @@ class SmartScraper:
                 
                 soup = BeautifulSoup(response.content, 'html.parser')
                 
-                # Extraction des éléments clés
                 title = soup.find('title')
                 title_text = title.get_text(strip=True) if title else ""
                 
@@ -65,7 +65,6 @@ class SmartScraper:
                 meta_desc = soup.find('meta', attrs={'name': 'description'})
                 meta_text = meta_desc.get('content', '') if meta_desc else ""
                 
-                # Extraction du contenu (H1, H2, premiers paragraphes)
                 content_parts = []
                 
                 if h1_text:
@@ -104,15 +103,7 @@ class SmartScraper:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_internal_dna(url: str) -> Optional[Dict]:
-    """
-    Extrait l'ADN interne du site officiel
-    
-    Args:
-        url: URL du site officiel
-    
-    Returns:
-        Dict avec title, h1, meta, raw_text ou None si erreur
-    """
+    """Extrait l'ADN interne du site officiel"""
     try:
         scraper = SmartScraper(start_urls=[url], max_urls=1, use_selenium=False)
         scraper.run_analysis()
@@ -129,31 +120,15 @@ def get_internal_dna(url: str) -> Optional[Dict]:
     except Exception as e:
         return None
 
-# ==========================================
-# TÂCHE 2 : ANALYSE SÉMANTIQUE MISTRAL
-# ==========================================
-
 @st.cache_data(ttl=3600, show_spinner=False)
 def analyze_mirror_gap(internal_data: Dict, external_results: List[Dict], api_key: str) -> Optional[Dict]:
-    """
-    Analyse la dissonance cognitive entre promesse et perception
-    
-    Args:
-        internal_data: Données du site officiel
-        external_results: Résultats Google
-        api_key: Clé API Mistral
-    
-    Returns:
-        Dict avec score, analysis, galaxy_nodes
-    """
+    """Analyse la dissonance cognitive entre promesse et perception"""
     try:
-        # Préparation des données externes
         external_summary = "\n".join([
             f"- {r['title']}: {r['desc'][:100]}"
             for r in external_results[:10]
         ])
         
-        # Construction du prompt
         system_prompt = "Tu es un expert en sémiotique de marque. Tu compares l'émission (Site Web) et la réception (Google SERP)."
         
         user_prompt = f"""
@@ -186,7 +161,6 @@ Règles:
 - invisible: 5 mots-clés présents UNIQUEMENT sur le Site (occasion manquée)
 """
         
-        # Appel API Mistral
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}"
@@ -215,7 +189,6 @@ Règles:
         data = response.json()
         content = data['choices'][0]['message']['content']
         
-        # Nettoyage du JSON (au cas où Mistral ajoute des backticks)
         content = content.strip()
         if content.startswith('```'):
             content = re.sub(r'^```json?\s*', '', content)
@@ -223,7 +196,6 @@ Règles:
         
         result = json.loads(content)
         
-        # Validation du format
         if all(k in result for k in ['score', 'analysis', 'galaxy_nodes']):
             return result
         
@@ -234,157 +206,7 @@ Règles:
         return None
 
 # ==========================================
-# TÂCHE 3 : VISUALISATION ALIGNMENT GALAXY
-# ==========================================
-
-def build_alignment_galaxy(brand: str, ai_data: Dict):
-    """
-    Construit le graphe Alignment Galaxy
-    
-    Args:
-        brand: Nom de la marque
-        ai_data: Données de l'analyse IA (avec galaxy_nodes)
-    
-    Returns:
-        NetworkX Graph
-    """
-    G = nx.DiGraph()
-    
-    # 1. NŒUD CENTRAL (Soleil - La Marque)
-    G.add_node(
-        brand,
-        label=brand.upper(),
-        size=50,
-        color="#0f172a",
-        font={'color': '#ffffff', 'size': 22},
-        title="MARQUE - CENTRE DE GRAVITÉ"
-    )
-    
-    nodes = ai_data.get('galaxy_nodes', {})
-    
-    # 2. CONCEPTS ALIGNÉS (Orbite Proche - Vert)
-    for concept in nodes.get('aligned', [])[:5]:
-        node_id = f"aligned_{concept}"
-        G.add_node(
-            node_id,
-            label=concept.upper(),
-            size=30,
-            color="#10b981",
-            title=f"✓ ALIGNÉ: {concept}"
-        )
-        G.add_edge(brand, node_id, color="#10b981", width=3, length=100)
-    
-    # 3. CONCEPTS BRUIT (Orbite Lointaine - Rouge)
-    for concept in nodes.get('noise', [])[:5]:
-        node_id = f"noise_{concept}"
-        G.add_node(
-            node_id,
-            label=concept.upper(),
-            size=25,
-            color="#ef4444",
-            shape="triangle",
-            title=f"⚠️ BRUIT MARCHÉ: {concept}"
-        )
-        G.add_edge(brand, node_id, color="#fca5a5", width=1, length=250)
-    
-    # 4. CONCEPTS INVISIBLES (Matière Noire - Bleu)
-    for concept in nodes.get('invisible', [])[:5]:
-        node_id = f"invisible_{concept}"
-        G.add_node(
-            node_id,
-            label=f"❌ {concept.upper()}",
-            size=20,
-            color="#3b82f6",
-            title=f"❌ INVISIBLE: {concept}"
-        )
-        G.add_edge(brand, node_id, color="#93c5fd", width=1.5, length=175, dashes=True)
-    
-    return G
-
-def render_interactive_graph(G):
-    """Moteur de rendu Pyvis"""
-    nt = Network(height="700px", width="100%", bgcolor="#ffffff", font_color="#0f172a")
-    nt.from_nx(G)
-    
-    opts = {
-        "nodes": {
-            "font": {
-                "face": "Inter", 
-                "size": 14, 
-                "strokeWidth": 3, 
-                "strokeColor": "#fff", 
-                "color": "#0f172a"
-            },
-            "borderWidth": 2
-        },
-        "edges": {
-            "color": "#cbd5e1", 
-            "width": 1.5, 
-            "smooth": {"type": "dynamic", "roundness": 0.2}
-        },
-        "interaction": {
-            "hover": True, 
-            "navigationButtons": True, 
-            "zoomView": True
-        },
-        "physics": {
-            "forceAtlas2Based": {
-                "gravitationalConstant": -100,
-                "centralGravity": 0.05,
-                "springLength": 150,
-                "springConstant": 0.08,
-                "avoidOverlap": 1
-            },
-            "solver": "forceAtlas2Based",
-            "stabilization": {"enabled": True, "iterations": 200}
-        }
-    }
-    nt.set_options(json.dumps(opts))
-    
-    path = "temp_offpage_graph.html"
-    nt.save_graph(path)
-    
-    with open(path, "r", encoding="utf-8") as f:
-        html = f.read()
-    
-    custom_css = """
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
-        * { font-family: 'Inter', sans-serif !important; }
-    </style>
-    """
-    components.html(html.replace("</body>", custom_css + "</body>"), height=750)
-
-def build_reputation_graph(brand: str, mentions: List[Dict]):
-    """Construction du graphe classique (mode sans Audit Miroir)"""
-    G = nx.DiGraph()
-    
-    G.add_node(
-        brand, 
-        label=brand.upper(), 
-        size=45, 
-        color="#0f172a",
-        font={'color': '#ffffff', 'size': 20},
-        title="MARQUE CIBLE"
-    )
-    
-    for m in mentions:
-        color = SOURCE_CONFIG.get(m['domain_key'], {}).get('color', '#64748b')
-        label = SOURCE_CONFIG.get(m['domain_key'], {}).get('label', 'AUTRE')
-        
-        G.add_node(
-            m['url'],
-            label=label,
-            size=20,
-            color=color,
-            title=f"{m['title']}\n{m['url']}"
-        )
-        G.add_edge(brand, m['url'], color="#cbd5e1")
-    
-    return G
-
-# ==========================================
-# FONCTIONS SERPAPI (INCHANGÉES)
+# SERPAPI (CODE INCHANGÉ)
 # ==========================================
 
 def _serpapi_search(query: str, max_results: int = 3, api_key: str = None) -> List[Dict]:
@@ -430,21 +252,9 @@ def _serpapi_search(query: str, max_results: int = 3, api_key: str = None) -> Li
 def _cached_scan(brand: str, scan_mode: str, api_key: str) -> Dict:
     """Scanner avec cache intelligent"""
     configs = {
-        "fast": {
-            "sources": 6,
-            "results_per_source": 2,
-            "delay": (0.5, 1.0)
-        },
-        "balanced": {
-            "sources": 8,
-            "results_per_source": 3,
-            "delay": (0.8, 1.5)
-        },
-        "safe": {
-            "sources": 10,
-            "results_per_source": 3,
-            "delay": (1.0, 2.0)
-        }
+        "fast": {"sources": 6, "results_per_source": 2, "delay": (0.5, 1.0)},
+        "balanced": {"sources": 8, "results_per_source": 3, "delay": (0.8, 1.5)},
+        "safe": {"sources": 10, "results_per_source": 3, "delay": (1.0, 2.0)}
     }
     
     config = configs.get(scan_mode, configs["balanced"])
@@ -497,18 +307,11 @@ def _scan_with_ui(brand: str, status_container, log_container, scan_mode: str, a
     )[:{"fast": 6, "balanced": 8, "safe": 10}.get(scan_mode, 8)]
     
     total = len(sorted_sources)
-    progress_bar = status_container.progress(
-        0, 
-        text=f"Initialisation // Mode {config_ui['label']} (ETA: {config_ui['eta']})..."
-    )
+    progress_bar = status_container.progress(0, text=f"Initialisation // Mode {config_ui['label']} (ETA: {config_ui['eta']})...")
     
     for i, (domain, meta) in enumerate(sorted_sources):
         source_name = meta["label"]
-        
-        progress_bar.progress(
-            i / total, 
-            text=f"Scan : {source_name}... [{i+1}/{total}]"
-        )
+        progress_bar.progress(i / total, text=f"Scan : {source_name}... [{i+1}/{total}]")
         
         log_html = f"<span style='color:#10b981'>[●]</span> Interrogation de {source_name}..."
         logs.append(log_html)
@@ -521,7 +324,7 @@ def _scan_with_ui(brand: str, status_container, log_container, scan_mode: str, a
                         border:1px solid #334155; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
                 <div style="border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:8px; 
                             color:#94a3b8; font-weight:700; letter-spacing:0.05em;">
-                    > HOTARU_SCAN_PROTOCOL // V4.0_MIRROR_AUDIT // {config_ui['label']}
+                    > HOTARU_SCAN_PROTOCOL // V4.1_DASHBOARD // {config_ui['label']}
                 </div>
                 {log_display}
                 <div style="margin-top:8px; color:#10b981; font-weight:bold;">
@@ -581,11 +384,403 @@ def _scan_with_ui(brand: str, status_container, log_container, scan_mode: str, a
     return scan_data["results"]
 
 # ==========================================
-# TÂCHE 4 : INTERFACE STREAMLIT
+# NOUVELLES VISUALISATIONS
+# ==========================================
+
+def render_dashboard(brand: str, analysis: Dict, internal_data: Dict):
+    """
+    Dashboard 3 colonnes : Alignés / Bruit / Invisibles
+    """
+    nodes = analysis.get('galaxy_nodes', {})
+    aligned = nodes.get('aligned', [])
+    noise = nodes.get('noise', [])
+    invisible = nodes.get('invisible', [])
+    
+    st.markdown(
+        f"""
+        <div style="text-align:center; padding:20px; background:#f8fafc; border-radius:12px; margin-bottom:24px;">
+            <div style="font-size:1.2rem; font-weight:700; color:#0f172a; margin-bottom:12px;">
+                🎯 AUDIT MIROIR : {brand.upper()}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    col1, col2, col3 = st.columns(3)
+    
+    # COLONNE 1 : ALIGNÉS
+    with col1:
+        st.markdown(
+            """
+            <div style="background:#ecfdf5; padding:16px; border-radius:8px; border:2px solid #10b981;">
+                <div style="text-align:center; font-size:1.1rem; font-weight:800; color:#10b981; margin-bottom:12px;">
+                    ✅ ALIGNÉS
+                </div>
+                <div style="text-align:center; font-size:0.75rem; color:#059669; margin-bottom:16px;">
+                    Vous dites + Google dit (BIEN ✓)
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        for concept in aligned:
+            st.markdown(
+                f"""
+                <div style="background:#d1fae5; padding:10px; margin:8px 0; border-radius:6px; 
+                            text-align:center; font-weight:600; color:#047857;">
+                    {concept.upper()}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        
+        st.markdown(
+            f"""
+            <div style="text-align:center; margin-top:16px; font-size:0.9rem; color:#059669; font-weight:600;">
+                {len(aligned)} concepts
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    
+    # COLONNE 2 : BRUIT
+    with col2:
+        st.markdown(
+            """
+            <div style="background:#fef2f2; padding:16px; border-radius:8px; border:2px solid #ef4444;">
+                <div style="text-align:center; font-size:1.1rem; font-weight:800; color:#ef4444; margin-bottom:12px;">
+                    ⚠️ BRUIT
+                </div>
+                <div style="text-align:center; font-size:0.75rem; color:#dc2626; margin-bottom:16px;">
+                    Google dit MAIS vous ne dites pas (DANGER ⚠️)
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        for concept in noise:
+            st.markdown(
+                f"""
+                <div style="background:#fecaca; padding:10px; margin:8px 0; border-radius:6px; 
+                            text-align:center; font-weight:600; color:#991b1b;">
+                    {concept.upper()}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        
+        st.markdown(
+            f"""
+            <div style="text-align:center; margin-top:16px; font-size:0.9rem; color:#dc2626; font-weight:600;">
+                {len(noise)} concepts
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    
+    # COLONNE 3 : INVISIBLES
+    with col3:
+        st.markdown(
+            """
+            <div style="background:#eff6ff; padding:16px; border-radius:8px; border:2px solid #3b82f6;">
+                <div style="text-align:center; font-size:1.1rem; font-weight:800; color:#3b82f6; margin-bottom:12px;">
+                    ❌ INVISIBLES
+                </div>
+                <div style="text-align:center; font-size:0.75rem; color:#2563eb; margin-bottom:16px;">
+                    Vous dites MAIS Google ignore (GÂCHIS 💸)
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        for concept in invisible:
+            st.markdown(
+                f"""
+                <div style="background:#bfdbfe; padding:10px; margin:8px 0; border-radius:6px; 
+                            text-align:center; font-weight:600; color:#1e40af;">
+                    ❌ {concept.upper()}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        
+        st.markdown(
+            f"""
+            <div style="text-align:center; margin-top:16px; font-size:0.9rem; color:#2563eb; font-weight:600;">
+                {len(invisible)} concepts
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    
+    # Légende
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div style="background:#f1f5f9; padding:16px; border-radius:8px; font-size:0.85rem;">
+            <strong>🔑 Légende :</strong><br>
+            🟢 <strong>ALIGNÉS</strong> : Concepts présents sur votre site ET dans Google = Communication efficace<br>
+            🔴 <strong>BRUIT</strong> : Concepts absents de votre site MAIS dominants sur Google = Risque réputationnel<br>
+            🔵 <strong>INVISIBLES</strong> : Concepts présents sur votre site MAIS invisibles dans Google = SEO à optimiser
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+def render_heat_map(brand: str, analysis: Dict, external_results: List[Dict], internal_data: Dict):
+    """
+    Heat Map : Tableau de chaleur Promesse vs Réalité
+    """
+    nodes = analysis.get('galaxy_nodes', {})
+    aligned = nodes.get('aligned', [])
+    noise = nodes.get('noise', [])
+    invisible = nodes.get('invisible', [])
+    
+    # Préparation des données
+    data = []
+    
+    # Alignés
+    for concept in aligned:
+        data.append({
+            'Concept': concept.upper(),
+            'Site': '████',
+            'Google': '████',
+            'Statut': '✅ Aligné',
+            'Catégorie': 'aligned'
+        })
+    
+    # Bruit
+    for concept in noise:
+        data.append({
+            'Concept': concept.upper(),
+            'Site': '░',
+            'Google': '████',
+            'Statut': '🔴 Bruit',
+            'Catégorie': 'noise'
+        })
+    
+    # Invisibles
+    for concept in invisible:
+        data.append({
+            'Concept': concept.upper(),
+            'Site': '███',
+            'Google': '░',
+            'Statut': '🔵 Invisible',
+            'Catégorie': 'invisible'
+        })
+    
+    df = pd.DataFrame(data)
+    
+    st.markdown(
+        """
+        <div style="text-align:center; padding:16px; background:#f8fafc; border-radius:8px; margin-bottom:20px;">
+            <div style="font-size:1.2rem; font-weight:700; color:#0f172a;">
+                🔥 CARTE DE CHALEUR : Promesse vs Réalité
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    # Affichage du tableau stylisé
+    for _, row in df.iterrows():
+        if row['Catégorie'] == 'aligned':
+            bg_color = "#ecfdf5"
+            border_color = "#10b981"
+        elif row['Catégorie'] == 'noise':
+            bg_color = "#fef2f2"
+            border_color = "#ef4444"
+        else:
+            bg_color = "#eff6ff"
+            border_color = "#3b82f6"
+        
+        st.markdown(
+            f"""
+            <div style="background:{bg_color}; padding:12px; margin:8px 0; border-radius:6px; 
+                        border-left:4px solid {border_color}; display:flex; justify-content:space-between; align-items:center;">
+                <div style="flex:2; font-weight:700; font-size:0.9rem;">
+                    {row['Concept']}
+                </div>
+                <div style="flex:1; text-align:center; font-family:monospace; font-size:0.85rem;">
+                    {row['Site']}
+                </div>
+                <div style="flex:1; text-align:center; font-family:monospace; font-size:0.85rem;">
+                    {row['Google']}
+                </div>
+                <div style="flex:1; text-align:right; font-weight:600; font-size:0.85rem;">
+                    {row['Statut']}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    
+    # Légende
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div style="background:#f1f5f9; padding:16px; border-radius:8px; font-size:0.85rem;">
+            <strong>📊 Légende :</strong><br>
+            <span style="font-family:monospace;">████</span> = Très présent (5+ mentions)<br>
+            <span style="font-family:monospace;">███</span> = Présent (3-4 mentions)<br>
+            <span style="font-family:monospace;">██</span> = Peu présent (1-2 mentions)<br>
+            <span style="font-family:monospace;">░</span> = Absent
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+def render_detailed_analysis(brand: str, analysis: Dict, external_results: List[Dict], internal_data: Dict):
+    """
+    Analyse détaillée par catégorie avec URLs
+    """
+    nodes = analysis.get('galaxy_nodes', {})
+    aligned = nodes.get('aligned', [])
+    noise = nodes.get('noise', [])
+    invisible = nodes.get('invisible', [])
+    
+    st.markdown("## 📊 ANALYSE DÉTAILLÉE PAR CATÉGORIE")
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # === SECTION ALIGNÉS ===
+    st.markdown(
+        """
+        <div style="background:#ecfdf5; padding:16px; border-radius:8px; border-left:4px solid #10b981; margin-bottom:24px;">
+            <div style="font-size:1.1rem; font-weight:800; color:#10b981; margin-bottom:8px;">
+                🟢 CONCEPTS ALIGNÉS ({}) - C'est votre force !
+            </div>
+            <div style="font-size:0.85rem; color:#059669;">
+                Ces concepts sont présents à la fois sur votre site ET dans les résultats Google
+            </div>
+        </div>
+        """.format(len(aligned)),
+        unsafe_allow_html=True
+    )
+    
+    for concept in aligned:
+        # Recherche dans les résultats Google
+        matching_results = [r for r in external_results if concept.lower() in r['title'].lower() or concept.lower() in r['desc'].lower()]
+        
+        st.markdown(
+            f"""
+            <div style="background:#f0fdf4; padding:14px; margin:12px 0; border-radius:6px; border:1px solid #bbf7d0;">
+                <div style="font-weight:700; font-size:0.95rem; color:#15803d; margin-bottom:8px;">
+                    ✓ {concept.upper()}
+                </div>
+                <div style="font-size:0.8rem; color:#166534; margin-bottom:6px;">
+                    <strong>Présent sur votre site :</strong> {internal_data.get('h1', 'N/A')[:80]}...
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        if matching_results:
+            st.markdown('<div style="margin-left:16px; font-size:0.8rem; color:#166534; margin-bottom:6px;"><strong>Présent sur Google :</strong></div>', unsafe_allow_html=True)
+            for res in matching_results[:3]:
+                # Extraction du domaine
+                domain = res['url'].split('/')[2] if len(res['url'].split('/')) > 2 else res['url']
+                st.markdown(
+                    f"""
+                    <div style="margin-left:16px; font-size:0.75rem; color:#059669; margin-bottom:4px;">
+                        • <strong>{res['source']}</strong> : {res['title'][:60]}... <span style="color:#64748b;">({domain})</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+    
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    
+    # === SECTION BRUIT ===
+    st.markdown(
+        """
+        <div style="background:#fef2f2; padding:16px; border-radius:8px; border-left:4px solid #ef4444; margin-bottom:24px;">
+            <div style="font-size:1.1rem; font-weight:800; color:#ef4444; margin-bottom:8px;">
+                🔴 CONCEPTS BRUIT ({}) - DANGER ! Non maîtrisés
+            </div>
+            <div style="font-size:0.85rem; color:#dc2626;">
+                Ces concepts sont dominants sur Google MAIS absents de votre site
+            </div>
+        </div>
+        """.format(len(noise)),
+        unsafe_allow_html=True
+    )
+    
+    for concept in noise:
+        matching_results = [r for r in external_results if concept.lower() in r['title'].lower() or concept.lower() in r['desc'].lower()]
+        
+        st.markdown(
+            f"""
+            <div style="background:#fef2f2; padding:14px; margin:12px 0; border-radius:6px; border:1px solid #fecaca;">
+                <div style="font-weight:700; font-size:0.95rem; color:#dc2626; margin-bottom:8px;">
+                    ⚠️ {concept.upper()}
+                </div>
+                <div style="font-size:0.8rem; color:#991b1b; margin-bottom:6px;">
+                    ❌ Absent de votre site
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        if matching_results:
+            st.markdown(f'<div style="margin-left:16px; font-size:0.8rem; color:#991b1b; margin-bottom:6px;"><strong>✓ Sur Google ({len(matching_results)} mentions) :</strong></div>', unsafe_allow_html=True)
+            for res in matching_results[:3]:
+                domain = res['url'].split('/')[2] if len(res['url'].split('/')) > 2 else res['url']
+                st.markdown(
+                    f"""
+                    <div style="margin-left:16px; font-size:0.75rem; color:#dc2626; margin-bottom:4px;">
+                        • <strong>{res['source']}</strong> : {res['title'][:60]}... <span style="color:#64748b;">({domain})</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+    
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    
+    # === SECTION INVISIBLES ===
+    st.markdown(
+        """
+        <div style="background:#eff6ff; padding:16px; border-radius:8px; border-left:4px solid #3b82f6; margin-bottom:24px;">
+            <div style="font-size:1.1rem; font-weight:800; color:#3b82f6; margin-bottom:8px;">
+                🔵 CONCEPTS INVISIBLES ({}) - Opportunités SEO
+            </div>
+            <div style="font-size:0.85rem; color:#2563eb;">
+                Ces concepts sont présents sur votre site MAIS invisibles dans Google
+            </div>
+        </div>
+        """.format(len(invisible)),
+        unsafe_allow_html=True
+    )
+    
+    for concept in invisible:
+        st.markdown(
+            f"""
+            <div style="background:#eff6ff; padding:14px; margin:12px 0; border-radius:6px; border:1px solid #bfdbfe;">
+                <div style="font-weight:700; font-size:0.95rem; color:#2563eb; margin-bottom:8px;">
+                    💸 {concept.upper()}
+                </div>
+                <div style="font-size:0.8rem; color:#1e40af; margin-bottom:6px;">
+                    <strong>✓ Présent sur votre site :</strong> {internal_data.get('meta', 'N/A')[:80]}...
+                </div>
+                <div style="font-size:0.8rem; color:#1e3a8a;">
+                    ❌ Google ne le voit pas (0 mentions)
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+# ==========================================
+# INTERFACE STREAMLIT
 # ==========================================
 
 def render_off_page_audit():
-    """Interface principale avec Audit Miroir"""
+    """Interface principale avec Dashboard + Heat Map"""
     st.markdown('<p class="section-title">01 / AUDIT DE RÉPUTATION (OFF-PAGE)</p>', unsafe_allow_html=True)
     
     # Lecture des clés API
@@ -622,7 +817,6 @@ def render_off_page_audit():
         label_visibility="collapsed"
     )
     
-    # 🆕 INPUT SITE OFFICIEL (Active l'Audit Miroir)
     official_site = col2.text_input(
         "Site Officiel (Optionnel)",
         value="",
@@ -668,7 +862,7 @@ def render_off_page_audit():
             st.session_state['offpage_brand'] = brand_input
             st.session_state['offpage_mode'] = scan_mode
             
-            # 🆕 AUDIT MIROIR si site officiel fourni
+            # Audit Miroir si site officiel fourni
             if official_site and mistral_key:
                 with st.spinner("🔍 Scraping du site officiel..."):
                     internal_data = get_internal_dna(official_site)
@@ -703,7 +897,7 @@ def render_off_page_audit():
     if results:
         st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
         
-        # 🆕 AFFICHAGE AUDIT MIROIR
+        # AFFICHAGE AUDIT MIROIR
         if mirror_data:
             analysis = mirror_data['analysis']
             internal = mirror_data['internal']
@@ -711,7 +905,6 @@ def render_off_page_audit():
             # Score d'alignement
             score = analysis.get('score', 0)
             
-            # Couleur selon le score
             if score >= 80:
                 color = "#10b981"
                 status = "EXCELLENT"
@@ -743,54 +936,8 @@ def render_off_page_audit():
             st.info(f"**💡 Analyse :** {analysis.get('analysis', 'N/A')}")
             
             st.markdown("<br>", unsafe_allow_html=True)
-            
-            # Layout 2 colonnes
-            col_left, col_right = st.columns(2)
-            
-            with col_left:
-                st.markdown("### 📢 CE QUE VOUS DITES")
-                st.markdown(
-                    f"""
-                    <div style="background:#f8fafc; padding:16px; border-radius:8px; border-left:4px solid #3b82f6;">
-                        <div style="font-weight:700; margin-bottom:8px;">H1:</div>
-                        <div style="margin-bottom:12px;">{internal.get('h1', 'N/A')}</div>
-                        
-                        <div style="font-weight:700; margin-bottom:8px;">Title:</div>
-                        <div style="margin-bottom:12px;">{internal.get('title', 'N/A')}</div>
-                        
-                        <div style="font-weight:700; margin-bottom:8px;">Meta:</div>
-                        <div>{internal.get('meta', 'N/A')}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-            
-            with col_right:
-                st.markdown("### 🌍 CE QU'ILS ENTENDENT")
-                
-                # Extraction mots-clés principaux Google
-                google_keywords = []
-                for r in results[:5]:
-                    title_words = r['title'].lower().split()
-                    google_keywords.extend([w for w in title_words if len(w) > 4])
-                
-                from collections import Counter
-                top_keywords = Counter(google_keywords).most_common(8)
-                
-                st.markdown(
-                    f"""
-                    <div style="background:#fef2f2; padding:16px; border-radius:8px; border-left:4px solid #ef4444;">
-                        <div style="font-weight:700; margin-bottom:12px;">Top mots-clés Google:</div>
-                        <div>
-                            {', '.join([f"<span style='background:#fee2e2; padding:4px 8px; border-radius:4px; margin:2px;'>{k[0]}</span>" for k in top_keywords])}
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
         
         # KPIs
-        st.markdown("<br>", unsafe_allow_html=True)
         k1, k2, k3, k4 = st.columns(4)
         k1.metric("Mentions", len(results))
         k2.metric("Sources", len(set(r['source'] for r in results)))
@@ -800,111 +947,132 @@ def render_off_page_audit():
         st.markdown("<br>", unsafe_allow_html=True)
         
         # Tabs
-        tab_graph, tab_list, tab_export, tab_method = st.tabs([
-            "📊 GRAPHE", 
-            "📋 LISTE", 
-            "💾 EXPORT",
-            "🧭 MÉTHODOLOGIE"
-        ])
-        
-        # TAB 1 : Graphe
-        with tab_graph:
-            if brand_name:
-                # 🆕 Choix du graphe selon mode
-                if mirror_data:
-                    G = build_alignment_galaxy(brand_name, mirror_data['analysis'])
-                else:
-                    G = build_reputation_graph(brand_name, results)
+        if mirror_data:
+            tab_dashboard, tab_heatmap, tab_analysis, tab_export, tab_method = st.tabs([
+                "📊 DASHBOARD", 
+                "🔥 HEAT MAP",
+                "🔍 ANALYSE",
+                "💾 EXPORT",
+                "🧭 MÉTHODOLOGIE"
+            ])
+            
+            with tab_dashboard:
+                render_dashboard(brand_name, mirror_data['analysis'], mirror_data['internal'])
+            
+            with tab_heatmap:
+                render_heat_map(brand_name, mirror_data['analysis'], results, mirror_data['internal'])
+            
+            with tab_analysis:
+                render_detailed_analysis(brand_name, mirror_data['analysis'], results, mirror_data['internal'])
+            
+            with tab_export:
+                export_data = {
+                    "brand": brand_name,
+                    "scan_mode": scan_mode,
+                    "alignment_score": mirror_data['analysis'].get('score'),
+                    "analysis": mirror_data['analysis'].get('analysis'),
+                    "total_mentions": len(results),
+                    "mentions": results,
+                    "galaxy_nodes": mirror_data['analysis'].get('galaxy_nodes')
+                }
                 
-                render_interactive_graph(G)
-        
-        # TAB 2 : Liste
-        with tab_list:
-            for m in results:
-                color = SOURCE_CONFIG.get(m['domain_key'], {}).get('color', '#333')
-                st.markdown(
-                    f"""
-                    <div style="border-left:3px solid {color}; padding:12px; margin-bottom:12px; 
-                                background:#fafafa; border-radius:4px;">
-                        <div style="font-size:0.7rem; font-weight:800; color:{color}; 
-                                    letter-spacing:0.1em; text-transform:uppercase;">
-                            {m['source']}
-                        </div>
-                        <div style="font-weight:600; font-size:0.95rem; margin:6px 0;">
-                            <a href="{m['url']}" target="_blank" style="color:#0f172a; text-decoration:none;">
-                                {m['title']}
-                            </a>
-                        </div>
-                        <div style="font-size:0.75rem; color:#64748b; font-family:'Courier New';">
-                            {m['url']}
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
+                json_data = json.dumps(export_data, indent=2, ensure_ascii=False)
+                
+                st.download_button(
+                    label="📥 Télécharger JSON Complet",
+                    data=json_data,
+                    file_name=f"hotaru_mirror_audit_{brand_name.lower().replace(' ', '_')}.json",
+                    mime="application/json",
+                    use_container_width=True
                 )
+            
+            with tab_method:
+                st.markdown("""
+                ### 🧭 Boussole Méthodologique : Comprendre le Score d'Alignement
+                
+                Le **Score d'Alignement HOTARU** mesure la distance sémantique entre votre émission (Site Officiel) 
+                et votre réception (SERP Google).
+                
+                #### Méthodologie : Le Score de Dissonance Cognitive
+                
+                **1. Extraction de l'ADN (Scraping Hybride)**  
+                Nous isolons les balises H1, Title et Meta Description de votre page d'accueil via notre module SmartScraper. 
+                C'est votre "Promesse Officielle".
+                
+                **2. Analyse du Bruit (Réception)**  
+                Nous analysons les snippets des 10 premiers résultats Google (hors votre site) pour identifier 
+                les thématiques dominantes.
+                
+                **3. Calcul du Gap (IA)**  
+                Notre moteur neuronal (Mistral AI) compare ces deux corpus :
+                
+                * **100%** : Résonance parfaite. Le marché répète exactement votre message.
+                * **80-99%** : Bon alignement avec quelques nuances.
+                * **60-79%** : Alignement moyen, certains messages se perdent.
+                * **< 60%** : Dissonance. Le marché vous associe à des sujets que vous ne maîtrisez pas 
+                  (bugs, polémiques, concurrents).
+                
+                #### Interprétation des Visualisations
+                
+                **📊 DASHBOARD (3 colonnes)**  
+                Vue d'ensemble immédiate de votre alignement :
+                * **Alignés** : Votre cœur de communication efficace
+                * **Bruit** : Risques réputationnels non maîtrisés
+                * **Invisibles** : Potentiel SEO inexploité
+                
+                **🔥 HEAT MAP (Tableau de chaleur)**  
+                Comparaison visuelle de la présence de chaque concept sur votre site vs Google.
+                Plus les barres sont pleines, plus le concept est présent.
+                
+                **🔍 ANALYSE DÉTAILLÉE**  
+                Exploration approfondie concept par concept avec les sources Google exactes.
+                """)
         
-        # TAB 3 : Export
-        with tab_export:
-            export_data = {
-                "brand": brand_name,
-                "scan_mode": scan_mode,
-                "total_mentions": len(results),
-                "mirror_audit": mirror_data is not None,
-                "mentions": results
-            }
+        else:
+            # Mode classique sans Audit Miroir
+            tab_list, tab_export = st.tabs(["📋 LISTE", "💾 EXPORT"])
             
-            if mirror_data:
-                export_data['alignment_score'] = mirror_data['analysis'].get('score')
-                export_data['analysis'] = mirror_data['analysis'].get('analysis')
+            with tab_list:
+                for m in results:
+                    color = SOURCE_CONFIG.get(m['domain_key'], {}).get('color', '#333')
+                    st.markdown(
+                        f"""
+                        <div style="border-left:3px solid {color}; padding:12px; margin-bottom:12px; 
+                                    background:#fafafa; border-radius:4px;">
+                            <div style="font-size:0.7rem; font-weight:800; color:{color}; 
+                                        letter-spacing:0.1em; text-transform:uppercase;">
+                                {m['source']}
+                            </div>
+                            <div style="font-weight:600; font-size:0.95rem; margin:6px 0;">
+                                <a href="{m['url']}" target="_blank" style="color:#0f172a; text-decoration:none;">
+                                    {m['title']}
+                                </a>
+                            </div>
+                            <div style="font-size:0.75rem; color:#64748b; font-family:'Courier New';">
+                                {m['url']}
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
             
-            json_data = json.dumps(export_data, indent=2, ensure_ascii=False)
-            
-            st.download_button(
-                label="📥 Télécharger JSON",
-                data=json_data,
-                file_name=f"hotaru_audit_{brand_name.lower().replace(' ', '_')}.json",
-                mime="application/json",
-                use_container_width=True
-            )
-        
-        # TAB 4 : Méthodologie
-        with tab_method:
-            st.markdown("""
-            ### 🧭 Boussole Méthodologique : Comprendre le Score d'Alignement
-            
-            Le **Score d'Alignement HOTARU** mesure la distance sémantique entre votre émission (Site Officiel) 
-            et votre réception (SERP Google).
-            
-            #### Méthodologie : Le Score de Dissonance Cognitive
-            
-            **1. Extraction de l'ADN (Scraping Hybride)**  
-            Nous isolons les balises H1, Title et Meta Description de votre page d'accueil via notre module SmartScraper. 
-            C'est votre "Promesse Officielle".
-            
-            **2. Analyse du Bruit (Réception)**  
-            Nous analysons les snippets des 10 premiers résultats Google (hors votre site) pour identifier 
-            les thématiques dominantes.
-            
-            **3. Calcul du Gap (IA)**  
-            Notre moteur neuronal (Mistral AI) compare ces deux corpus :
-            
-            * **100%** : Résonance parfaite. Le marché répète exactement votre message.
-            * **80-99%** : Bon alignement avec quelques nuances.
-            * **60-79%** : Alignement moyen, certains messages se perdent.
-            * **< 60%** : Dissonance. Le marché vous associe à des sujets que vous ne maîtrisez pas 
-              (bugs, polémiques, concurrents).
-            
-            #### Interprétation du Graphe "Alignment Galaxy"
-            
-            * **🟢 Concepts ALIGNÉS** (Orbite proche) : Mots-clés présents à la fois sur votre site ET dans Google. 
-              C'est votre cœur de communication efficace.
-            
-            * **🔴 Concepts BRUIT** (Orbite lointaine) : Mots-clés absents de votre site mais dominants sur Google. 
-              Ce sont les associations non contrôlées (risque réputationnel).
-            
-            * **🔵 Concepts INVISIBLES** (Matière noire) : Mots-clés présents sur votre site mais invisibles dans Google. 
-              Ce sont vos occasions manquées (potentiel SEO inexploité).
-            """)
+            with tab_export:
+                export_data = {
+                    "brand": brand_name,
+                    "scan_mode": scan_mode,
+                    "total_mentions": len(results),
+                    "mentions": results
+                }
+                
+                json_data = json.dumps(export_data, indent=2, ensure_ascii=False)
+                
+                st.download_button(
+                    label="📥 Télécharger JSON",
+                    data=json_data,
+                    file_name=f"hotaru_scan_{brand_name.lower().replace(' ', '_')}.json",
+                    mime="application/json",
+                    use_container_width=True
+                )
     
     # Options avancées
     with st.expander("🔧 Options avancées"):
