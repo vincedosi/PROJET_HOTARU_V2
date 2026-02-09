@@ -1,7 +1,6 @@
 """
-HOTARU - Module Off-Page Reputation (V3.5 - Production Ready)
-Scanner de réputation off-page avec SerpAPI
-Clé API configurée dans Streamlit Secrets
+HOTARU - Module Off-Page Reputation (V4.0 - Mirror Audit Edition)
+Scanner de réputation avec analyse de dissonance cognitive marque/marché
 """
 
 import streamlit as st
@@ -12,8 +11,10 @@ import json
 import time
 import random
 import requests
-from typing import List, Dict
+from typing import List, Dict, Optional
 from datetime import datetime
+from bs4 import BeautifulSoup
+import re
 
 # --- CONFIG SOURCES ---
 SOURCE_CONFIG = {
@@ -29,8 +30,279 @@ SOURCE_CONFIG = {
     "stackoverflow.com": {"label": "STACKOVERFLOW", "color": "#F58025", "priority": 3}
 }
 
+# ==========================================
+# TÂCHE 1 : SCRAPING HYBRIDE (SmartScraper)
+# ==========================================
+
+class SmartScraper:
+    """Scraper robuste pour extraction de l'ADN d'un site"""
+    
+    def __init__(self, start_urls: List[str], max_urls: int = 1, use_selenium: bool = False):
+        self.start_urls = start_urls
+        self.max_urls = max_urls
+        self.use_selenium = use_selenium
+        self.results = []
+    
+    def run_analysis(self):
+        """Lance le scraping"""
+        for url in self.start_urls[:self.max_urls]:
+            try:
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+                response = requests.get(url, headers=headers, timeout=10)
+                response.raise_for_status()
+                
+                soup = BeautifulSoup(response.content, 'html.parser')
+                
+                # Extraction des éléments clés
+                title = soup.find('title')
+                title_text = title.get_text(strip=True) if title else ""
+                
+                h1 = soup.find('h1')
+                h1_text = h1.get_text(strip=True) if h1 else ""
+                
+                meta_desc = soup.find('meta', attrs={'name': 'description'})
+                meta_text = meta_desc.get('content', '') if meta_desc else ""
+                
+                # Extraction du contenu (H1, H2, premiers paragraphes)
+                content_parts = []
+                
+                if h1_text:
+                    content_parts.append(h1_text)
+                
+                for h2 in soup.find_all('h2')[:5]:
+                    content_parts.append(h2.get_text(strip=True))
+                
+                for p in soup.find_all('p')[:10]:
+                    text = p.get_text(strip=True)
+                    if len(text) > 20:
+                        content_parts.append(text)
+                
+                raw_text = " ".join(content_parts)[:1000]
+                
+                self.results.append({
+                    'url': url,
+                    'title': self._clean_text(title_text),
+                    'h1': self._clean_text(h1_text),
+                    'meta': self._clean_text(meta_text),
+                    'raw_text': self._clean_text(raw_text),
+                    'success': True
+                })
+                
+            except Exception as e:
+                self.results.append({
+                    'url': url,
+                    'error': str(e),
+                    'success': False
+                })
+    
+    def _clean_text(self, text: str) -> str:
+        """Nettoie le texte extrait"""
+        text = re.sub(r'\s+', ' ', text)
+        return text.strip()
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_internal_dna(url: str) -> Optional[Dict]:
+    """
+    Extrait l'ADN interne du site officiel
+    
+    Args:
+        url: URL du site officiel
+    
+    Returns:
+        Dict avec title, h1, meta, raw_text ou None si erreur
+    """
+    try:
+        scraper = SmartScraper(start_urls=[url], max_urls=1, use_selenium=False)
+        scraper.run_analysis()
+        
+        if scraper.results and scraper.results[0].get('success'):
+            result = scraper.results[0]
+            return {
+                'title': result['title'],
+                'h1': result['h1'],
+                'meta': result['meta'],
+                'raw_text': result['raw_text']
+            }
+        return None
+    except Exception as e:
+        return None
+
+# ==========================================
+# TÂCHE 2 : ANALYSE SÉMANTIQUE MISTRAL
+# ==========================================
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def analyze_mirror_gap(internal_data: Dict, external_results: List[Dict], api_key: str) -> Optional[Dict]:
+    """
+    Analyse la dissonance cognitive entre promesse et perception
+    
+    Args:
+        internal_data: Données du site officiel
+        external_results: Résultats Google
+        api_key: Clé API Mistral
+    
+    Returns:
+        Dict avec score, analysis, galaxy_nodes
+    """
+    try:
+        # Préparation des données externes
+        external_summary = "\n".join([
+            f"- {r['title']}: {r['desc'][:100]}"
+            for r in external_results[:10]
+        ])
+        
+        # Construction du prompt
+        system_prompt = "Tu es un expert en sémiotique de marque. Tu compares l'émission (Site Web) et la réception (Google SERP)."
+        
+        user_prompt = f"""
+SITE OFFICIEL (Ce que la marque DIT):
+- Titre: {internal_data['title']}
+- H1: {internal_data['h1']}
+- Meta: {internal_data['meta']}
+- Contexte: {internal_data['raw_text'][:500]}
+
+GOOGLE SERP (Ce que le marché ENTEND):
+{external_summary}
+
+TÂCHE: Analyse la dissonance cognitive entre ces deux corpus.
+
+Réponds UNIQUEMENT avec un JSON STRICT (pas de markdown, pas de backticks) au format:
+{{
+    "score": <int entre 0 et 100>,
+    "analysis": "<analyse courte et cinglante, max 2 phrases>",
+    "galaxy_nodes": {{
+        "aligned": ["concept1", "concept2", "concept3", "concept4", "concept5"],
+        "noise": ["concept1", "concept2", "concept3", "concept4", "concept5"],
+        "invisible": ["concept1", "concept2", "concept3", "concept4", "concept5"]
+    }}
+}}
+
+Règles:
+- score: 100 = résonance parfaite, 0 = dissonance totale
+- aligned: 5 mots-clés présents dans LES DEUX sources (Site ET Google)
+- noise: 5 mots-clés présents UNIQUEMENT dans Google (bruit de marché)
+- invisible: 5 mots-clés présents UNIQUEMENT sur le Site (occasion manquée)
+"""
+        
+        # Appel API Mistral
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+        
+        payload = {
+            "model": "mistral-large-latest",
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "temperature": 0.3,
+            "max_tokens": 1000
+        }
+        
+        response = requests.post(
+            "https://api.mistral.ai/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            return None
+        
+        data = response.json()
+        content = data['choices'][0]['message']['content']
+        
+        # Nettoyage du JSON (au cas où Mistral ajoute des backticks)
+        content = content.strip()
+        if content.startswith('```'):
+            content = re.sub(r'^```json?\s*', '', content)
+            content = re.sub(r'\s*```$', '', content)
+        
+        result = json.loads(content)
+        
+        # Validation du format
+        if all(k in result for k in ['score', 'analysis', 'galaxy_nodes']):
+            return result
+        
+        return None
+        
+    except Exception as e:
+        st.error(f"Erreur Mistral: {e}")
+        return None
+
+# ==========================================
+# TÂCHE 3 : VISUALISATION ALIGNMENT GALAXY
+# ==========================================
+
+def build_alignment_galaxy(brand: str, ai_data: Dict):
+    """
+    Construit le graphe Alignment Galaxy
+    
+    Args:
+        brand: Nom de la marque
+        ai_data: Données de l'analyse IA (avec galaxy_nodes)
+    
+    Returns:
+        NetworkX Graph
+    """
+    G = nx.DiGraph()
+    
+    # 1. NŒUD CENTRAL (Soleil - La Marque)
+    G.add_node(
+        brand,
+        label=brand.upper(),
+        size=50,
+        color="#0f172a",
+        font={'color': '#ffffff', 'size': 22},
+        title="MARQUE - CENTRE DE GRAVITÉ"
+    )
+    
+    nodes = ai_data.get('galaxy_nodes', {})
+    
+    # 2. CONCEPTS ALIGNÉS (Orbite Proche - Vert)
+    for concept in nodes.get('aligned', [])[:5]:
+        node_id = f"aligned_{concept}"
+        G.add_node(
+            node_id,
+            label=concept.upper(),
+            size=30,
+            color="#10b981",
+            title=f"✓ ALIGNÉ: {concept}"
+        )
+        G.add_edge(brand, node_id, color="#10b981", width=3, length=100)
+    
+    # 3. CONCEPTS BRUIT (Orbite Lointaine - Rouge)
+    for concept in nodes.get('noise', [])[:5]:
+        node_id = f"noise_{concept}"
+        G.add_node(
+            node_id,
+            label=concept.upper(),
+            size=25,
+            color="#ef4444",
+            shape="triangle",
+            title=f"⚠️ BRUIT MARCHÉ: {concept}"
+        )
+        G.add_edge(brand, node_id, color="#fca5a5", width=1, length=250)
+    
+    # 4. CONCEPTS INVISIBLES (Matière Noire - Bleu)
+    for concept in nodes.get('invisible', [])[:5]:
+        node_id = f"invisible_{concept}"
+        G.add_node(
+            node_id,
+            label=f"❌ {concept.upper()}",
+            size=20,
+            color="#3b82f6",
+            title=f"❌ INVISIBLE: {concept}"
+        )
+        G.add_edge(brand, node_id, color="#93c5fd", width=1.5, length=175, dashes=True)
+    
+    return G
+
 def render_interactive_graph(G):
-    """Moteur de rendu Pyvis pour le graphe de réputation"""
+    """Moteur de rendu Pyvis"""
     nt = Network(height="700px", width="100%", bgcolor="#ffffff", font_color="#0f172a")
     nt.from_nx(G)
     
@@ -84,10 +356,9 @@ def render_interactive_graph(G):
     components.html(html.replace("</body>", custom_css + "</body>"), height=750)
 
 def build_reputation_graph(brand: str, mentions: List[Dict]):
-    """Construction du graphe en étoile : marque au centre, sources autour"""
+    """Construction du graphe classique (mode sans Audit Miroir)"""
     G = nx.DiGraph()
     
-    # Nœud central (la marque)
     G.add_node(
         brand, 
         label=brand.upper(), 
@@ -97,7 +368,6 @@ def build_reputation_graph(brand: str, mentions: List[Dict]):
         title="MARQUE CIBLE"
     )
     
-    # Nœuds satellites (les mentions)
     for m in mentions:
         color = SOURCE_CONFIG.get(m['domain_key'], {}).get('color', '#64748b')
         label = SOURCE_CONFIG.get(m['domain_key'], {}).get('label', 'AUTRE')
@@ -113,18 +383,12 @@ def build_reputation_graph(brand: str, mentions: List[Dict]):
     
     return G
 
+# ==========================================
+# FONCTIONS SERPAPI (INCHANGÉES)
+# ==========================================
+
 def _serpapi_search(query: str, max_results: int = 3, api_key: str = None) -> List[Dict]:
-    """
-    Recherche Google via SerpAPI (pas de blocage, 100% fiable)
-    
-    Args:
-        query: Requête Google (ex: "Tesla" site:reddit.com)
-        max_results: Nombre de résultats à récupérer
-        api_key: Clé API SerpAPI
-    
-    Returns:
-        Liste de dicts avec title, description, url
-    """
+    """Recherche Google via SerpAPI"""
     if not api_key:
         return []
     
@@ -149,7 +413,6 @@ def _serpapi_search(query: str, max_results: int = 3, api_key: str = None) -> Li
         
         data = response.json()
         
-        # Extraction des résultats organiques
         results = []
         for item in data.get("organic_results", [])[:max_results]:
             results.append({
@@ -165,19 +428,7 @@ def _serpapi_search(query: str, max_results: int = 3, api_key: str = None) -> Li
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def _cached_scan(brand: str, scan_mode: str, api_key: str) -> Dict:
-    """
-    Scanner avec cache intelligent (1h)
-    Évite les requêtes répétées pour la même marque
-    
-    Args:
-        brand: Nom de la marque à scanner
-        scan_mode: Mode de scan (fast/balanced/safe)
-        api_key: Clé SerpAPI
-    
-    Returns:
-        Dict avec results, timestamp, mode
-    """
-    # Configuration selon le mode
+    """Scanner avec cache intelligent"""
     configs = {
         "fast": {
             "sources": 6,
@@ -198,7 +449,6 @@ def _cached_scan(brand: str, scan_mode: str, api_key: str) -> Dict:
     
     config = configs.get(scan_mode, configs["balanced"])
     
-    # Tri des sources par priorité
     sorted_sources = sorted(
         SOURCE_CONFIG.items(),
         key=lambda x: x[1].get('priority', 99)
@@ -206,21 +456,11 @@ def _cached_scan(brand: str, scan_mode: str, api_key: str) -> Dict:
     
     results = []
     
-    # Scan source par source
     for domain, meta in sorted_sources:
         source_name = meta["label"]
-        
-        # Construction de la query Google
         query = f'"{brand}" site:{domain}'
+        found = _serpapi_search(query, max_results=config["results_per_source"], api_key=api_key)
         
-        # Recherche via SerpAPI
-        found = _serpapi_search(
-            query, 
-            max_results=config["results_per_source"], 
-            api_key=api_key
-        )
-        
-        # Ajout des résultats
         for item in found:
             results.append({
                 "source": source_name,
@@ -230,7 +470,6 @@ def _cached_scan(brand: str, scan_mode: str, api_key: str) -> Dict:
                 "url": item['url']
             })
         
-        # Pause entre sources (courtoisie)
         delay = random.uniform(*config["delay"])
         time.sleep(delay)
     
@@ -241,22 +480,9 @@ def _cached_scan(brand: str, scan_mode: str, api_key: str) -> Dict:
     }
 
 def _scan_with_ui(brand: str, status_container, log_container, scan_mode: str, api_key: str):
-    """
-    Wrapper UI : affiche l'animation pendant le scan
-    
-    Args:
-        brand: Nom de la marque
-        status_container: Container Streamlit pour la barre de progression
-        log_container: Container pour les logs terminal
-        scan_mode: Mode de scan
-        api_key: Clé SerpAPI
-    
-    Returns:
-        Liste des résultats
-    """
+    """Wrapper UI pour le scan"""
     logs = []
     
-    # Configuration visuelle selon le mode
     configs = {
         "fast": {"label": "⚡ RAPIDE", "eta": "~15s"},
         "balanced": {"label": "⚖️ ÉQUILIBRÉ", "eta": "~25s"},
@@ -265,7 +491,6 @@ def _scan_with_ui(brand: str, status_container, log_container, scan_mode: str, a
     
     config_ui = configs.get(scan_mode, configs["balanced"])
     
-    # Liste des sources à scanner
     sorted_sources = sorted(
         SOURCE_CONFIG.items(),
         key=lambda x: x[1].get('priority', 99)
@@ -277,21 +502,17 @@ def _scan_with_ui(brand: str, status_container, log_container, scan_mode: str, a
         text=f"Initialisation // Mode {config_ui['label']} (ETA: {config_ui['eta']})..."
     )
     
-    # Animation visuelle pendant le scan
     for i, (domain, meta) in enumerate(sorted_sources):
         source_name = meta["label"]
         
-        # Mise à jour de la barre
         progress_bar.progress(
             i / total, 
             text=f"Scan : {source_name}... [{i+1}/{total}]"
         )
         
-        # Ajout du log
         log_html = f"<span style='color:#10b981'>[●]</span> Interrogation de {source_name}..."
         logs.append(log_html)
         
-        # Affichage du terminal (dernières 8 lignes)
         log_display = "<br>".join(logs[-8:])
         log_container.markdown(
             f"""
@@ -300,7 +521,7 @@ def _scan_with_ui(brand: str, status_container, log_container, scan_mode: str, a
                         border:1px solid #334155; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
                 <div style="border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:8px; 
                             color:#94a3b8; font-weight:700; letter-spacing:0.05em;">
-                    > HOTARU_SCAN_PROTOCOL // V3.5_SERPAPI // {config_ui['label']}
+                    > HOTARU_SCAN_PROTOCOL // V4.0_MIRROR_AUDIT // {config_ui['label']}
                 </div>
                 {log_display}
                 <div style="margin-top:8px; color:#10b981; font-weight:bold;">
@@ -316,10 +537,8 @@ def _scan_with_ui(brand: str, status_container, log_container, scan_mode: str, a
         
         time.sleep(0.2)
     
-    # Lancement du scan réel (avec cache)
     scan_data = _cached_scan(brand, scan_mode, api_key)
     
-    # Logs finaux avec résultats
     logs = []
     results_by_source = {}
     for r in scan_data["results"]:
@@ -336,7 +555,6 @@ def _scan_with_ui(brand: str, status_container, log_container, scan_mode: str, a
             log_html = f"<span style='color:#64748b'>[○]</span> Aucune donnée sur {source_name}"
         logs.append(log_html)
     
-    # Affichage final
     log_display = "<br>".join(logs)
     log_container.markdown(
         f"""
@@ -362,80 +580,40 @@ def _scan_with_ui(brand: str, status_container, log_container, scan_mode: str, a
     
     return scan_data["results"]
 
+# ==========================================
+# TÂCHE 4 : INTERFACE STREAMLIT
+# ==========================================
+
 def render_off_page_audit():
-    """
-    Interface principale du module Off-Page
-    Récupère automatiquement la clé depuis Streamlit Secrets
-    """
+    """Interface principale avec Audit Miroir"""
     st.markdown('<p class="section-title">01 / AUDIT DE RÉPUTATION (OFF-PAGE)</p>', unsafe_allow_html=True)
     
-    # ✅ DIAGNOSTIC + LECTURE DE LA CLÉ
-    api_key = None
+    # Lecture des clés API
+    serpapi_key = None
+    mistral_key = None
     
-    # Debug : afficher les clés disponibles
-    with st.expander("🔍 Diagnostic Secrets (DEBUG)", expanded=False):
-        st.write("**Clés disponibles dans st.secrets:**", list(st.secrets.keys()))
-        st.write("**SERPAPI_KEY présente?**", "SERPAPI_KEY" in st.secrets)
-        
-        # Test toutes les variantes possibles
-        possible_keys = [
-            ("SERPAPI_KEY", lambda: st.secrets["SERPAPI_KEY"]),
-            ("serpapi.SERPAPI_KEY", lambda: st.secrets["serpapi"]["SERPAPI_KEY"]),
-            ("serpapi_key", lambda: st.secrets.get("serpapi_key")),
-            ("SERP_API_KEY", lambda: st.secrets.get("SERP_API_KEY"))
-        ]
-        
-        for key_name, getter in possible_keys:
-            try:
-                test_val = getter()
-                if test_val:
-                    st.success(f"✅ Trouvé via: `{key_name}` = {test_val[:10]}...")
-                    if not api_key:  # Prendre la première qui marche
-                        api_key = test_val
-            except:
-                st.info(f"❌ Pas trouvé via: `{key_name}`")
+    try:
+        serpapi_key = st.secrets["SERPAPI_KEY"]
+    except:
+        pass
     
-    # Lecture de la clé (méthode principale)
-    if not api_key:
-        try:
-            api_key = st.secrets["SERPAPI_KEY"]
-        except:
-            try:
-                api_key = st.secrets["serpapi"]["SERPAPI_KEY"]
-            except:
-                pass
+    try:
+        mistral_key = st.secrets["mistral"]["api_key"]
+    except:
+        pass
     
-    # Si toujours pas de clé
-    if not api_key:
-        st.error(
-            """
-            ❌ **Clé API SerpAPI introuvable**
-            
-            **Dans Settings → Secrets, assure-toi d'avoir exactement :**
-```toml
-            SERPAPI_KEY = "ta_clé_ici"
-```
-            
-            **OU si tu as une section [serpapi] :**
-```toml
-            [serpapi]
-            SERPAPI_KEY = "ta_clé_ici"
-```
-            
-            📌 [Obtenir une clé gratuite (100 requêtes/mois)](https://serpapi.com/users/sign_up)
-            """
-        )
+    if not serpapi_key:
+        st.error("❌ Clé SERPAPI_KEY manquante dans Secrets")
         return
     
-    # Confirmation visuelle
     st.markdown(
         f'<p style="font-size:0.75rem;color:#10b981;font-weight:600;margin-bottom:16px;">'
-        f'✓ Clé SerpAPI configurée ({api_key[:8]}...)</p>', 
+        f'✓ SerpAPI configurée ({serpapi_key[:8]}...)</p>', 
         unsafe_allow_html=True
     )
     
-    # --- INTERFACE DE SCAN ---
-    col1, col2, col3 = st.columns([3, 1, 1])
+    # --- INPUTS ---
+    col1, col2 = st.columns([2, 1])
     
     brand_input = col1.text_input(
         "Marque", 
@@ -444,7 +622,18 @@ def render_off_page_audit():
         label_visibility="collapsed"
     )
     
-    scan_mode = col2.selectbox(
+    # 🆕 INPUT SITE OFFICIEL (Active l'Audit Miroir)
+    official_site = col2.text_input(
+        "Site Officiel (Optionnel)",
+        value="",
+        placeholder="https://www.exemple.com",
+        label_visibility="collapsed",
+        help="Active l'Audit Miroir si rempli"
+    )
+    
+    col3, col4 = st.columns([1, 1])
+    
+    scan_mode = col3.selectbox(
         "Mode",
         options=["balanced", "safe", "fast"],
         format_func=lambda x: {
@@ -459,58 +648,177 @@ def render_off_page_audit():
     # Initialisation session state
     if 'offpage_results' not in st.session_state:
         st.session_state['offpage_results'] = []
+    if 'mirror_data' not in st.session_state:
+        st.session_state['mirror_data'] = None
     
     # Bouton de scan
-    scan_button = col3.button("SCANNER", type="primary", use_container_width=True)
+    scan_button = col4.button("SCANNER", type="primary", use_container_width=True)
     
     if scan_button:
         if not brand_input:
             st.warning("⚠️ Nom de marque requis")
         else:
-            # Conteneurs pour l'animation
             status_box = st.empty()
             log_box = st.empty()
             
-            # Lancement du scan
-            results = _scan_with_ui(brand_input, status_box, log_box, scan_mode, api_key)
+            # Scan Google
+            results = _scan_with_ui(brand_input, status_box, log_box, scan_mode, serpapi_key)
             
-            # Stockage des résultats
             st.session_state['offpage_results'] = results
             st.session_state['offpage_brand'] = brand_input
             st.session_state['offpage_mode'] = scan_mode
             
-            # Feedback utilisateur
+            # 🆕 AUDIT MIROIR si site officiel fourni
+            if official_site and mistral_key:
+                with st.spinner("🔍 Scraping du site officiel..."):
+                    internal_data = get_internal_dna(official_site)
+                
+                if internal_data:
+                    with st.spinner("🧠 Analyse sémantique avec Mistral..."):
+                        mirror_analysis = analyze_mirror_gap(internal_data, results, mistral_key)
+                    
+                    if mirror_analysis:
+                        st.session_state['mirror_data'] = {
+                            'internal': internal_data,
+                            'analysis': mirror_analysis
+                        }
+                        st.success("✓ Audit Miroir terminé !")
+                    else:
+                        st.warning("⚠️ Erreur lors de l'analyse Mistral")
+                else:
+                    st.warning("⚠️ Impossible de scraper le site officiel")
+            elif official_site and not mistral_key:
+                st.warning("⚠️ Clé Mistral manquante pour l'Audit Miroir")
+            
             if results:
-                st.success(f"✓ {len(results)} mentions trouvées • Données en cache pour 1h")
+                st.success(f"✓ {len(results)} mentions trouvées")
             else:
-                st.info("Aucune mention trouvée pour cette marque.")
+                st.info("Aucune mention trouvée.")
     
-    # --- AFFICHAGE DES RÉSULTATS ---
+    # --- AFFICHAGE RÉSULTATS ---
     results = st.session_state.get('offpage_results', [])
     brand_name = st.session_state.get('offpage_brand', brand_input)
+    mirror_data = st.session_state.get('mirror_data')
     
     if results:
         st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
         
+        # 🆕 AFFICHAGE AUDIT MIROIR
+        if mirror_data:
+            analysis = mirror_data['analysis']
+            internal = mirror_data['internal']
+            
+            # Score d'alignement
+            score = analysis.get('score', 0)
+            
+            # Couleur selon le score
+            if score >= 80:
+                color = "#10b981"
+                status = "EXCELLENT"
+            elif score >= 60:
+                color = "#f59e0b"
+                status = "MOYEN"
+            else:
+                color = "#ef4444"
+                status = "FAIBLE"
+            
+            st.markdown(
+                f"""
+                <div style="text-align:center; padding:24px; background:linear-gradient(135deg, {color}22 0%, {color}11 100%); 
+                            border-radius:12px; border:2px solid {color};">
+                    <div style="font-size:4rem; font-weight:900; color:{color}; line-height:1;">
+                        {score}<span style="font-size:2rem;">/100</span>
+                    </div>
+                    <div style="font-size:1.2rem; font-weight:700; color:{color}; margin-top:8px;">
+                        SCORE D'ALIGNEMENT : {status}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Analyse de l'IA
+            st.info(f"**💡 Analyse :** {analysis.get('analysis', 'N/A')}")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Layout 2 colonnes
+            col_left, col_right = st.columns(2)
+            
+            with col_left:
+                st.markdown("### 📢 CE QUE VOUS DITES")
+                st.markdown(
+                    f"""
+                    <div style="background:#f8fafc; padding:16px; border-radius:8px; border-left:4px solid #3b82f6;">
+                        <div style="font-weight:700; margin-bottom:8px;">H1:</div>
+                        <div style="margin-bottom:12px;">{internal.get('h1', 'N/A')}</div>
+                        
+                        <div style="font-weight:700; margin-bottom:8px;">Title:</div>
+                        <div style="margin-bottom:12px;">{internal.get('title', 'N/A')}</div>
+                        
+                        <div style="font-weight:700; margin-bottom:8px;">Meta:</div>
+                        <div>{internal.get('meta', 'N/A')}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            
+            with col_right:
+                st.markdown("### 🌍 CE QU'ILS ENTENDENT")
+                
+                # Extraction mots-clés principaux Google
+                google_keywords = []
+                for r in results[:5]:
+                    title_words = r['title'].lower().split()
+                    google_keywords.extend([w for w in title_words if len(w) > 4])
+                
+                from collections import Counter
+                top_keywords = Counter(google_keywords).most_common(8)
+                
+                st.markdown(
+                    f"""
+                    <div style="background:#fef2f2; padding:16px; border-radius:8px; border-left:4px solid #ef4444;">
+                        <div style="font-weight:700; margin-bottom:12px;">Top mots-clés Google:</div>
+                        <div>
+                            {', '.join([f"<span style='background:#fee2e2; padding:4px 8px; border-radius:4px; margin:2px;'>{k[0]}</span>" for k in top_keywords])}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+        
         # KPIs
+        st.markdown("<br>", unsafe_allow_html=True)
         k1, k2, k3, k4 = st.columns(4)
         k1.metric("Mentions", len(results))
         k2.metric("Sources", len(set(r['source'] for r in results)))
-        k3.metric("API", "SerpAPI", delta="✓ Actif")
+        k3.metric("Mode", {"fast": "⚡", "balanced": "⚖️", "safe": "🛡️"}.get(scan_mode, '⚖️'))
         k4.metric("Cache", "1h")
         
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Tabs de visualisation
-        tab_graph, tab_list, tab_export = st.tabs(["📊 GRAPHE", "📋 LISTE", "💾 EXPORT"])
+        # Tabs
+        tab_graph, tab_list, tab_export, tab_method = st.tabs([
+            "📊 GRAPHE", 
+            "📋 LISTE", 
+            "💾 EXPORT",
+            "🧭 MÉTHODOLOGIE"
+        ])
         
-        # TAB 1 : Graphe interactif
+        # TAB 1 : Graphe
         with tab_graph:
             if brand_name:
-                G = build_reputation_graph(brand_name, results)
+                # 🆕 Choix du graphe selon mode
+                if mirror_data:
+                    G = build_alignment_galaxy(brand_name, mirror_data['analysis'])
+                else:
+                    G = build_reputation_graph(brand_name, results)
+                
                 render_interactive_graph(G)
         
-        # TAB 2 : Liste des mentions
+        # TAB 2 : Liste
         with tab_list:
             for m in results:
                 color = SOURCE_CONFIG.get(m['domain_key'], {}).get('color', '#333')
@@ -535,54 +843,85 @@ def render_off_page_audit():
                     unsafe_allow_html=True
                 )
         
-        # TAB 3 : Export JSON
+        # TAB 3 : Export
         with tab_export:
             export_data = {
                 "brand": brand_name,
-                "scan_mode": st.session_state.get('offpage_mode', 'balanced'),
+                "scan_mode": scan_mode,
                 "total_mentions": len(results),
-                "sources_count": len(set(r['source'] for r in results)),
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "mirror_audit": mirror_data is not None,
                 "mentions": results
             }
+            
+            if mirror_data:
+                export_data['alignment_score'] = mirror_data['analysis'].get('score')
+                export_data['analysis'] = mirror_data['analysis'].get('analysis')
             
             json_data = json.dumps(export_data, indent=2, ensure_ascii=False)
             
             st.download_button(
                 label="📥 Télécharger JSON",
                 data=json_data,
-                file_name=f"hotaru_offpage_{brand_name.lower().replace(' ', '_')}.json",
+                file_name=f"hotaru_audit_{brand_name.lower().replace(' ', '_')}.json",
                 mime="application/json",
                 use_container_width=True
             )
+        
+        # TAB 4 : Méthodologie
+        with tab_method:
+            st.markdown("""
+            ### 🧭 Boussole Méthodologique : Comprendre le Score d'Alignement
             
-            st.markdown(
-                f"""
-                <div style="margin-top:16px; padding:12px; background:#f1f5f9; border-radius:4px; font-size:0.8rem;">
-                    <strong>📊 Statistiques d'export :</strong><br>
-                    • Format : JSON structuré<br>
-                    • Taille : {len(json_data)} caractères<br>
-                    • Mode scan : {st.session_state.get('offpage_mode', 'balanced').upper()}<br>
-                    • Date : {datetime.now().strftime("%d/%m/%Y %H:%M")}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            Le **Score d'Alignement HOTARU** mesure la distance sémantique entre votre émission (Site Officiel) 
+            et votre réception (SERP Google).
+            
+            #### Méthodologie : Le Score de Dissonance Cognitive
+            
+            **1. Extraction de l'ADN (Scraping Hybride)**  
+            Nous isolons les balises H1, Title et Meta Description de votre page d'accueil via notre module SmartScraper. 
+            C'est votre "Promesse Officielle".
+            
+            **2. Analyse du Bruit (Réception)**  
+            Nous analysons les snippets des 10 premiers résultats Google (hors votre site) pour identifier 
+            les thématiques dominantes.
+            
+            **3. Calcul du Gap (IA)**  
+            Notre moteur neuronal (Mistral AI) compare ces deux corpus :
+            
+            * **100%** : Résonance parfaite. Le marché répète exactement votre message.
+            * **80-99%** : Bon alignement avec quelques nuances.
+            * **60-79%** : Alignement moyen, certains messages se perdent.
+            * **< 60%** : Dissonance. Le marché vous associe à des sujets que vous ne maîtrisez pas 
+              (bugs, polémiques, concurrents).
+            
+            #### Interprétation du Graphe "Alignment Galaxy"
+            
+            * **🟢 Concepts ALIGNÉS** (Orbite proche) : Mots-clés présents à la fois sur votre site ET dans Google. 
+              C'est votre cœur de communication efficace.
+            
+            * **🔴 Concepts BRUIT** (Orbite lointaine) : Mots-clés absents de votre site mais dominants sur Google. 
+              Ce sont les associations non contrôlées (risque réputationnel).
+            
+            * **🔵 Concepts INVISIBLES** (Matière noire) : Mots-clés présents sur votre site mais invisibles dans Google. 
+              Ce sont vos occasions manquées (potentiel SEO inexploité).
+            """)
     
-    # --- OPTIONS AVANCÉES ---
+    # Options avancées
     with st.expander("🔧 Options avancées"):
         col_a, col_b = st.columns(2)
         
         if col_a.button("🗑️ Vider le cache", use_container_width=True):
             _cached_scan.clear()
+            get_internal_dna.clear()
+            analyze_mirror_gap.clear()
             st.session_state['offpage_results'] = []
-            st.success("✓ Cache vidé. Prochain scan sera complet.")
+            st.session_state['mirror_data'] = None
+            st.success("✓ Cache vidé.")
         
         if col_b.button("📊 Statistiques API", use_container_width=True):
             st.info(
-                "**SerpAPI - Plan Gratuit :**\n\n"
-                "• 100 requêtes/mois\n"
-                "• Pas de carte bancaire requise\n"
-                "• Résultats instantanés\n"
-                "• Pas de CAPTCHA"
+                "**APIs utilisées :**\n\n"
+                "• SerpAPI : 100 req/mois gratuit\n"
+                "• Mistral AI : Selon votre plan\n"
+                "• Scraping : Illimité"
             )
