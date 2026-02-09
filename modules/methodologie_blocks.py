@@ -94,19 +94,6 @@ Une donnée périmée est une donnée risquée pour une IA.
 """
 
 
-def render_methodologie_for_module(module_key: str | None = None) -> None:
-    """
-    Affiche la méthodologie Authority Score sous forme de Markdown riche.
-    module_key est ignoré pour l'instant : le contenu est identique pour tous les modules qui l'appellent.
-    """
-    st.markdown(METHODOLOGIE_AUTHORITY_MD)
-
-"""
-HOTARU - Blocs Méthodologie réutilisables (SaaS).
-Chaque module (Audit, Authority, Master, Leaf) peut afficher son onglet Méthodologie.
-"""
-
-import streamlit as st
 
 # Contenu méthodologie par module (titre + texte court)
 METHODOLOGIE_CONTENT = {
@@ -143,8 +130,12 @@ METHODOLOGIE_CONTENT = {
 def render_methodologie_for_module(module_key: str):
     """
     Affiche le contenu Méthodologie pour un module (authority, master, leaf).
+    Pour Authority Score : méthodologie détaillée (METHODOLOGIE_AUTHORITY_MD).
     Audit garde sa méthode dédiée dans audit_geo (METHODOLOGIE HOTARU complète).
     """
+    if module_key == "authority":
+        st.markdown(METHODOLOGIE_AUTHORITY_MD)
+        return
     content = METHODOLOGIE_CONTENT.get(module_key)
     if not content:
         st.info("Méthodologie non définie pour ce module.")
