@@ -638,7 +638,7 @@ def categorize_urls(results):
 # =============================================================================
 
 def render_journal_crawled(results):
-    """Vue A : Journal des pages crawlees, classees par categories"""
+    """Vue A : Journal des pages crawlees, classees par categories. Sans accordeon : sections plates pour afficher tous les noms."""
     categories = categorize_urls(results)
 
     st.markdown(
@@ -657,40 +657,45 @@ def render_journal_crawled(results):
     )
 
     for cat_name, pages in categories.items():
-        with st.expander(f"{cat_name}  ({len(pages)})", expanded=False):
-            for p in pages:
-                score_data = calculate_page_score(p)
-                if isinstance(score_data, tuple):
-                    sc, grade, _, _ = score_data
-                else:
-                    sc, grade = score_data, 'N/A'
+        # Titre de section (plus d'accordéon)
+        st.markdown(
+            f'<p style="font-size:0.65rem;font-weight:800;letter-spacing:0.15em;text-transform:uppercase;color:#94a3b8;margin:16px 0 8px 0;">{html.escape(cat_name)}  ({len(pages)})</p>',
+            unsafe_allow_html=True
+        )
+        # Un seul bloc HTML par catégorie : toutes les lignes dedans (évite bugs d'affichage)
+        rows_html = []
+        for p in pages:
+            score_data = calculate_page_score(p)
+            if isinstance(score_data, tuple):
+                sc, grade, _, _ = score_data
+            else:
+                sc, grade = score_data, 'N/A'
 
-                col = _grade_color(grade)
-                url = p.get('url', '') or ''
-                path = urlparse(url).path or '/'
-                raw_title = (p.get('title') or '').strip()
-                title = raw_title if raw_title else (path.strip('/').replace('-', ' ').replace('_', ' ').title() if path != '/' else 'Sans titre')
-                if not title or title == '/':
-                    title = 'Sans titre'
-                # Échapper pour HTML pour éviter contenu vide ou injection
-                title_safe = html.escape(title)
-                path_safe = html.escape(path)
-                url_safe = html.escape(url)
+            col = _grade_color(grade)
+            url = p.get('url', '') or ''
+            path = urlparse(url).path or '/'
+            raw_title = (p.get('title') or '').strip()
+            title = raw_title if raw_title else (path.strip('/').replace('-', ' ').replace('_', ' ').title() if path != '/' else 'Sans titre')
+            if not title or title == '/':
+                title = 'Sans titre'
+            title_safe = html.escape(title)
+            path_safe = html.escape(path)
+            url_safe = html.escape(url)
 
-                st.markdown(
-                    f'<div class="journal-table-row" style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #f1f5f9;">'
-                    f'<span class="grade-badge-circle" style="background:{col};color:#fff;border:2px solid #fff;'
-                    f'width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;'
-                    f'font-size:0.65rem;font-weight:800;letter-spacing:0.05em;flex-shrink:0;">{grade}</span>'
-                    f'<span class="journal-page-title" style="font-size:0.85rem;font-weight:600;color:#0f172a;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
-                    f'<a href="{url_safe}" target="_blank" style="color:#0f172a;text-decoration:none;"'
-                    f' onmouseover="this.style.borderBottom=\'1px solid #0f172a\'"'
-                    f' onmouseout="this.style.borderBottom=\'none\'">{title_safe}</a></span>'
-                    f'<span style="font-size:0.7rem;color:#94a3b8;font-family:\'Courier New\',monospace;'
-                    f'width:300px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;">{path_safe}</span>'
-                    f'</div>',
-                    unsafe_allow_html=True
-                )
+            rows_html.append(
+                f'<div class="journal-table-row" style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #f1f5f9;">'
+                f'<span class="grade-badge-circle" style="background:{col};color:#fff;border:2px solid #fff;'
+                f'width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;'
+                f'font-size:0.65rem;font-weight:800;letter-spacing:0.05em;flex-shrink:0;">{grade}</span>'
+                f'<span class="journal-page-title" style="font-size:0.85rem;font-weight:600;color:#0f172a;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
+                f'<a href="{url_safe}" target="_blank" style="color:#0f172a;text-decoration:none;"'
+                f' onmouseover="this.style.borderBottom=\'1px solid #0f172a\'"'
+                f' onmouseout="this.style.borderBottom=\'none\'">{title_safe}</a></span>'
+                f'<span style="font-size:0.7rem;color:#94a3b8;font-family:\'Courier New\',monospace;'
+                f'width:300px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;">{path_safe}</span>'
+                f'</div>'
+            )
+        st.markdown('<div class="journal-category-block">' + ''.join(rows_html) + '</div>', unsafe_allow_html=True)
 
 
 def render_journal_filtered(filtered_log):
