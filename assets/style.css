@@ -798,15 +798,15 @@ pre, code {
 
 /* --- ZEN CARD (main container) --- */
 .zen-card {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    padding: 32px;
-    margin-bottom: 24px;
-    transition: border-color 0.2s ease;
+    /* Card visuelle désactivée : on garde seulement l'espacement vertical */
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin-bottom: var(--space-6);
 }
 
 .zen-card:hover {
-    border-color: var(--primary);
+    border-color: transparent;
     box-shadow: none;
 }
 
