@@ -1420,315 +1420,313 @@ def render_audit_geo():
                 st.rerun()
 
         # =================================================================
-        # RESULTATS
+        # RESULTATS (affiché seulement si un Audit Site a été lancé)
         # =================================================================
-        if "results" not in st.session_state:
-            return
+        if "results" in st.session_state:
+            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
 
-        st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-
-        # ========== 02 / SCORE AI-READABLE ==========
-        st.markdown(
-            '<p class="section-title">02 / SCORE AI-READABLE</p>',
-            unsafe_allow_html=True
-        )
-
-        g_score = st.session_state.get("geo_score", 0)
-        score_color = _score_color(g_score)
-        score_label = _score_label(g_score)
-
-        st.markdown(
-            f'<div style="display:flex;align-items:flex-end;gap:16px;margin-bottom:12px;">'
-            f'<span style="font-size:5rem;font-weight:900;color:{score_color};line-height:1;letter-spacing:-0.04em;">{g_score}</span>'
-            f'<span style="font-size:1.2rem;font-weight:700;color:#94a3b8;margin-bottom:10px;">/100</span>'
-            f'</div>',
-            unsafe_allow_html=True
-        )
-
-        st.markdown(
-            f'<span style="display:inline-block;padding:6px 20px;font-size:0.6rem;font-weight:800;'
-            f'letter-spacing:0.2em;text-transform:uppercase;background:{score_color};color:#fff;'
-            f'border:1px solid {score_color};">{score_label}</span>',
-            unsafe_allow_html=True
-        )
-
-        st.markdown("<br><br>", unsafe_allow_html=True)
-
-        # ========== INFRASTRUCTURE ==========
-        st.markdown(
-            '<p class="section-title">03 / INFRASTRUCTURE IA</p>',
-            unsafe_allow_html=True
-        )
-
-        if st.session_state.get("geo_infra"):
-            cols = st.columns(4)
-            for i, (name, d) in enumerate(st.session_state.geo_infra.items()):
-                with cols[i]:
-                    if d['status']:
-                        status_html = (
-                            '<span style="font-size:0.7rem;font-weight:800;color:#10b981;'
-                            'letter-spacing:0.1em;">PRESENT</span>'
-                        )
-                    else:
-                        status_html = (
-                            '<span style="font-size:0.7rem;font-weight:800;color:#FF4B4B;'
-                            'letter-spacing:0.1em;">ABSENT</span>'
-                        )
-
-                    st.markdown(
-                        f'<div style="padding:20px;border:1px solid #e2e8f0;border-left:3px solid '
-                        f'{"#10b981" if d["status"] else "#FF4B4B"};">'
-                        f'<div style="font-weight:800;font-size:0.85rem;margin-bottom:8px;">{name}</div>'
-                        f'{status_html}'
-                        f'<div style="font-size:0.75rem;color:#94a3b8;margin-top:8px;line-height:1.4;'
-                        f'font-style:italic;">{d["meta"]["desc"]}</div>'
-                        f'</div>',
-                        unsafe_allow_html=True
-                    )
-
-        st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-
-        # ========== 04 / STATISTIQUES DU CRAWL ==========
-        if "crawl_stats" in st.session_state and st.session_state.crawl_stats:
+            # ========== 02 / SCORE AI-READABLE ==========
             st.markdown(
-                '<p class="section-title">04 / STATISTIQUES DU CRAWL</p>',
+                '<p class="section-title">02 / SCORE AI-READABLE</p>',
                 unsafe_allow_html=True
             )
 
-            stats = st.session_state.crawl_stats
+            g_score = st.session_state.get("geo_score", 0)
+            score_color = _score_color(g_score)
+            score_label = _score_label(g_score)
 
-            # Points d'entree multiples
-            if "start_urls" in st.session_state and len(st.session_state.start_urls) > 1:
-                with st.expander(f"Points d'entree : {len(st.session_state.start_urls)}", expanded=False):
-                    for i, url in enumerate(st.session_state.start_urls, 1):
+            st.markdown(
+                f'<div style="display:flex;align-items:flex-end;gap:16px;margin-bottom:12px;">'
+                f'<span style="font-size:5rem;font-weight:900;color:{score_color};line-height:1;letter-spacing:-0.04em;">{g_score}</span>'
+                f'<span style="font-size:1.2rem;font-weight:700;color:#94a3b8;margin-bottom:10px;">/100</span>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
+            st.markdown(
+                f'<span style="display:inline-block;padding:6px 20px;font-size:0.6rem;font-weight:800;'
+                f'letter-spacing:0.2em;text-transform:uppercase;background:{score_color};color:#fff;'
+                f'border:1px solid {score_color};">{score_label}</span>',
+                unsafe_allow_html=True
+            )
+
+            st.markdown("<br><br>", unsafe_allow_html=True)
+
+            # ========== INFRASTRUCTURE ==========
+            st.markdown(
+                '<p class="section-title">03 / INFRASTRUCTURE IA</p>',
+                unsafe_allow_html=True
+            )
+
+            if st.session_state.get("geo_infra"):
+                cols = st.columns(4)
+                for i, (name, d) in enumerate(st.session_state.geo_infra.items()):
+                    with cols[i]:
+                        if d['status']:
+                            status_html = (
+                                '<span style="font-size:0.7rem;font-weight:800;color:#10b981;'
+                                'letter-spacing:0.1em;">PRESENT</span>'
+                            )
+                        else:
+                            status_html = (
+                                '<span style="font-size:0.7rem;font-weight:800;color:#FF4B4B;'
+                                'letter-spacing:0.1em;">ABSENT</span>'
+                            )
+
                         st.markdown(
-                            f'<div style="padding:4px 0;font-size:0.8rem;font-family:\'Courier New\',monospace;'
-                            f'color:#64748b;">{i}. {url}</div>',
+                            f'<div style="padding:20px;border:1px solid #e2e8f0;border-left:3px solid '
+                            f'{"#10b981" if d["status"] else "#FF4B4B"};">'
+                            f'<div style="font-weight:800;font-size:0.85rem;margin-bottom:8px;">{name}</div>'
+                            f'{status_html}'
+                            f'<div style="font-size:0.75rem;color:#94a3b8;margin-top:8px;line-height:1.4;'
+                            f'font-style:italic;">{d["meta"]["desc"]}</div>'
+                            f'</div>',
                             unsafe_allow_html=True
                         )
 
-            # Metriques principales - style massif
-            col1, col2, col3, col4 = st.columns(4)
+            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
 
-            metrics = [
-                (col1, stats.get("pages_crawled", 0), "Pages crawlees"),
-                (col2, stats.get("links_discovered", 0), "Liens decouverts"),
-                (col3, stats.get("links_duplicate", 0), "Doublons"),
-                (col4, stats.get("errors", 0), "Erreurs"),
-            ]
+            # ========== 04 / STATISTIQUES DU CRAWL ==========
+            if "crawl_stats" in st.session_state and st.session_state.crawl_stats:
+                st.markdown(
+                    '<p class="section-title">04 / STATISTIQUES DU CRAWL</p>',
+                    unsafe_allow_html=True
+                )
 
-            for col, value, label in metrics:
-                with col:
+                stats = st.session_state.crawl_stats
+
+                # Points d'entree multiples
+                if "start_urls" in st.session_state and len(st.session_state.start_urls) > 1:
+                    with st.expander(f"Points d'entree : {len(st.session_state.start_urls)}", expanded=False):
+                        for i, url in enumerate(st.session_state.start_urls, 1):
+                            st.markdown(
+                                f'<div style="padding:4px 0;font-size:0.8rem;font-family:\'Courier New\',monospace;'
+                                f'color:#64748b;">{i}. {url}</div>',
+                                unsafe_allow_html=True
+                            )
+
+                # Metriques principales - style massif
+                col1, col2, col3, col4 = st.columns(4)
+
+                metrics = [
+                    (col1, stats.get("pages_crawled", 0), "Pages crawlees"),
+                    (col2, stats.get("links_discovered", 0), "Liens decouverts"),
+                    (col3, stats.get("links_duplicate", 0), "Doublons"),
+                    (col4, stats.get("errors", 0), "Erreurs"),
+                ]
+
+                for col, value, label in metrics:
+                    with col:
+                        st.markdown(
+                            f'<div style="text-align:center;padding:24px;border:1px solid #e2e8f0;">'
+                            f'<div style="font-size:2.5rem;font-weight:900;line-height:1;color:#0f172a;">{value}</div>'
+                            f'<div style="font-size:0.6rem;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;'
+                            f'color:#94a3b8;margin-top:10px;">{label}</div>'
+                            f'</div>',
+                            unsafe_allow_html=True
+                        )
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                # Metriques secondaires - discrets, italiques
+                s_col1, s_col2, s_col3 = st.columns(3)
+                with s_col1:
                     st.markdown(
-                        f'<div style="text-align:center;padding:24px;border:1px solid #e2e8f0;">'
-                        f'<div style="font-size:2.5rem;font-weight:900;line-height:1;color:#0f172a;">{value}</div>'
-                        f'<div style="font-size:0.6rem;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;'
-                        f'color:#94a3b8;margin-top:10px;">{label}</div>'
-                        f'</div>',
+                        f'<p style="font-size:0.75rem;color:#94a3b8;font-style:italic;">'
+                        f'Pages ignorees : <strong>{stats.get("pages_skipped", 0)}</strong></p>',
+                        unsafe_allow_html=True
+                    )
+                with s_col2:
+                    st.markdown(
+                        f'<p style="font-size:0.75rem;color:#94a3b8;font-style:italic;">'
+                        f'Liens filtres : <strong>{stats.get("links_filtered", 0)}</strong></p>',
+                        unsafe_allow_html=True
+                    )
+                with s_col3:
+                    st.markdown(
+                        f'<p style="font-size:0.75rem;color:#94a3b8;font-style:italic;">'
+                        f'URLs visitees : <strong>{len(st.session_state.results)}</strong></p>',
                         unsafe_allow_html=True
                     )
 
-            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
 
-            # Metriques secondaires - discrets, italiques
-            s_col1, s_col2, s_col3 = st.columns(3)
-            with s_col1:
-                st.markdown(
-                    f'<p style="font-size:0.75rem;color:#94a3b8;font-style:italic;">'
-                    f'Pages ignorees : <strong>{stats.get("pages_skipped", 0)}</strong></p>',
-                    unsafe_allow_html=True
-                )
-            with s_col2:
-                st.markdown(
-                    f'<p style="font-size:0.75rem;color:#94a3b8;font-style:italic;">'
-                    f'Liens filtres : <strong>{stats.get("links_filtered", 0)}</strong></p>',
-                    unsafe_allow_html=True
-                )
-            with s_col3:
-                st.markdown(
-                    f'<p style="font-size:0.75rem;color:#94a3b8;font-style:italic;">'
-                    f'URLs visitees : <strong>{len(st.session_state.results)}</strong></p>',
-                    unsafe_allow_html=True
-                )
-
-        st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-
-        # ========== 04.5 / RAPPORT D'AUDIT GEO & DATA ==========
-        render_geo_report(
-            st.session_state.get("target_url", ""),
-            st.session_state.get("ai_accessibility", {})
-        )
-
-        st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-
-        # ========== MISTRAL OPTIMIZATION ==========
-        render_mistral_optimization(st.session_state.get("target_url", ""))
-
-        st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-
-        # ========== 06 / JOURNAUX ==========
-        st.markdown(
-            '<p class="section-title">06 / JOURNAUX</p>',
-            unsafe_allow_html=True
-        )
-
-        j_tab1, j_tab2, j_tab3 = st.tabs([
-            "PAGES CRAWLEES",
-            "LIENS FILTRES",
-            "DOUBLONS"
-        ])
-
-        with j_tab1:
-            render_journal_crawled(st.session_state.results)
-
-        with j_tab2:
-            render_journal_filtered(st.session_state.get("filtered_log", []))
-
-        with j_tab3:
-            render_journal_duplicates(st.session_state.get("duplicate_log", []))
-
-        st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-
-        # ========== 07 / GRAPHE ==========
-        st.markdown(
-            '<p class="section-title">07 / GRAPHE DE MAILLAGE</p>',
-            unsafe_allow_html=True
-        )
-
-        c_expert, c_save_name, c_save_btn = st.columns([1, 2, 1])
-        expert_on = c_expert.toggle("Score AI-READABLE", value=False)
-
-        domain = urlparse(st.session_state.target_url).netloc
-        s_name = c_save_name.text_input("Nom sauvegarde", value=domain.split('.')[0], label_visibility="collapsed")
-
-        # Sauvegarde
-        if c_save_btn.button("SAUVEGARDER", use_container_width=True):
-            max_pages_to_save = 100
-            results_to_save = st.session_state.results[:max_pages_to_save]
-
-            clean_results = []
-            for r in results_to_save:
-                clean_results.append({
-                    "url": r.get("url"),
-                    "title": r.get("title", "")[:50],
-                    "description": r.get("description", "")[:100],
-                    "h1": r.get("h1", "")[:50],
-                    "response_time": round(r.get("response_time", 0), 2),
-                    "has_structured_data": r.get("has_structured_data", False),
-                    "h2_count": r.get("h2_count", 0)
-                })
-
-            compact_clusters = []
-            for cluster in st.session_state.clusters:
-                compact_clusters.append({
-                    "name": cluster["name"],
-                    "count": cluster["count"],
-                    "samples": []
-                })
-
-            payload = {
-                "results": clean_results,
-                "clusters": compact_clusters,
-                "geo_infra": st.session_state.get('geo_infra', {}),
-                "geo_score": st.session_state.get('geo_score', 0),
-                "stats": {
-                    "pages_crawled": st.session_state.crawl_stats.get('pages_crawled', 0),
-                    "links_discovered": st.session_state.crawl_stats.get('links_discovered', 0),
-                    "links_filtered": st.session_state.crawl_stats.get('links_filtered', 0),
-                    "links_duplicate": st.session_state.crawl_stats.get('links_duplicate', 0),
-                    "pages_skipped": st.session_state.crawl_stats.get('pages_skipped', 0),
-                    "errors": st.session_state.crawl_stats.get('errors', 0),
-                    "start_urls_count": st.session_state.crawl_stats.get('start_urls_count', 1)
-                },
-                "start_urls": st.session_state.get('start_urls', [st.session_state.target_url])[:5],
-                "ai_accessibility": st.session_state.get('ai_accessibility', {})
-            }
-
-            if len(st.session_state.results) > max_pages_to_save:
-                st.markdown(
-                    f'<p style="color:#FFA500;font-weight:700;font-size:0.8rem;">'
-                    f'Seules les {max_pages_to_save} premieres pages sur {len(st.session_state.results)} seront sauvegardees '
-                    f'(limite Google Sheets)</p>',
-                    unsafe_allow_html=True
-                )
-
-            db.save_audit(user_email, st.session_state.current_ws, st.session_state.target_url, s_name, payload)
-            st.toast("Audit sauvegarde")
-
-        # Construction du graphe
-        G = nx.DiGraph()
-        G.add_node(
-            st.session_state.target_url,
-            label=domain.upper(),
-            size=35,
-            color="#0f172a",
-            font={'color': '#ffffff', 'face': 'Inter'}
-        )
-
-        for c in st.session_state.clusters:
-            c_id = f"group_{c['name']}"
-            G.add_node(
-                c_id,
-                label=c['name'].upper(),
-                color="#cbd5e1",
-                size=25,
-                font={'color': '#0f172a', 'face': 'Inter'}
+            # ========== 04.5 / RAPPORT D'AUDIT GEO & DATA ==========
+            render_geo_report(
+                st.session_state.get("target_url", ""),
+                st.session_state.get("ai_accessibility", {})
             )
-            G.add_edge(st.session_state.target_url, c_id)
 
-            for p in c['samples'][:40]:
-                score_data = calculate_page_score(p)
-                if isinstance(score_data, tuple):
-                    sc, grade, breakdown, recommendations = score_data
-                else:
-                    sc = score_data
-                    grade = 'N/A'
-                    breakdown = {}
-                    recommendations = []
+            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
 
-                if expert_on:
-                    col = _score_color(sc)
-                else:
-                    col = "#e2e8f0"
+            # ========== MISTRAL OPTIMIZATION ==========
+            render_mistral_optimization(st.session_state.get("target_url", ""))
 
-                label = get_clean_label(p.get('title', ''), p['url'], domain)
-                if expert_on and isinstance(score_data, tuple):
-                    label = f"{label}\\n[{grade}]"
+            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
 
-                tooltip_parts = []
-                if expert_on and isinstance(score_data, tuple):
-                    tooltip_parts.append(f"Score AI-READABLE: {sc}/100 - Grade: {grade}")
+            # ========== 06 / JOURNAUX ==========
+            st.markdown(
+                '<p class="section-title">06 / JOURNAUX</p>',
+                unsafe_allow_html=True
+            )
 
-                    missing = []
-                    if not p.get('description'):
-                        missing.append("Meta description manquante")
-                    if not p.get('h1'):
-                        missing.append("H1 manquant")
-                    if not p.get('has_structured_data'):
-                        missing.append("JSON-LD manquant")
-                    if p.get('h2_count', 0) < 2:
-                        missing.append("Peu de H2")
+            j_tab1, j_tab2, j_tab3 = st.tabs([
+                "PAGES CRAWLEES",
+                "LIENS FILTRES",
+                "DOUBLONS"
+            ])
 
-                    if missing:
-                        tooltip_parts.append("\\n\\nElements manquants:\\n" + "\\n".join(f"- {m}" for m in missing))
+            with j_tab1:
+                render_journal_crawled(st.session_state.results)
 
-                    if recommendations:
-                        top_reco = recommendations[:2]
-                        tooltip_parts.append("\\n\\nRecommandations:\\n" + "\\n".join(f"- {r}" for r in top_reco))
+            with j_tab2:
+                render_journal_filtered(st.session_state.get("filtered_log", []))
 
-                tooltip = "\\n".join(tooltip_parts) if tooltip_parts else ""
+            with j_tab3:
+                render_journal_duplicates(st.session_state.get("duplicate_log", []))
 
+            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+
+            # ========== 07 / GRAPHE ==========
+            st.markdown(
+                '<p class="section-title">07 / GRAPHE DE MAILLAGE</p>',
+                unsafe_allow_html=True
+            )
+
+            c_expert, c_save_name, c_save_btn = st.columns([1, 2, 1])
+            expert_on = c_expert.toggle("Score AI-READABLE", value=False)
+
+            domain = urlparse(st.session_state.target_url).netloc
+            s_name = c_save_name.text_input("Nom sauvegarde", value=domain.split('.')[0], label_visibility="collapsed")
+
+            # Sauvegarde
+            if c_save_btn.button("SAUVEGARDER", use_container_width=True):
+                max_pages_to_save = 100
+                results_to_save = st.session_state.results[:max_pages_to_save]
+
+                clean_results = []
+                for r in results_to_save:
+                    clean_results.append({
+                        "url": r.get("url"),
+                        "title": r.get("title", "")[:50],
+                        "description": r.get("description", "")[:100],
+                        "h1": r.get("h1", "")[:50],
+                        "response_time": round(r.get("response_time", 0), 2),
+                        "has_structured_data": r.get("has_structured_data", False),
+                        "h2_count": r.get("h2_count", 0)
+                    })
+
+                compact_clusters = []
+                for cluster in st.session_state.clusters:
+                    compact_clusters.append({
+                        "name": cluster["name"],
+                        "count": cluster["count"],
+                        "samples": []
+                    })
+
+                payload = {
+                    "results": clean_results,
+                    "clusters": compact_clusters,
+                    "geo_infra": st.session_state.get('geo_infra', {}),
+                    "geo_score": st.session_state.get('geo_score', 0),
+                    "stats": {
+                        "pages_crawled": st.session_state.crawl_stats.get('pages_crawled', 0),
+                        "links_discovered": st.session_state.crawl_stats.get('links_discovered', 0),
+                        "links_filtered": st.session_state.crawl_stats.get('links_filtered', 0),
+                        "links_duplicate": st.session_state.crawl_stats.get('links_duplicate', 0),
+                        "pages_skipped": st.session_state.crawl_stats.get('pages_skipped', 0),
+                        "errors": st.session_state.crawl_stats.get('errors', 0),
+                        "start_urls_count": st.session_state.crawl_stats.get('start_urls_count', 1)
+                    },
+                    "start_urls": st.session_state.get('start_urls', [st.session_state.target_url])[:5],
+                    "ai_accessibility": st.session_state.get('ai_accessibility', {})
+                }
+
+                if len(st.session_state.results) > max_pages_to_save:
+                    st.markdown(
+                        f'<p style="color:#FFA500;font-weight:700;font-size:0.8rem;">'
+                        f'Seules les {max_pages_to_save} premieres pages sur {len(st.session_state.results)} seront sauvegardees '
+                        f'(limite Google Sheets)</p>',
+                        unsafe_allow_html=True
+                    )
+
+                db.save_audit(user_email, st.session_state.current_ws, st.session_state.target_url, s_name, payload)
+                st.toast("Audit sauvegarde")
+
+            # Construction du graphe
+            G = nx.DiGraph()
+            G.add_node(
+                st.session_state.target_url,
+                label=domain.upper(),
+                size=35,
+                color="#0f172a",
+                font={'color': '#ffffff', 'face': 'Inter'}
+            )
+
+            for c in st.session_state.clusters:
+                c_id = f"group_{c['name']}"
                 G.add_node(
-                    p['url'],
-                    label=label,
-                    size=12,
-                    color=col,
-                    font={'color': '#0f172a', 'face': 'Inter'},
-                    title=tooltip
+                    c_id,
+                    label=c['name'].upper(),
+                    color="#cbd5e1",
+                    size=25,
+                    font={'color': '#0f172a', 'face': 'Inter'}
                 )
-                G.add_edge(c_id, p['url'])
+                G.add_edge(st.session_state.target_url, c_id)
 
-        render_interactive_graph(G, show_health=expert_on)
+                for p in c['samples'][:40]:
+                    score_data = calculate_page_score(p)
+                    if isinstance(score_data, tuple):
+                        sc, grade, breakdown, recommendations = score_data
+                    else:
+                        sc = score_data
+                        grade = 'N/A'
+                        breakdown = {}
+                        recommendations = []
+
+                    if expert_on:
+                        col = _score_color(sc)
+                    else:
+                        col = "#e2e8f0"
+
+                    label = get_clean_label(p.get('title', ''), p['url'], domain)
+                    if expert_on and isinstance(score_data, tuple):
+                        label = f"{label}\\n[{grade}]"
+
+                    tooltip_parts = []
+                    if expert_on and isinstance(score_data, tuple):
+                        tooltip_parts.append(f"Score AI-READABLE: {sc}/100 - Grade: {grade}")
+
+                        missing = []
+                        if not p.get('description'):
+                            missing.append("Meta description manquante")
+                        if not p.get('h1'):
+                            missing.append("H1 manquant")
+                        if not p.get('has_structured_data'):
+                            missing.append("JSON-LD manquant")
+                        if p.get('h2_count', 0) < 2:
+                            missing.append("Peu de H2")
+
+                        if missing:
+                            tooltip_parts.append("\\n\\nElements manquants:\\n" + "\\n".join(f"- {m}" for m in missing))
+
+                        if recommendations:
+                            top_reco = recommendations[:2]
+                            tooltip_parts.append("\\n\\nRecommandations:\\n" + "\\n".join(f"- {r}" for r in top_reco))
+
+                    tooltip = "\\n".join(tooltip_parts) if tooltip_parts else ""
+
+                    G.add_node(
+                        p['url'],
+                        label=label,
+                        size=12,
+                        color=col,
+                        font={'color': '#0f172a', 'face': 'Inter'},
+                        title=tooltip
+                    )
+                    G.add_edge(c_id, p['url'])
+
+            render_interactive_graph(G, show_health=expert_on)
 
     # ========================== TAB 2 : AUDIT EXTERNE ==========================
     with tab2:
