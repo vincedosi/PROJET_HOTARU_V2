@@ -1585,32 +1585,9 @@ def render_audit_geo():
 
             st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
 
-            # ========== 06 / JOURNAUX ==========
+            # ========== 06 / GRAPHE DE MAILLAGE ==========
             st.markdown(
-                '<p class="section-title">06 / JOURNAUX</p>',
-                unsafe_allow_html=True
-            )
-
-            j_tab1, j_tab2, j_tab3 = st.tabs([
-                "PAGES CRAWLEES",
-                "LIENS FILTRES",
-                "DOUBLONS"
-            ])
-
-            with j_tab1:
-                render_journal_crawled(st.session_state.results)
-
-            with j_tab2:
-                render_journal_filtered(st.session_state.get("filtered_log", []))
-
-            with j_tab3:
-                render_journal_duplicates(st.session_state.get("duplicate_log", []))
-
-            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-
-            # ========== 07 / GRAPHE ==========
-            st.markdown(
-                '<p class="section-title">07 / GRAPHE DE MAILLAGE</p>',
+                '<p class="section-title">06 / GRAPHE DE MAILLAGE</p>',
                 unsafe_allow_html=True
             )
 
@@ -1750,6 +1727,29 @@ def render_audit_geo():
                     G.add_edge(c_id, p['url'])
 
             render_interactive_graph(G, show_health=expert_on)
+
+            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+
+            # ========== 07 / JOURNAUX ==========
+            st.markdown(
+                '<p class="section-title">07 / JOURNAUX</p>',
+                unsafe_allow_html=True
+            )
+
+            j_tab1, j_tab2, j_tab3 = st.tabs([
+                "PAGES CRAWLEES",
+                "LIENS FILTRES",
+                "DOUBLONS"
+            ])
+
+            with j_tab1:
+                render_journal_crawled(st.session_state.results)
+
+            with j_tab2:
+                render_journal_filtered(st.session_state.get("filtered_log", []))
+
+            with j_tab3:
+                render_journal_duplicates(st.session_state.get("duplicate_log", []))
 
     # ========================== TAB 2 : AUDIT EXTERNE ==========================
     with tab2:
