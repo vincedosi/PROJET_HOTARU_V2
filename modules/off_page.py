@@ -1,6 +1,7 @@
 """
-HOTARU - Module Off-Page Reputation (V3.3 - Debug Edition)
-Version avec logs détaillés pour diagnostiquer les blocages Google
+HOTARU - Module Off-Page Reputation (V3.4 - SerpAPI Edition)
+Scanner de réputation off-page avec SerpAPI (100% fiable)
+Clé API à configurer dans Streamlit Cloud : Settings → Secrets
 """
 
 import streamlit as st
@@ -10,15 +11,9 @@ import streamlit.components.v1 as components
 import json
 import time
 import random
+import requests
 from typing import List, Dict
 from datetime import datetime
-
-# Import avec fallback
-try:
-    from googlesearch import search
-    HAS_GOOGLESEARCH = True
-except ImportError:
-    HAS_GOOGLESEARCH = False
 
 # --- CONFIG SOURCES ---
 SOURCE_CONFIG = {
@@ -35,17 +30,31 @@ SOURCE_CONFIG = {
 }
 
 def render_interactive_graph(G):
-    """Graphe Pyvis optimisé"""
+    """Moteur de rendu Pyvis pour le graphe de réputation"""
     nt = Network(height="700px", width="100%", bgcolor="#ffffff", font_color="#0f172a")
     nt.from_nx(G)
     
     opts = {
         "nodes": {
-            "font": {"face": "Inter", "size": 14, "strokeWidth": 3, "strokeColor": "#fff", "color": "#0f172a"},
+            "font": {
+                "face": "Inter", 
+                "size": 14, 
+                "strokeWidth": 3, 
+                "strokeColor": "#fff", 
+                "color": "#0f172a"
+            },
             "borderWidth": 2
         },
-        "edges": {"color": "#cbd5e1", "width": 1.5, "smooth": {"type": "dynamic", "roundness": 0.2}},
-        "interaction": {"hover": True, "navigationButtons": True, "zoomView": True},
+        "edges": {
+            "color": "#cbd5e1", 
+            "width": 1.5, 
+            "smooth": {"type": "dynamic", "roundness": 0.2}
+        },
+        "interaction": {
+            "hover": True, 
+            "navigationButtons": True, 
+            "zoomView": True
+        },
         "physics": {
             "forceAtlas2Based": {
                 "gravitationalConstant": -100,
@@ -75,10 +84,10 @@ def render_interactive_graph(G):
     components.html(html.replace("</body>", custom_css + "</body>"), height=750)
 
 def build_reputation_graph(brand: str, mentions: List[Dict]):
-    """Construction du graphe en étoile"""
+    """Construction du graphe en étoile : marque au centre, sources autour"""
     G = nx.DiGraph()
     
-    # Nœud central
+    # Nœud central (la marque)
     G.add_node(
         brand, 
         label=brand.upper(), 
@@ -88,7 +97,7 @@ def build_reputation_graph(brand: str, mentions: List[Dict]):
         title="MARQUE CIBLE"
     )
     
-    # Nœuds satellites
+    # Nœuds satellites (les mentions)
     for m in mentions:
         color = SOURCE_CONFIG.get(m['domain_key'], {}).get('color', '#64748b')
         label = SOURCE_CONFIG.get(m['domain_key'], {}).get('label', 'AUTRE')
@@ -104,128 +113,92 @@ def build_reputation_graph(brand: str, mentions: List[Dict]):
     
     return G
 
-def _safe_google_search_debug(query: str, max_results: int = 3, debug_container=None) -> List[Dict]:
+def _serpapi_search(query: str, max_results: int = 3, api_key: str = None) -> List[Dict]:
     """
-    VERSION DEBUG - Affiche tous les détails du processus
+    Recherche Google via SerpAPI (pas de blocage, 100% fiable)
     
     Args:
-        query: Requête Google
-        max_results: Nombre max de résultats
-        debug_container: Container Streamlit pour afficher les logs
+        query: Requête Google (ex: "Tesla" site:reddit.com)
+        max_results: Nombre de résultats à récupérer
+        api_key: Clé API SerpAPI
+    
+    Returns:
+        Liste de dicts avec title, description, url
     """
-    results = []
+    if not api_key:
+        return []
     
-    # Conteneur pour les logs si non fourni
-    if debug_container is None:
-        debug_container = st.expander("🔍 Logs de Debug", expanded=True)
-    
-    with debug_container:
-        st.markdown(f"**🎯 Query lancée :** `{query}`")
-        st.markdown(f"**⏱️ Timeout :** 20 secondes")
-        st.markdown(f"**💤 Sleep interval :** 4.0 secondes")
-        st.markdown("---")
+    try:
+        params = {
+            "q": query,
+            "api_key": api_key,
+            "num": max_results,
+            "engine": "google",
+            "hl": "fr",
+            "gl": "fr"
+        }
         
-        try:
-            start_time = time.time()
-            
-            # Tentative de recherche
-            st.markdown("🔄 **Initialisation de la recherche Google...**")
-            
-            search_gen = search(
-                query,
-                num_results=max_results,
-                advanced=True,
-                sleep_interval=4.0,
-                timeout=20  # ✅ Timeout augmenté
-            )
-            
-            st.markdown("✅ **Générateur créé. Extraction des résultats...**")
-            
-            # Extraction des résultats
-            for idx, res in enumerate(search_gen):
-                result_time = time.time() - start_time
-                
-                st.markdown(
-                    f"""
-                    <div style="background:#f0fdf4; border-left:3px solid #10b981; padding:8px; margin:8px 0; border-radius:4px;">
-                        <strong>✓ Résultat {idx+1}</strong> (après {result_time:.1f}s)<br>
-                        <span style="font-size:0.85rem; color:#059669;">📄 Titre: {res.title or 'N/A'}</span><br>
-                        <span style="font-size:0.75rem; color:#64748b; font-family:monospace;">🔗 URL: {res.url}</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-                
-                results.append({
-                    "title": res.title or "Sans titre",
-                    "description": res.description or "",
-                    "url": res.url
-                })
-                
-                if len(results) >= max_results:
-                    st.markdown(f"🎯 **Limite atteinte** ({max_results} résultats)")
-                    break
-            
-            total_time = time.time() - start_time
-            
-            # Résumé final
-            if results:
-                st.success(f"✅ **{len(results)} résultat(s) trouvé(s)** en {total_time:.1f}s")
-            else:
-                st.warning("⚠️ **Aucun résultat retourné** (peut être un blocage Google)")
-                    
-        except Exception as e:
-            error_time = time.time() - start_time
-            st.error(
-                f"""
-                ❌ **Erreur après {error_time:.1f}s**
-                
-                **Type:** `{type(e).__name__}`
-                
-                **Message:** {str(e)}
-                
-                **Causes possibles:**
-                - Google détecte un bot et bloque
-                - Timeout dépassé (réseau lent)
-                - CAPTCHA invisible demandé
-                - Rate limit atteint
-                """
-            )
-    
-    return results
+        response = requests.get(
+            "https://serpapi.com/search.json",
+            params=params,
+            timeout=15
+        )
+        
+        if response.status_code != 200:
+            return []
+        
+        data = response.json()
+        
+        # Extraction des résultats organiques
+        results = []
+        for item in data.get("organic_results", [])[:max_results]:
+            results.append({
+                "title": item.get("title", "Sans titre"),
+                "description": item.get("snippet", ""),
+                "url": item.get("link", "")
+            })
+        
+        return results
+        
+    except Exception as e:
+        return []
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def _cached_scan_debug(brand: str, scan_mode: str, enable_debug: bool = False) -> Dict:
+def _cached_scan(brand: str, scan_mode: str, api_key: str) -> Dict:
     """
-    Scanner AVEC CACHE et mode debug optionnel
+    Scanner avec cache intelligent (1h)
+    Évite les requêtes répétées pour la même marque
     
     Args:
-        brand: Nom de la marque
-        scan_mode: Mode de scan (safe/balanced/fast)
-        enable_debug: Active les logs détaillés
+        brand: Nom de la marque à scanner
+        scan_mode: Mode de scan (fast/balanced/safe)
+        api_key: Clé SerpAPI
+    
+    Returns:
+        Dict avec results, timestamp, mode
     """
-    # Configuration selon mode
+    # Configuration selon le mode
     configs = {
         "fast": {
             "sources": 6,
             "results_per_source": 2,
-            "between_sources": (3.0, 5.0)
+            "delay": (0.5, 1.0)
         },
         "balanced": {
             "sources": 8,
             "results_per_source": 3,
-            "between_sources": (4.0, 7.0)
+            "delay": (0.8, 1.5)
         },
         "safe": {
             "sources": 10,
             "results_per_source": 3,
-            "between_sources": (5.0, 9.0)
+            "delay": (1.0, 2.0)
         }
     }
     
-    config = configs.get(scan_mode, configs["safe"])
+    config = configs.get(scan_mode, configs["balanced"])
     
-    # Tri par priorité
+    # Tri des sources par priorité
     sorted_sources = sorted(
         SOURCE_CONFIG.items(),
         key=lambda x: x[1].get('priority', 99)
@@ -233,50 +206,21 @@ def _cached_scan_debug(brand: str, scan_mode: str, enable_debug: bool = False) -
     
     results = []
     
-    # Conteneur de debug global
-    if enable_debug:
-        debug_master = st.container()
-    
+    # Scan source par source
     for domain, meta in sorted_sources:
         source_name = meta["label"]
         
-        # Query Google
+        # Construction de la query Google
         query = f'"{brand}" site:{domain}'
         
-        if enable_debug:
-            with debug_master:
-                st.markdown(f"### 🔍 Scan de {source_name}")
-            
-            found = _safe_google_search_debug(
-                query, 
-                max_results=config["results_per_source"],
-                debug_container=debug_master
-            )
-        else:
-            # Mode silencieux (version originale sans logs)
-            found = []
-            try:
-                search_gen = search(
-                    query,
-                    num_results=config["results_per_source"],
-                    advanced=True,
-                    sleep_interval=4.0,
-                    timeout=20
-                )
-                
-                for res in search_gen:
-                    found.append({
-                        "title": res.title or "Sans titre",
-                        "description": res.description or "",
-                        "url": res.url
-                    })
-                    
-                    if len(found) >= config["results_per_source"]:
-                        break
-            except:
-                pass
+        # Recherche via SerpAPI
+        found = _serpapi_search(
+            query, 
+            max_results=config["results_per_source"], 
+            api_key=api_key
+        )
         
-        # Traitement résultats
+        # Ajout des résultats
         for item in found:
             results.append({
                 "source": source_name,
@@ -286,11 +230,8 @@ def _cached_scan_debug(brand: str, scan_mode: str, enable_debug: bool = False) -
                 "url": item['url']
             })
         
-        # PAUSE entre sources
-        delay = random.uniform(*config["between_sources"])
-        if enable_debug:
-            with debug_master:
-                st.info(f"⏸️ Pause de {delay:.1f}s avant la prochaine source...")
+        # Pause entre sources (courtoisie)
+        delay = random.uniform(*config["delay"])
         time.sleep(delay)
     
     return {
@@ -299,86 +240,59 @@ def _cached_scan_debug(brand: str, scan_mode: str, enable_debug: bool = False) -
         "mode": scan_mode
     }
 
-def _scan_with_ui(brand: str, status_container, log_container, scan_mode: str = "safe", debug_mode: bool = False):
+def _scan_with_ui(brand: str, status_container, log_container, scan_mode: str, api_key: str):
     """
-    Wrapper UI pour le scan caché
+    Wrapper UI : affiche l'animation pendant le scan
+    
+    Args:
+        brand: Nom de la marque
+        status_container: Container Streamlit pour la barre de progression
+        log_container: Container pour les logs terminal
+        scan_mode: Mode de scan
+        api_key: Clé SerpAPI
+    
+    Returns:
+        Liste des résultats
     """
     logs = []
     
-    # Configuration visuelle
+    # Configuration visuelle selon le mode
     configs = {
-        "fast": {"label": "⚡ RAPIDE", "eta": "~45s"},
-        "balanced": {"label": "⚖️ ÉQUILIBRÉ", "eta": "~1m30s"},
-        "safe": {"label": "🛡️ SÉCURISÉ", "eta": "~2m30s"}
+        "fast": {"label": "⚡ RAPIDE", "eta": "~15s"},
+        "balanced": {"label": "⚖️ ÉQUILIBRÉ", "eta": "~25s"},
+        "safe": {"label": "🛡️ COMPLET", "eta": "~35s"}
     }
     
-    config_ui = configs.get(scan_mode, configs["safe"])
+    config_ui = configs.get(scan_mode, configs["balanced"])
     
-    # Tri sources
+    # Liste des sources à scanner
     sorted_sources = sorted(
         SOURCE_CONFIG.items(),
         key=lambda x: x[1].get('priority', 99)
-    )[:{"fast": 6, "balanced": 8, "safe": 10}.get(scan_mode, 10)]
+    )[:{"fast": 6, "balanced": 8, "safe": 10}.get(scan_mode, 8)]
     
     total = len(sorted_sources)
-    progress_bar = status_container.progress(0, text=f"Initialisation // Mode {config_ui['label']} (ETA: {config_ui['eta']})...")
+    progress_bar = status_container.progress(
+        0, 
+        text=f"Initialisation // Mode {config_ui['label']} (ETA: {config_ui['eta']})..."
+    )
     
-    if not debug_mode:
-        # Animation normale
-        for i, (domain, meta) in enumerate(sorted_sources):
-            source_name = meta["label"]
-            
-            progress_bar.progress(i / total, text=f"Scan : {source_name}... [{i+1}/{total}]")
-            
-            log_html = f"<span style='color:#64748b'>[●]</span> Interrogation de {source_name}..."
-            logs.append(log_html)
-            
-            log_display = "<br>".join(logs[-8:])
-            log_container.markdown(
-                f"""
-                <div style="background:#0f172a; color:#cbd5e1; padding:16px; border-radius:8px; 
-                            font-family:'Courier New'; font-size:0.85rem; line-height:1.6; 
-                            border:1px solid #334155; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
-                    <div style="border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:8px; 
-                                color:#94a3b8; font-weight:700; letter-spacing:0.05em;">
-                        > HOTARU_SCAN_PROTOCOL // V3.3_DEBUG // {config_ui['label']}
-                    </div>
-                    {log_display}
-                    <div style="margin-top:8px; color:#10b981; font-weight:bold;">
-                        <span style="animation: blink 1s infinite;">▮</span> Scan en cours...
-                    </div>
-                </div>
-                <style>
-                    @keyframes blink {{ 0%, 49% {{ opacity: 1; }} 50%, 100% {{ opacity: 0; }} }}
-                </style>
-                """,
-                unsafe_allow_html=True
-            )
-            
-            time.sleep(0.3)
-    
-    # Appel du scan (avec ou sans debug)
-    scan_data = _cached_scan_debug(brand, scan_mode, enable_debug=debug_mode)
-    
-    if not debug_mode:
-        # Logs finaux
-        logs = []
-        results_by_source = {}
-        for r in scan_data["results"]:
-            results_by_source.setdefault(r['source'], 0)
-            results_by_source[r['source']] += 1
+    # Animation visuelle pendant le scan
+    for i, (domain, meta) in enumerate(sorted_sources):
+        source_name = meta["label"]
         
-        for domain, meta in sorted_sources:
-            source_name = meta["label"]
-            count = results_by_source.get(source_name, 0)
-            
-            if count > 0:
-                log_html = f"<span style='color:#10b981'>[✓]</span> {count} mentions sur {source_name}"
-            else:
-                log_html = f"<span style='color:#64748b'>[○]</span> Aucune donnée sur {source_name}"
-            logs.append(log_html)
+        # Mise à jour de la barre
+        progress_bar.progress(
+            i / total, 
+            text=f"Scan : {source_name}... [{i+1}/{total}]"
+        )
         
-        log_display = "<br>".join(logs)
+        # Ajout du log
+        log_html = f"<span style='color:#10b981'>[●]</span> Interrogation de {source_name}..."
+        logs.append(log_html)
+        
+        # Affichage du terminal (dernières 8 lignes)
+        log_display = "<br>".join(logs[-8:])
         log_container.markdown(
             f"""
             <div style="background:#0f172a; color:#cbd5e1; padding:16px; border-radius:8px; 
@@ -386,98 +300,156 @@ def _scan_with_ui(brand: str, status_container, log_container, scan_mode: str = 
                         border:1px solid #334155; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
                 <div style="border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:8px; 
                             color:#94a3b8; font-weight:700; letter-spacing:0.05em;">
-                    > SCAN TERMINÉ // {scan_data['timestamp']}
+                    > HOTARU_SCAN_PROTOCOL // V3.4_SERPAPI // {config_ui['label']}
                 </div>
                 {log_display}
-                <div style="margin-top:12px; color:#10b981; font-weight:bold;">
-                    ✓ {len(scan_data['results'])} mentions extraites
+                <div style="margin-top:8px; color:#10b981; font-weight:bold;">
+                    <span style="animation: blink 1s infinite;">▮</span> Scan en cours...
                 </div>
             </div>
+            <style>
+                @keyframes blink {{ 0%, 49% {{ opacity: 1; }} 50%, 100% {{ opacity: 0; }} }}
+            </style>
             """,
             unsafe_allow_html=True
         )
         
-        progress_bar.progress(1.0, text="✓ Scan terminé avec succès")
-        time.sleep(1.5)
-        status_container.empty()
+        time.sleep(0.2)
+    
+    # Lancement du scan réel (avec cache)
+    scan_data = _cached_scan(brand, scan_mode, api_key)
+    
+    # Logs finaux avec résultats
+    logs = []
+    results_by_source = {}
+    for r in scan_data["results"]:
+        results_by_source.setdefault(r['source'], 0)
+        results_by_source[r['source']] += 1
+    
+    for domain, meta in sorted_sources:
+        source_name = meta["label"]
+        count = results_by_source.get(source_name, 0)
+        
+        if count > 0:
+            log_html = f"<span style='color:#10b981'>[✓]</span> {count} mentions sur {source_name}"
+        else:
+            log_html = f"<span style='color:#64748b'>[○]</span> Aucune donnée sur {source_name}"
+        logs.append(log_html)
+    
+    # Affichage final
+    log_display = "<br>".join(logs)
+    log_container.markdown(
+        f"""
+        <div style="background:#0f172a; color:#cbd5e1; padding:16px; border-radius:8px; 
+                    font-family:'Courier New'; font-size:0.85rem; line-height:1.6; 
+                    border:1px solid #334155; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
+            <div style="border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:8px; 
+                        color:#94a3b8; font-weight:700; letter-spacing:0.05em;">
+                > SCAN TERMINÉ // {scan_data['timestamp']}
+            </div>
+            {log_display}
+            <div style="margin-top:12px; color:#10b981; font-weight:bold;">
+                ✓ {len(scan_data['results'])} mentions extraites via SerpAPI
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    progress_bar.progress(1.0, text="✓ Scan terminé avec succès")
+    time.sleep(1.5)
+    status_container.empty()
     
     return scan_data["results"]
 
 def render_off_page_audit():
-    """Interface principale avec mode debug"""
+    """
+    Interface principale du module Off-Page
+    Récupère automatiquement la clé depuis Streamlit Secrets
+    """
     st.markdown('<p class="section-title">01 / AUDIT DE RÉPUTATION (OFF-PAGE)</p>', unsafe_allow_html=True)
     
-    if not HAS_GOOGLESEARCH:
-        st.error("❌ Module `googlesearch-python` requis.")
-        st.code("pip install googlesearch-python", language="bash")
+    # ✅ LECTURE DE LA CLÉ DEPUIS STREAMLIT SECRETS
+    try:
+        api_key = st.secrets["SERPAPI_KEY"]
+    except (KeyError, FileNotFoundError):
+        st.error(
+            """
+            ❌ **Clé API SerpAPI manquante**
+            
+            **Configuration requise :**
+            
+            1. Va dans **Settings → Secrets** de ton app Streamlit
+            2. Ajoute cette ligne :
+```toml
+            SERPAPI_KEY = "ta_clé_ici"
+```
+            
+            3. Obtiens une clé gratuite (100 requêtes/mois) :
+            👉 [serpapi.com/users/sign_up](https://serpapi.com/users/sign_up)
+            """
+        )
         return
     
-    # Info
+    # Confirmation visuelle
     st.markdown(
-        '<p style="font-size:0.75rem;color:#94a3b8;font-style:italic;margin-bottom:16px;">'
-        '🛡️ Scan ultra-sécurisé avec cache intelligent (1h). Active le mode DEBUG pour diagnostiquer les problèmes.</p>', 
+        '<p style="font-size:0.75rem;color:#10b981;font-weight:600;margin-bottom:16px;">'
+        '✓ Clé SerpAPI configurée (100 requêtes gratuites/mois)</p>', 
         unsafe_allow_html=True
     )
     
-    # Input zone
-    col1, col2, col3, col4 = st.columns([2.5, 1, 1, 0.5])
+    # --- INTERFACE DE SCAN ---
+    col1, col2, col3 = st.columns([3, 1, 1])
     
     brand_input = col1.text_input(
         "Marque", 
         value="", 
-        placeholder="Ex: Tesla",
+        placeholder="Ex: Tesla, Nike, Apple...",
         label_visibility="collapsed"
     )
     
     scan_mode = col2.selectbox(
         "Mode",
-        options=["safe", "balanced", "fast"],
-        format_func=lambda x: {"fast": "⚡ Rapide", "balanced": "⚖️ Équilibré", "safe": "🛡️ Sûr"}[x],
+        options=["balanced", "safe", "fast"],
+        format_func=lambda x: {
+            "fast": "⚡ Rapide", 
+            "balanced": "⚖️ Équilibré", 
+            "safe": "🛡️ Complet"
+        }[x],
         label_visibility="collapsed",
         index=0
     )
     
-    # ✅ NOUVEAU : Toggle Debug
-    debug_mode = col4.checkbox("🐛", help="Active les logs détaillés pour diagnostiquer les problèmes")
-    
-    # Session state
+    # Initialisation session state
     if 'offpage_results' not in st.session_state:
         st.session_state['offpage_results'] = []
     
-    # Action
+    # Bouton de scan
     scan_button = col3.button("SCANNER", type="primary", use_container_width=True)
     
     if scan_button:
         if not brand_input:
             st.warning("⚠️ Nom de marque requis")
         else:
-            if debug_mode:
-                st.info("🐛 **Mode DEBUG activé** - Les logs détaillés s'afficheront ci-dessous")
-            
+            # Conteneurs pour l'animation
             status_box = st.empty()
             log_box = st.empty()
             
-            # Scan avec ou sans debug
-            results = _scan_with_ui(brand_input, status_box, log_box, scan_mode, debug_mode)
+            # Lancement du scan
+            results = _scan_with_ui(brand_input, status_box, log_box, scan_mode, api_key)
             
+            # Stockage des résultats
             st.session_state['offpage_results'] = results
             st.session_state['offpage_brand'] = brand_input
             st.session_state['offpage_mode'] = scan_mode
             
-            # Message de succès
+            # Feedback utilisateur
             if results:
                 st.success(f"✓ {len(results)} mentions trouvées • Données en cache pour 1h")
             else:
-                st.warning(
-                    "⚠️ **Aucune mention trouvée**\n\n"
-                    "**Solutions :**\n"
-                    "- Active le mode 🐛 DEBUG pour voir les détails\n"
-                    "- Essaye une autre marque (ex: 'Nike', 'Apple')\n"
-                    "- Attends 5-10 minutes (Google peut bloquer temporairement)\n"
-                    "- Vérifie ta connexion internet"
-                )
+                st.info("Aucune mention trouvée pour cette marque.")
     
-    # RÉSULTATS
+    # --- AFFICHAGE DES RÉSULTATS ---
     results = st.session_state.get('offpage_results', [])
     brand_name = st.session_state.get('offpage_brand', brand_input)
     
@@ -488,19 +460,21 @@ def render_off_page_audit():
         k1, k2, k3, k4 = st.columns(4)
         k1.metric("Mentions", len(results))
         k2.metric("Sources", len(set(r['source'] for r in results)))
-        k3.metric("Mode", {"fast": "⚡", "balanced": "⚖️", "safe": "🛡️"}.get(st.session_state.get('offpage_mode', 'safe'), '🛡️'))
-        k4.metric("Cache", "✓ Actif", delta="1h")
+        k3.metric("API", "SerpAPI", delta="✓ Actif")
+        k4.metric("Cache", "1h")
         
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Tabs
+        # Tabs de visualisation
         tab_graph, tab_list, tab_export = st.tabs(["📊 GRAPHE", "📋 LISTE", "💾 EXPORT"])
         
+        # TAB 1 : Graphe interactif
         with tab_graph:
             if brand_name:
                 G = build_reputation_graph(brand_name, results)
                 render_interactive_graph(G)
         
+        # TAB 2 : Liste des mentions
         with tab_list:
             for m in results:
                 color = SOURCE_CONFIG.get(m['domain_key'], {}).get('color', '#333')
@@ -525,12 +499,14 @@ def render_off_page_audit():
                     unsafe_allow_html=True
                 )
         
+        # TAB 3 : Export JSON
         with tab_export:
             export_data = {
                 "brand": brand_name,
-                "scan_mode": st.session_state.get('offpage_mode', 'safe'),
+                "scan_mode": st.session_state.get('offpage_mode', 'balanced'),
                 "total_mentions": len(results),
                 "sources_count": len(set(r['source'] for r in results)),
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "mentions": results
             }
             
@@ -550,32 +526,27 @@ def render_off_page_audit():
                     <strong>📊 Statistiques d'export :</strong><br>
                     • Format : JSON structuré<br>
                     • Taille : {len(json_data)} caractères<br>
-                    • Mode scan : {st.session_state.get('offpage_mode', 'safe').upper()}
+                    • Mode scan : {st.session_state.get('offpage_mode', 'balanced').upper()}<br>
+                    • Date : {datetime.now().strftime("%d/%m/%Y %H:%M")}
                 </div>
                 """,
                 unsafe_allow_html=True
             )
     
-    # Options avancées
-    with st.expander("⚙️ Options avancées"):
+    # --- OPTIONS AVANCÉES ---
+    with st.expander("🔧 Options avancées"):
         col_a, col_b = st.columns(2)
         
-        if col_a.button("🗑️ Vider le cache", help="Force un nouveau scan"):
-            _cached_scan_debug.clear()
+        if col_a.button("🗑️ Vider le cache", use_container_width=True):
+            _cached_scan.clear()
             st.session_state['offpage_results'] = []
-            st.success("Cache vidé.")
+            st.success("✓ Cache vidé. Prochain scan sera complet.")
         
-        if col_b.button("📋 Tester une requête", help="Test rapide d'une source"):
-            if brand_input:
-                test_query = f'"{brand_input}" site:reddit.com'
-                st.code(test_query, language="text")
-                
-                with st.spinner("Test en cours..."):
-                    test_results = _safe_google_search_debug(test_query, max_results=2)
-                
-                if test_results:
-                    st.success(f"✅ {len(test_results)} résultats trouvés")
-                else:
-                    st.error("❌ Aucun résultat (blocage probable)")
-            else:
-                st.warning("Entrez une marque d'abord")
+        if col_b.button("📊 Statistiques API", use_container_width=True):
+            st.info(
+                "**SerpAPI - Plan Gratuit :**\n\n"
+                "• 100 requêtes/mois\n"
+                "• Pas de carte bancaire requise\n"
+                "• Résultats instantanés\n"
+                "• Pas de CAPTCHA"
+            )
