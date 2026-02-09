@@ -29,6 +29,7 @@ class SmartScraper:
         self.max_urls = max_urls
         self.visited = set()
         self.results = []
+        # Préférence utilisateur pour Selenium (peut être activé aussi automatiquement)
         self.use_selenium = use_selenium
         self.driver = None
         self.log_callback = None
@@ -69,9 +70,16 @@ class SmartScraper:
         print(f"🔗 Mode multi-URLs activé: {len(self.start_urls)} point(s) d'entrée")
         for i, url in enumerate(self.start_urls, 1):
             print(f"   {i}. {url}")
-        
-        # Détecter si le site est en React/SPA
-        if self._is_spa_site():
+
+        # Détection React/SPA + override par préférence utilisateur
+        # Nouvelle logique : si use_selenium == True OU si _is_spa_site() == True → on active Selenium.
+        spa_detected = False
+        try:
+            spa_detected = self._is_spa_site()
+        except Exception:
+            spa_detected = False
+
+        if self.use_selenium or spa_detected:
             self.use_selenium = True
             self._init_selenium()
 
@@ -110,24 +118,46 @@ class SmartScraper:
             return False
 
     def _init_selenium(self):
-        """Initialise Selenium"""
+        """Initialise Selenium (avec undetected_chromedriver si disponible)."""
         try:
+            # Tentative avec undetected_chromedriver (meilleure furtivité pour sites protégés)
+            try:
+                import undetected_chromedriver as uc  # type: ignore
+
+                chrome_options = uc.ChromeOptions()
+                chrome_options.add_argument("--headless=new")
+                chrome_options.add_argument("--no-sandbox")
+                chrome_options.add_argument("--disable-dev-shm-usage")
+                chrome_options.add_argument(
+                    f'user-agent={self.session.headers.get("User-Agent", "Mozilla/5.0")}'
+                )
+
+                self.driver = uc.Chrome(options=chrome_options)
+                self._log("✅ Mode Selenium (undetected_chromedriver) activé")
+                return
+            except Exception as e_uc:
+                self._log(f"⚠️ undetected_chromedriver indisponible ({e_uc}), fallback Selenium standard...")
+
+            # Fallback : Selenium classique + webdriver-manager
             from selenium.webdriver.chrome.service import Service
             from webdriver_manager.chrome import ChromeDriverManager
-            
+
             chrome_options = Options()
-            chrome_options.add_argument('--headless')
-            chrome_options.add_argument('--no-sandbox')
-            chrome_options.add_argument('--disable-dev-shm-usage')
-            chrome_options.add_argument('--disable-gpu')
-            chrome_options.add_argument(f'user-agent={self.session.headers["User-Agent"]}')
-            
+            chrome_options.add_argument("--headless=new")
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--disable-gpu")
+            chrome_options.add_argument(
+                f'user-agent={self.session.headers.get("User-Agent", "Mozilla/5.0")}'
+            )
+
             service = Service(ChromeDriverManager().install())
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
-            self._log("✅ Mode Selenium activé (React/SPA détecté)")
+            self._log("✅ Mode Selenium standard activé")
         except Exception as e:
             self._log(f"⚠️ Selenium non disponible: {e}")
             self.use_selenium = False
+            self.driver = None
 
     def is_valid_url(self, url):
         """Vérifie si l'URL est pertinente"""
@@ -181,25 +211,41 @@ class SmartScraper:
         """Scrape une page"""
         try:
             start_time = time.time()
-            
+
             if self.use_selenium and self.driver:
-                self.driver.get(url)
-                WebDriverWait(self.driver, 5).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-                time.sleep(0.5)  # Réduit de 1s à 0.5s
-                html_content = self.driver.page_source
-                soup = BeautifulSoup(html_content, 'html.parser')
-                response_time = time.time() - start_time
+                try:
+                    self.driver.get(url)
+                    WebDriverWait(self.driver, 5).until(
+                        EC.presence_of_element_located((By.TAG_NAME, "body"))
+                    )
+                    # Laisser le temps au JS de charger le contenu initial
+                    time.sleep(3)
+                    # Scroll pour déclencher le lazy-loading (images, liens supplémentaires, etc.)
+                    try:
+                        self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                        time.sleep(2)
+                    except Exception:
+                        # Si le scroll échoue, on continue quand même avec le contenu déjà chargé
+                        pass
+
+                    html_content = self.driver.page_source
+                    soup = BeautifulSoup(html_content, "html.parser")
+                    response_time = time.time() - start_time
+                except Exception as se:
+                    # Erreur Selenium sur cette page : on log, puis on laisse remonter à l'exception générale
+                    self._log(f"⚠️ Erreur Selenium sur {url}: {se}")
+                    raise
             else:
                 resp = self.session.get(url, timeout=3)  # Réduit de 4s à 3s
                 response_time = time.time() - start_time
-                
+
                 if resp.status_code != 200:
-                    self.stats['errors'] += 1
+                    self.stats["errors"] += 1
                     return None
-                
-                soup = BeautifulSoup(resp.content, 'html.parser')
+
+                soup = BeautifulSoup(resp.content, "html.parser")
                 html_content = str(soup)
-            
+
             raw_title = soup.title.string.strip() if soup.title else ""
             h1 = soup.find('h1').get_text().strip() if soup.find('h1') else ""
             final_title = self.clean_title(raw_title, h1, url)
@@ -222,8 +268,8 @@ class SmartScraper:
                 else:
                     self.stats['links_filtered'] += 1
             
-            self.stats['links_discovered'] += len(links)
-            
+            self.stats["links_discovered"] += len(links)
+
             has_structured_data = bool(soup.find('script', type='application/ld+json'))
             h2_count = len(soup.find_all('h2'))
             lists_count = len(soup.find_all(['ul', 'ol']))
@@ -239,10 +285,11 @@ class SmartScraper:
                 "last_modified": "",
                 "has_structured_data": has_structured_data,
                 "h2_count": h2_count,
-                "lists_count": lists_count
+                "lists_count": lists_count,
             }
         except Exception as e:
-            self.stats['errors'] += 1
+            self.stats["errors"] += 1
+            self._log(f"⚠️ Erreur lors du scraping de {url}: {e}")
             return None
 
     def run_analysis(self, progress_callback=None, log_callback=None):
