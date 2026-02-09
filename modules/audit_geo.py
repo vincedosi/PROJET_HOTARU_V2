@@ -6,6 +6,7 @@
 import streamlit as st
 import json
 import re
+import html
 import requests
 import zlib
 import base64
@@ -540,11 +541,20 @@ def calculate_page_score(page):
 
 
 def get_clean_label(title, url, domain):
+    """Libellé court pour les nœuds du graphe ; ne retourne jamais une chaîne vide."""
     try:
-        clean = re.split(r' [-|:|] ', title)[0]
-        if len(clean) < 4: clean = url.rstrip('/').split('/')[-1].replace('-', ' ').capitalize()
-        return clean[:20] + ".." if len(clean) > 22 else clean
-    except: return "Page"
+        raw = (title or "").strip()
+        clean = re.split(r' [-|:|] ', raw)[0].strip() if raw else ""
+        if len(clean) < 4:
+            path = (url or "").rstrip("/")
+            parts = path.split("/")
+            last = parts[-1] if parts else ""
+            clean = last.replace("-", " ").replace("_", " ").strip().title() or domain or "Page"
+        if not clean:
+            clean = domain or "Page"
+        return (clean[:20] + "..") if len(clean) > 22 else clean
+    except Exception:
+        return (urlparse(url).path or "/").strip("/").replace("-", " ").title() or "Page"
 
 
 def _score_color(score):
@@ -656,12 +666,16 @@ def render_journal_crawled(results):
                     sc, grade = score_data, 'N/A'
 
                 col = _grade_color(grade)
-                url = p.get('url', '')
+                url = p.get('url', '') or ''
                 path = urlparse(url).path or '/'
                 raw_title = (p.get('title') or '').strip()
-                title = raw_title if raw_title else (path if path != '/' else 'Sans titre')
-                if title == '/' or not title:
+                title = raw_title if raw_title else (path.strip('/').replace('-', ' ').replace('_', ' ').title() if path != '/' else 'Sans titre')
+                if not title or title == '/':
                     title = 'Sans titre'
+                # Échapper pour HTML pour éviter contenu vide ou injection
+                title_safe = html.escape(title)
+                path_safe = html.escape(path)
+                url_safe = html.escape(url)
 
                 st.markdown(
                     f'<div class="journal-table-row" style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #f1f5f9;">'
@@ -669,11 +683,11 @@ def render_journal_crawled(results):
                     f'width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;'
                     f'font-size:0.65rem;font-weight:800;letter-spacing:0.05em;flex-shrink:0;">{grade}</span>'
                     f'<span class="journal-page-title" style="font-size:0.85rem;font-weight:600;color:#0f172a;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
-                    f'<a href="{url}" target="_blank" style="color:#0f172a;text-decoration:none;"'
+                    f'<a href="{url_safe}" target="_blank" style="color:#0f172a;text-decoration:none;"'
                     f' onmouseover="this.style.borderBottom=\'1px solid #0f172a\'"'
-                    f' onmouseout="this.style.borderBottom=\'none\'">{title}</a></span>'
+                    f' onmouseout="this.style.borderBottom=\'none\'">{title_safe}</a></span>'
                     f'<span style="font-size:0.7rem;color:#94a3b8;font-family:\'Courier New\',monospace;'
-                    f'width:300px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;">{path}</span>'
+                    f'width:300px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;">{path_safe}</span>'
                     f'</div>',
                     unsafe_allow_html=True
                 )
@@ -1691,7 +1705,9 @@ def render_audit_geo():
                     else:
                         col = "#e2e8f0"
 
-                    label = get_clean_label(p.get('title', ''), p['url'], domain)
+                    label = get_clean_label(p.get('title', ''), p.get('url', ''), domain)
+                    if not (label or '').strip():
+                        label = (urlparse(p.get('url', '')).path or '/').strip('/').replace('-', ' ').title() or 'Page'
                     if expert_on and isinstance(score_data, tuple):
                         label = f"{label}\\n[{grade}]"
 
