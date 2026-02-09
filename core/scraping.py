@@ -208,76 +208,118 @@ class SmartScraper:
         return text[:40] + ".." if len(text) > 40 else text
 
     def get_page_details(self, url):
-        """Scrape une page"""
+        """Scrape une page avec gestion avancée (Cookies + JS Links pour sites SPA/BMW)"""
         try:
             start_time = time.time()
 
+            # --- MODE SELENIUM (Complexe) ---
             if self.use_selenium and self.driver:
                 try:
                     self.driver.get(url)
-                    WebDriverWait(self.driver, 5).until(
+
+                    # 1. Attendre le chargement du body
+                    WebDriverWait(self.driver, 10).until(
                         EC.presence_of_element_located((By.TAG_NAME, "body"))
                     )
-                    # Laisser le temps au JS de charger le contenu initial
-                    time.sleep(3)
-                    # Scroll pour déclencher le lazy-loading (images, liens supplémentaires, etc.)
+                    time.sleep(2)  # Stabilisation
+
+                    # 2. TENTATIVE DE GESTION COOKIES (Boutons 'Accepter')
+                    try:
+                        self.driver.execute_script(
+                            """
+                            const buttons = document.querySelectorAll('button, a, div[role="button"]');
+                            buttons.forEach(btn => {
+                                if (btn.innerText.toLowerCase().includes('accepter') || btn.innerText.toLowerCase().includes('accept all')) {
+                                    btn.click();
+                                }
+                            });
+                            """
+                        )
+                        time.sleep(1)
+                    except Exception:
+                        pass
+
+                    # 3. SCROLL OFFENSIF (Force le chargement du footer/liens cachés)
                     try:
                         self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
                         time.sleep(2)
+                        self.driver.execute_script("window.scrollTo(0, 0);")
                     except Exception:
-                        # Si le scroll échoue, on continue quand même avec le contenu déjà chargé
                         pass
 
+                    # 4. EXTRACTION JS (liens générés par le navigateur, y compris BMW/SPA)
+                    js_links = self.driver.execute_script(
+                        """
+                        return Array.from(document.querySelectorAll('a[href]')).map(a => a.href);
+                        """
+                    )
+
+                    # On récupère aussi le HTML pour le texte
                     html_content = self.driver.page_source
                     soup = BeautifulSoup(html_content, "html.parser")
                     response_time = time.time() - start_time
-                except Exception as se:
-                    # Erreur Selenium sur cette page : on log, puis on laisse remonter à l'exception générale
-                    self._log(f"⚠️ Erreur Selenium sur {url}: {se}")
-                    raise
-            else:
-                resp = self.session.get(url, timeout=3)  # Réduit de 4s à 3s
-                response_time = time.time() - start_time
 
+                    # On utilise les liens JS prioritaires
+                    raw_links = js_links or []
+
+                except Exception as se:
+                    self._log(f"⚠️ Erreur Selenium sur {url}: {se}")
+                    # On laisse remonter pour que le bloc except global gère l'erreur proprement
+                    raise
+
+            # --- MODE REQUESTS (Simple) ---
+            else:
+                resp = self.session.get(url, timeout=5)
+                response_time = time.time() - start_time
                 if resp.status_code != 200:
                     self.stats["errors"] += 1
                     return None
-
                 soup = BeautifulSoup(resp.content, "html.parser")
                 html_content = str(soup)
+                raw_links = [a["href"] for a in soup.find_all("a", href=True)]
+
+            # --- NETTOYAGE ET STRUCTURATION DES DONNÉES ---
 
             raw_title = soup.title.string.strip() if soup.title else ""
-            h1 = soup.find('h1').get_text().strip() if soup.find('h1') else ""
+            h1 = soup.find("h1").get_text().strip() if soup.find("h1") else ""
             final_title = self.clean_title(raw_title, h1, url)
-            
+
             meta_desc = ""
-            meta_tag = soup.find('meta', attrs={'name': 'description'})
-            if meta_tag and meta_tag.get('content'):
-                meta_desc = meta_tag['content'].strip()
-            
+            meta_tag = soup.find("meta", attrs={"name": "description"})
+            if meta_tag and meta_tag.get("content"):
+                meta_desc = meta_tag["content"].strip()
+
+            # Traitement des liens
             links = []
             normalized_current = self.normalize_url(url)
-            for a in soup.find_all('a', href=True):
-                href = a['href']
+
+            for href in raw_links:
+                if not href:
+                    continue
+
+                # Reconstitution URL complète
                 full_url = urljoin(url, href)
 
+                # Filtrage Domaine + Validité
                 if urlparse(full_url).netloc.lower() == self.domain.lower() and self.is_valid_url(full_url):
                     clean_link = self.normalize_url(full_url)
                     if clean_link != normalized_current:
                         links.append(clean_link)
                 else:
-                    self.stats['links_filtered'] += 1
-            
-            self.stats["links_discovered"] += len(links)
+                    self.stats["links_filtered"] += 1
 
-            has_structured_data = bool(soup.find('script', type='application/ld+json'))
-            h2_count = len(soup.find_all('h2'))
-            lists_count = len(soup.find_all(['ul', 'ol']))
-            
+            # Dédoublonnage final
+            unique_links = list(set(links))
+            self.stats["links_discovered"] += len(unique_links)
+
+            has_structured_data = bool(soup.find("script", type="application/ld+json"))
+            h2_count = len(soup.find_all("h2"))
+            lists_count = len(soup.find_all(["ul", "ol"]))
+
             return {
                 "url": url,
                 "title": final_title,
-                "links": list(set(links)),
+                "links": unique_links,
                 "description": meta_desc,
                 "h1": h1,
                 "response_time": response_time,
@@ -287,9 +329,10 @@ class SmartScraper:
                 "h2_count": h2_count,
                 "lists_count": lists_count,
             }
+
         except Exception as e:
             self.stats["errors"] += 1
-            self._log(f"⚠️ Erreur lors du scraping de {url}: {e}")
+            self._log(f"⚠️ Erreur critique scraping {url}: {e}")
             return None
 
     def run_analysis(self, progress_callback=None, log_callback=None):
