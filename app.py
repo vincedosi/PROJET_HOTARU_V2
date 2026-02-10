@@ -22,6 +22,7 @@ from modules.authority_score import render_authority_score
 from modules.master import render_master_tab
 from modules.leaf import render_leaf_tab
 from modules.eco_impact import render_eco_tab
+from modules.ai_transformer_page import render_ai_transformer_tab
 
 # =============================================================================
 # VERSION (date + heure à chaque run / déploiement)
@@ -141,8 +142,8 @@ def main():
             st.rerun()
 
     # NAVIGATION
-    tab_home, tab_audit, tab_authority, tab_master, tab_leaf, tab_eco = st.tabs(
-        ["Home", "Audit", "Authority Score", "Master", "Leaf", "Eco-Score"]
+    tab_home, tab_audit, tab_authority, tab_master, tab_leaf, tab_eco, tab_ai = st.tabs(
+        ["Home", "Audit", "Authority Score", "Master", "Leaf", "Eco-Score", "AI Transformer"]
     )
 
     with tab_home:
@@ -162,6 +163,9 @@ def main():
 
     with tab_eco:
         render_eco_tab()
+
+    with tab_ai:
+        render_ai_transformer_tab()
 
     # FOOTER
     st.markdown(
