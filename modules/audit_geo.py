@@ -1385,10 +1385,20 @@ def render_audit_geo():
                 st.session_state.geo_infra = infra
                 st.session_state.geo_score = score
 
-                scr = SmartScraper(urls, max_urls=limit_in)
+                # Callback pour afficher les logs du scraping dans Streamlit
+                crawl_logs = []
+                def add_crawl_log(msg):
+                    crawl_logs.append(msg)
+
+                scr = SmartScraper(urls, max_urls=limit_in, log_callback=add_crawl_log)
                 res, stats = scr.run_analysis(
                     progress_callback=lambda m, v: bar.progress(v, m)
                 )
+
+                # Afficher les logs du crawl (optionnel)
+                if crawl_logs:
+                    with st.expander("Logs du crawl", expanded=False):
+                        st.code("\n".join(crawl_logs[-50:]))
 
                 # Double verification accessibilite IA (Frontend + API)
                 bar.progress(0.95, "Verification accessibilite IA (Frontend + API)...")
