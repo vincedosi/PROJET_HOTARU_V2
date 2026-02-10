@@ -97,7 +97,7 @@ Les IA connectées au web (ChatGPT Search, Perplexity, Google AI Overviews) filt
 
 ---
 
-## Pourquoi cette méthodologie est unique ? (Argumentaire Client)
+## Pourquoi cette méthodologie est unique ?
 
 *\"Contrairement au SEO classique qui cherche à placer des mots-clés pour un moteur de recherche, cette méthodologie audite la **digestibilité de votre marque pour une intelligence artificielle**. Nous ne travaillons pas sur le positionnement d'une page, mais sur la **compréhension fondamentale de votre entreprise par les modèles qui façonneront le web de demain.**\"*
 """

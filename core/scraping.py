@@ -1,11 +1,9 @@
 """
-SMART SCRAPER HYBRIDE (V9 - FIX DÉTECTION SPA AMÉLIORÉE)
-- Détection SPA robuste (attributs src/href + type=module)
+SMART SCRAPER HYBRIDE (V9 - FIX DÉTECTION SPA CRITIQUE)
+- Détection SPA ROBUSTE et SILENCIEUSE (pas de print qui plante)
 - Extraction JSON-LD via JavaScript pour sites SPA (React, Vue, Nuxt, Next.js)
 - Logs visibles dans l'interface Streamlit
 - Compteur de pages en temps réel
-- Optimisation vitesse (threading + requests session)
-- Support React/SPA
 """
 import requests
 from bs4 import BeautifulSoup
@@ -29,11 +27,10 @@ class SmartScraper:
 
         self.domain = urlparse(start_urls[0]).netloc.lower()
         self.start_urls = [self.normalize_url(url) for url in start_urls]
-        self.base_url = self.start_urls[0]  # Pour compatibilité
+        self.base_url = self.start_urls[0]
         self.max_urls = max_urls
         self.visited = set()
         self.results = []
-        # Préférence utilisateur pour Selenium (peut être activé aussi automatiquement)
         self.use_selenium = use_selenium
         self.driver = None
         self.log_callback = None
@@ -45,13 +42,13 @@ class SmartScraper:
                     f"❌ Toutes les URLs doivent être du même domaine. Trouvé: {urlparse(url).netloc} au lieu de {self.domain}"
                 )
 
-        # Session requests pour réutiliser la connexion (+ rapide)
+        # Session requests
         self.session = requests.Session()
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         })
 
-        # Compteurs de debug
+        # Compteurs
         self.stats = {
             "pages_crawled": 0,
             "pages_skipped": 0,
@@ -63,128 +60,121 @@ class SmartScraper:
             "start_urls_count": len(self.start_urls),
         }
 
-        # Journaux détaillés (URLs réelles, pas juste les compteurs)
-        self.filtered_log = []  # [(url, motif)]
-        self.duplicate_log = []  # [url]
+        self.filtered_log = []
+        self.duplicate_log = []
 
-        # Filtres anti-bruit réduits (seulement les vrais parasites)
+        # Filtres
         self.exclude_patterns = [
-            ".pdf",
-            ".jpg",
-            ".jpeg",
-            ".png",
-            ".gif",
-            ".zip",
-            ".doc",
-            ".docx",
-            "tel:",
-            "mailto:",
-            "javascript:",
-            "void(0)",
+            ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".zip",
+            ".doc", ".docx", "tel:", "mailto:", "javascript:", "void(0)",
         ]
 
-        print(f"🔗 Mode multi-URLs activé: {len(self.start_urls)} point(s) d'entrée")
+        self._log(f"🔗 Mode multi-URLs activé: {len(self.start_urls)} point(s) d'entrée")
         for i, url in enumerate(self.start_urls, 1):
-            print(f"   {i}. {url}")
+            self._log(f"   {i}. {url}")
 
-        # Détection React/SPA + override par préférence utilisateur
-        # Nouvelle logique : si use_selenium == True OU si _is_spa_site() == True → on active Selenium.
+        # ========== DÉTECTION SPA (CRITIQUE) ==========
         spa_detected = False
-        try:
-            spa_detected = self._is_spa_site()
-            if spa_detected:
-                print("🔍 Site SPA/React détecté automatiquement")
-        except Exception as e:
-            print(f"⚠️ Erreur détection SPA: {e}")
-            spa_detected = False
+        if not self.use_selenium:  # Seulement si pas déjà forcé
+            try:
+                spa_detected = self._is_spa_site()
+                if spa_detected:
+                    self._log("🎯 Site SPA détecté automatiquement → Activation Selenium")
+                else:
+                    self._log("📄 Site classique détecté → Mode requests simple")
+            except Exception as e:
+                self._log(f"⚠️ Erreur détection SPA: {e}")
+                spa_detected = False
 
+        # Activation Selenium si forcé OU détecté
         if self.use_selenium or spa_detected:
             self.use_selenium = True
             self._init_selenium()
+        else:
+            self._log("✅ Mode requests activé (pas de Selenium)")
 
     def normalize_url(self, url):
-        """Normalise une URL pour éviter les doublons (trailing slash, fragments, query params, casse)"""
-        # Supprimer les fragments (#) et les paramètres de requête (?)
+        """Normalise une URL pour éviter les doublons."""
         url = url.split("#")[0].split("?")[0]
-        # Supprimer le trailing slash (sauf pour la racine du domaine)
         parsed = urlparse(url)
         path = parsed.path.rstrip("/") or "/"
-        # Normaliser la casse du chemin
         path = path.lower()
-        # Reconstruire l'URL normalisée
         normalized = urlunparse(
             (parsed.scheme.lower(), parsed.netloc.lower(), path, "", "", "")
         )
         return normalized
 
     def _log(self, message):
-        """Log visible dans Streamlit"""
-        print(message)  # Toujours afficher en console
+        """Log visible dans Streamlit ET console."""
+        print(message)
         if self.log_callback:
             self.log_callback(message)
 
     def _is_spa_site(self):
-        """Détecte si le site utilise un framework JS (HTML + attributs scripts)"""
+        """
+        Détecte si le site utilise un framework JS.
+        VERSION ROBUSTE : pas de print(), gestion d'erreur complète.
+        """
         try:
             resp = self.session.get(self.start_urls[0], timeout=5)
-            html = resp.text.lower()
+            html = resp.text
+            html_l = html.lower()
             
-            # Patterns dans le HTML textuel
+            # 1. Patterns dans le texte HTML
             text_patterns = [
-                "react",
-                "vue",
-                "angular",
-                "ng-app",
-                "data-reactroot",
-                '<div id="root">',
-                '<div id="app">',
-                "__next",
-                "nuxt",
-                "_nuxt",
+                "react", "vue", "angular", "ng-app", "data-reactroot",
+                '<div id="root">', '<div id="app">', "__next", "nuxt", "_nuxt",
             ]
             
-            # Vérification dans le texte
-            if any(pattern in html for pattern in text_patterns):
-                return True
+            for pattern in text_patterns:
+                if pattern in html_l:
+                    self._log(f"   🎯 Pattern trouvé: '{pattern}'")
+                    return True
             
-            # Vérification dans les attributs src/href des scripts/links (CRUCIAL pour Nuxt)
+            # 2. Parse HTML pour analyse avancée
             soup = BeautifulSoup(html, "html.parser")
             
-            # Scripts avec src contenant des patterns SPA
+            # 3. Scripts avec src SPA
             for script in soup.find_all("script", src=True):
-                src = script["src"].lower()
-                if any(p in src for p in ["_nuxt", "__next", "react", "vue", "angular", "webpack", "vite"]):
-                    print(f"   🎯 SPA détecté via script: {script['src'][:80]}")
-                    return True
+                src = script.get("src", "").lower()
+                spa_keywords = ["_nuxt", "__next", "react", "vue", "angular", "webpack", "vite"]
+                for keyword in spa_keywords:
+                    if keyword in src:
+                        self._log(f"   🎯 Script SPA trouvé: {keyword} dans {src[:60]}")
+                        return True
             
-            # Links vers des préchargements de modules (typique Nuxt/Next)
+            # 4. Links modulepreload (Nuxt/Next/Vite)
             for link in soup.find_all("link", rel=True):
-                rel = " ".join(link["rel"]).lower() if isinstance(link["rel"], list) else link["rel"].lower()
+                rel_list = link.get("rel", [])
+                if isinstance(rel_list, str):
+                    rel_list = [rel_list]
+                rel_str = " ".join(rel_list).lower()
                 href = link.get("href", "").lower()
                 
-                # modulepreload, preload avec .js, ou liens vers _nuxt
-                if ("modulepreload" in rel or "preload" in rel) and (".js" in href or "_nuxt" in href):
-                    print(f"   🎯 SPA détecté via link modulepreload: {href[:80]}")
-                    return True
+                if ("modulepreload" in rel_str or "preload" in rel_str):
+                    if ".js" in href or "_nuxt" in href or "__next" in href:
+                        self._log(f"   🎯 Modulepreload trouvé: {href[:60]}")
+                        return True
             
-            # Scripts de type module (ES modules, typique des apps modernes)
+            # 5. Scripts type=module (ES modules)
             module_scripts = soup.find_all("script", type="module")
-            if len(module_scripts) > 0:
-                print(f"   🎯 SPA probable: {len(module_scripts)} script(s) de type 'module' détecté(s)")
+            if len(module_scripts) >= 1:
+                self._log(f"   🎯 {len(module_scripts)} script(s) ES module trouvé(s)")
                 return True
             
             return False
             
         except Exception as e:
-            print(f"⚠️ Erreur détection SPA: {e}")
+            # Erreur silencieuse, on suppose que ce n'est pas une SPA
+            self._log(f"⚠️ Erreur détection SPA (on suppose site classique): {e}")
             return False
 
     def _init_selenium(self):
-        """Initialise Selenium (avec undetected_chromedriver si disponible)."""
+        """Initialise Selenium."""
         try:
-            # Tentative avec undetected_chromedriver (meilleure furtivité pour sites protégés)
+            # Tentative undetected_chromedriver
             try:
-                import undetected_chromedriver as uc  # type: ignore
+                import undetected_chromedriver as uc
 
                 chrome_options = uc.ChromeOptions()
                 chrome_options.add_argument("--headless=new")
@@ -195,14 +185,12 @@ class SmartScraper:
                 )
 
                 self.driver = uc.Chrome(options=chrome_options)
-                self._log("✅ Mode Selenium (undetected_chromedriver) activé")
+                self._log("✅ Selenium (undetected_chromedriver) activé")
                 return
             except Exception as e_uc:
-                self._log(
-                    f"⚠️ undetected_chromedriver indisponible ({e_uc}), fallback Selenium standard..."
-                )
+                self._log(f"⚠️ undetected_chromedriver indisponible, fallback standard...")
 
-            # Fallback : Selenium classique + webdriver-manager
+            # Fallback Selenium classique
             from selenium.webdriver.chrome.service import Service
             from webdriver_manager.chrome import ChromeDriverManager
 
@@ -217,14 +205,14 @@ class SmartScraper:
 
             service = Service(ChromeDriverManager().install())
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
-            self._log("✅ Mode Selenium standard activé")
+            self._log("✅ Selenium standard activé")
         except Exception as e:
-            self._log(f"⚠️ Selenium non disponible: {e}")
+            self._log(f"❌ Selenium non disponible: {e}")
             self.use_selenium = False
             self.driver = None
 
     def is_valid_url(self, url):
-        """Vérifie si l'URL est pertinente"""
+        """Vérifie si l'URL est pertinente."""
         for pattern in self.exclude_patterns:
             if pattern in url.lower():
                 self.filtered_log.append((url, pattern))
@@ -232,7 +220,7 @@ class SmartScraper:
         return True
 
     def clean_title(self, title, h1, url):
-        """Nettoie le titre"""
+        """Nettoie le titre."""
         domain_name = urlparse(url).netloc.split(".")[0].lower()
 
         def is_useful(text):
@@ -274,23 +262,23 @@ class SmartScraper:
         return text[:40] + ".." if len(text) > 40 else text
 
     def get_page_details(self, url):
-        """Scrape une page avec gestion avancée (Cookies + JS Links + JSON-LD dynamique pour sites SPA)"""
+        """Scrape une page."""
         try:
             start_time = time.time()
-            json_ld_from_js = []  # Initialisation pour éviter les erreurs
+            json_ld_from_js = []
 
-            # --- MODE SELENIUM (Complexe) ---
+            # ========== MODE SELENIUM ==========
             if self.use_selenium and self.driver:
                 try:
                     self._log(f"🔍 Selenium: Chargement {url}")
                     self.driver.get(url)
 
-                    # 1. Attendre le chargement du body
+                    # 1. Attente body
                     WebDriverWait(self.driver, 10).until(
                         EC.presence_of_element_located((By.TAG_NAME, "body"))
                     )
                     
-                    # 2. ATTENTE EXPLICITE POUR JSON-LD (crucial pour SPA)
+                    # 2. ATTENTE JSON-LD (crucial pour SPA)
                     self._log("   ⏳ Attente JSON-LD...")
                     try:
                         WebDriverWait(self.driver, 10).until(
@@ -299,19 +287,19 @@ class SmartScraper:
                             )
                         )
                         self._log("   ✅ JSON-LD détecté dans le DOM")
-                    except Exception as wait_ex:
-                        self._log(f"   ⚠️ Timeout JSON-LD: {wait_ex}")
+                    except Exception:
+                        self._log("   ⚠️ Timeout JSON-LD (peut-être absent)")
                     
-                    time.sleep(2)  # Stabilisation supplémentaire
+                    time.sleep(2)
 
-                    # 3. GESTION COOKIES
+                    # 3. Cookies
                     try:
                         self.driver.execute_script(
                             """
                             const buttons = document.querySelectorAll('button, a, div[role="button"]');
                             buttons.forEach(btn => {
                                 const text = btn.innerText.toLowerCase();
-                                if (text.includes('accepter') || text.includes('accept all') || text.includes('tout accepter')) {
+                                if (text.includes('accepter') || text.includes('accept all')) {
                                     btn.click();
                                 }
                             });
@@ -321,48 +309,34 @@ class SmartScraper:
                     except Exception:
                         pass
 
-                    # 4. SCROLL OFFENSIF
+                    # 4. Scroll
                     try:
-                        self.driver.execute_script(
-                            "window.scrollTo(0, document.body.scrollHeight);"
-                        )
+                        self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
                         time.sleep(1)
                         self.driver.execute_script("window.scrollTo(0, 0);")
                         time.sleep(1)
                     except Exception:
                         pass
 
-                    # 5. EXTRACTION JSON-LD VIA JAVASCRIPT (VERSION ROBUSTE)
+                    # 5. EXTRACTION JSON-LD
                     try:
                         self._log("   🔍 Extraction JSON-LD...")
                         
-                        # Compte d'abord combien il y en a
                         script_count = self.driver.execute_script(
                             'return document.querySelectorAll(\'script[type*="ld+json" i]\').length'
                         )
                         self._log(f"   📊 {script_count} script(s) JSON-LD trouvé(s)")
                         
-                        # Extraction avec gestion robuste
                         json_ld_from_js = self.driver.execute_script(
                             """
                             const scripts = document.querySelectorAll('script[type*="ld+json" i]');
-                            console.log('Scripts JSON-LD trouvés:', scripts.length);
-                            
                             return Array.from(scripts).map((s, idx) => {
                                 try {
                                     const content = s.textContent || s.innerText || '';
-                                    console.log('Script', idx, '- longueur:', content.length);
-                                    
-                                    if (!content.trim()) {
-                                        console.warn('Script', idx, 'vide');
-                                        return null;
-                                    }
-                                    
-                                    const parsed = JSON.parse(content);
-                                    console.log('Script', idx, 'parsé avec succès');
-                                    return parsed;
+                                    if (!content.trim()) return null;
+                                    return JSON.parse(content);
                                 } catch (err) {
-                                    console.error('Script', idx, 'erreur parsing:', err.message);
+                                    console.error('Script', idx, 'erreur:', err.message);
                                     return null;
                                 }
                             }).filter(x => x !== null);
@@ -371,35 +345,31 @@ class SmartScraper:
                         
                         if json_ld_from_js:
                             self._log(f"   ✅ {len(json_ld_from_js)} bloc(s) JSON-LD extrait(s)")
-                            # Debug: affiche les types
                             for i, block in enumerate(json_ld_from_js):
                                 block_type = block.get('@type', 'Unknown') if isinstance(block, dict) else 'Array'
                                 self._log(f"      • Bloc {i+1}: {block_type}")
                         else:
-                            self._log("   ❌ Aucun JSON-LD extrait (tableau vide)")
+                            self._log("   ❌ Aucun JSON-LD extrait")
                             
                     except Exception as e:
-                        self._log(f"   ⚠️ ERREUR extraction JSON-LD JS: {e}")
+                        self._log(f"   ⚠️ ERREUR extraction JSON-LD: {e}")
                         json_ld_from_js = []
 
-                    # 6. EXTRACTION LIENS VIA JAVASCRIPT
+                    # 6. Liens
                     js_links = self.driver.execute_script(
-                        """
-                        return Array.from(document.querySelectorAll('a[href]')).map(a => a.href);
-                        """
+                        "return Array.from(document.querySelectorAll('a[href]')).map(a => a.href);"
                     )
 
-                    # Récupération HTML
                     html_content = self.driver.page_source
                     soup = BeautifulSoup(html_content, "html.parser")
                     response_time = time.time() - start_time
                     raw_links = js_links or []
 
                 except Exception as se:
-                    self._log(f"⚠️ Erreur Selenium sur {url}: {se}")
+                    self._log(f"⚠️ Erreur Selenium: {se}")
                     raise
 
-            # --- MODE REQUESTS (Simple) ---
+            # ========== MODE REQUESTS ==========
             else:
                 resp = self.session.get(url, timeout=5)
                 response_time = time.time() - start_time
@@ -410,8 +380,7 @@ class SmartScraper:
                 html_content = str(soup)
                 raw_links = [a["href"] for a in soup.find_all("a", href=True)]
 
-            # --- NETTOYAGE ET STRUCTURATION DES DONNÉES ---
-
+            # ========== EXTRACTION DONNÉES ==========
             raw_title = soup.title.string.strip() if soup.title else ""
             h1 = soup.find("h1").get_text().strip() if soup.find("h1") else ""
             final_title = self.clean_title(raw_title, h1, url)
@@ -421,18 +390,14 @@ class SmartScraper:
             if meta_tag and meta_tag.get("content"):
                 meta_desc = meta_tag["content"].strip()
 
-            # Traitement des liens
+            # Traitement liens
             links = []
             normalized_current = self.normalize_url(url)
 
             for href in raw_links:
                 if not href:
                     continue
-
-                # Reconstitution URL complète
                 full_url = urljoin(url, href)
-
-                # Filtrage Domaine + Validité
                 if (
                     urlparse(full_url).netloc.lower() == self.domain.lower()
                     and self.is_valid_url(full_url)
@@ -443,21 +408,16 @@ class SmartScraper:
                 else:
                     self.stats["links_filtered"] += 1
 
-            # Dédoublonnage final
             unique_links = list(set(links))
             self.stats["links_discovered"] += len(unique_links)
 
-            # --- EXTRACTION JSON-LD ---
-            # Priorité 1: Données extraites via JavaScript (pour les SPA)
-            # Priorité 2: Parsing BeautifulSoup classique (pour sites statiques)
+            # JSON-LD
             if self.use_selenium and json_ld_from_js:
                 json_ld_data = json_ld_from_js
             else:
-                # Fallback: extraction via BeautifulSoup
                 json_ld_data = []
                 for script in soup.find_all("script"):
                     t = (script.get("type") or "").lower()
-                    # Certains sites utilisent des variantes: "application/ld+json; charset=utf-8"
                     if "ld+json" not in t:
                         continue
                     try:
@@ -491,43 +451,31 @@ class SmartScraper:
 
         except Exception as e:
             self.stats["errors"] += 1
-            self._log(f"⚠️ Erreur critique scraping {url}: {e}")
+            self._log(f"⚠️ Erreur critique: {e}")
             return None
 
     def run_analysis(self, progress_callback=None, log_callback=None):
-        """Lance l'analyse avec logs Streamlit"""
+        """Lance l'analyse."""
         self.log_callback = log_callback
 
-        # ✅ CRAWL MULTI-URLs : Commence avec toutes les URLs de départ (normalisées)
         queue = list(self.start_urls)
-        self.visited.update(self.start_urls)  # start_urls déjà normalisées dans __init__
+        self.visited.update(self.start_urls)
         crawled_count = 0
 
         print(f"\n{'='*80}")
-        print(f"🚀 DÉBUT DU CRAWL MULTI-URLs: {self.max_urls} pages demandées")
+        print(f"🚀 DÉBUT DU CRAWL: {self.max_urls} pages")
         print(f"Domaine: {self.domain}")
-        print(f"Points d'entrée: {len(self.start_urls)}")
-        for i, url in enumerate(self.start_urls, 1):
-            print(f"   {i}. {url}")
         print(f"{'='*80}\n")
 
         try:
             while queue and crawled_count < self.max_urls:
                 current_url = queue.pop(0)
-
-                # ✅ MISE À JOUR EN TEMPS RÉEL (chaque page)
                 percent = min(crawled_count / self.max_urls, 0.99)
 
                 if progress_callback:
                     progress_callback(
-                        f"🔍 {crawled_count}/{self.max_urls} pages | Queue: {len(queue)} | Liens: {self.stats['links_discovered']}",
+                        f"🔍 {crawled_count}/{self.max_urls} pages | Queue: {len(queue)}",
                         percent,
-                    )
-
-                # Log console tous les 10 crawls
-                if crawled_count % 10 == 0:
-                    print(
-                        f"📊 {crawled_count}/{self.max_urls} | Queue: {len(queue)} | Visitées: {len(self.visited)} | Liens: {self.stats['links_discovered']}"
                     )
 
                 data = self.get_page_details(current_url)
@@ -537,79 +485,27 @@ class SmartScraper:
                     crawled_count += 1
                     self.stats["pages_crawled"] += 1
 
-                    # Ajout des liens avec comptage détaillé
-                    links_added = 0
                     for link in data["links"]:
                         if link in self.visited:
                             self.stats["links_duplicate"] += 1
-                            self.duplicate_log.append(link)
-                        elif len(queue) >= 5000:
-                            self.stats["queue_full_blocks"] += 1
-                        else:
+                        elif len(queue) < 5000:
                             self.visited.add(link)
                             queue.append(link)
-                            links_added += 1
-
-                    # Debug si problème de liens
-                    if crawled_count % 50 == 0:
-                        print(
-                            f"   → Page #{crawled_count}: {len(data['links'])} liens trouvés, {links_added} ajoutés"
-                        )
-
-                    # DEBUG CRITIQUE: Si peu de liens découverts
-                    if crawled_count == 5 and self.stats["links_discovered"] < 20:
-                        print(
-                            f"\n⚠️ ALERTE: Seulement {self.stats['links_discovered']} liens découverts après 5 pages!"
-                        )
-                        print(f"   Exemples de liens sur la dernière page:")
-                        for link in data["links"][:5]:
-                            print(f"      • {link}")
-                        print()
                 else:
                     self.stats["pages_skipped"] += 1
 
-                # Pause ultra-rapide
-                time.sleep(0.005)  # 5ms seulement
+                time.sleep(0.005)
 
         finally:
             if self.driver:
                 self.driver.quit()
 
-        # RAPPORT FINAL CONSOLE
-        print(f"\n{'='*80}")
-        print(f"✅ CRAWL MULTI-URLs TERMINÉ")
-        print(f"{'='*80}")
-        print(f"📈 RÉSULTATS:")
-        print(f"   ├─ Points d'entrée: {self.stats['start_urls_count']}")
-        print(f"   ├─ Pages crawlées: {self.stats['pages_crawled']} / {self.max_urls}")
-        print(f"   ├─ Pages ignorées: {self.stats['pages_skipped']}")
-        print(f"   ├─ URLs visitées: {len(self.visited)}")
-        print(f"   ├─ Queue finale: {len(queue)} URLs restantes")
-        print(f"   └─ Erreurs: {self.stats['errors']}")
-        print(f"\n🔗 LIENS:")
-        print(f"   ├─ Découverts: {self.stats['links_discovered']}")
-        print(f"   ├─ Filtrés: {self.stats['links_filtered']}")
-        print(f"   ├─ Doublons: {self.stats['links_duplicate']}")
-        print(f"   └─ Blocages queue: {self.stats['queue_full_blocks']}")
-
-        # Diagnostic si arrêt anticipé
-        if crawled_count < self.max_urls:
-            print(f"\n⚠️ ARRÊT ANTICIPÉ: {crawled_count}/{self.max_urls} pages")
-            if len(queue) == 0:
-                print(f"   Raison: QUEUE VIDE")
-                print(f"   → Le site a moins de {self.max_urls} pages accessibles")
-                print(f"   → Ou les filtres sont trop stricts (vérifier exclude_patterns)")
-            else:
-                print(f"   Raison: Condition while rompue (bug logique)")
-
-        print(f"{'='*80}\n")
+        print(f"\n✅ TERMINÉ: {self.stats['pages_crawled']} pages crawlées\n")
 
         patterns = self.analyze_patterns(self.results)
 
         if progress_callback:
-            progress_callback(
-                f"✅ Terminé: {self.stats['pages_crawled']} pages crawlées", 1.0
-            )
+            progress_callback(f"✅ Terminé: {self.stats['pages_crawled']} pages", 1.0)
 
         return self.results, {
             "total_urls": len(self.results),
@@ -620,7 +516,7 @@ class SmartScraper:
         }
 
     def analyze_patterns(self, pages):
-        """Analyse les patterns d'URL"""
+        """Analyse les patterns d'URL."""
         groups = {}
         for p in pages:
             path = urlparse(p["url"]).path
@@ -646,62 +542,14 @@ class SmartScraper:
 
 
 def fetch_page(url: str, timeout: int = 15) -> str:
-    """
-    Récupère le HTML d'une seule page (sans crawler).
-    Utilisé par eco_impact, authority, leaf, etc.
-    Lève requests.RequestException en cas d'erreur.
-    """
+    """Récupère le HTML d'une seule page."""
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
     session = requests.Session()
     session.headers.update({
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     })
     r = session.get(url, timeout=timeout)
     r.raise_for_status()
     r.encoding = r.apparent_encoding or "utf-8"
     return r.text
-
-
-# --- TEST RAPIDE ---
-if __name__ == "__main__":
-    print("\n" + "=" * 80)
-    print("🧪 TEST: Extraction JSON-LD sur site SPA (lamarinerecrute.gouv.fr)")
-    print("=" * 80 + "\n")
-
-    # Callback pour voir les logs en temps réel
-    def log_callback(msg):
-        print(f"[LOG] {msg}")
-
-    # Force Selenium pour ce test
-    scraper = SmartScraper(
-        "https://lamarinerecrute.gouv.fr/", 
-        max_urls=1, 
-        use_selenium=False  # On teste la détection automatique
-    )
-    scraper.log_callback = log_callback
-
-    print(f"\n🔍 Mode Selenium activé: {scraper.use_selenium}")
-    
-    data = scraper.get_page_details("https://lamarinerecrute.gouv.fr/")
-
-    if data:
-        print(f"\n📄 Page: {data['url']}")
-        print(f"   Titre: {data['title']}")
-        print(f"   H1: {data['h1']}")
-        print(f"   JSON-LD trouvé: {data['has_structured_data']}")
-
-        if data["json_ld"]:
-            print(f"\n✅ SUCCESS: {len(data['json_ld'])} bloc(s) JSON-LD")
-            for i, block in enumerate(data["json_ld"], 1):
-                print(f"\n--- Bloc {i} ---")
-                print(json.dumps(block, indent=2, ensure_ascii=False))
-        else:
-            print("\n❌ ÉCHEC: Aucun JSON-LD détecté")
-            print(f"HTML length: {len(data.get('html_content', ''))}")
-    else:
-        print("❌ Échec du scraping")
-
-    # Cleanup
-    if scraper.driver:
-        scraper.driver.quit()
