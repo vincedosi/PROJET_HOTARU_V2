@@ -143,7 +143,12 @@ def render_scraping_debug_tab():
             add_log("🔧 Initialisation du scraper...")
             
             # On importe et on patche temporairement
-            scraper = SmartScraper([target_url], max_urls=1, use_selenium=force_selenium)
+            scraper = SmartScraper(
+            [target_url], 
+            max_urls=1, 
+            use_selenium=force_selenium,
+            log_callback=add_log
+            )
             
             # ⚠️ HACK : On réassigne le callback et on rejoue les logs manquants
             # (car __init__ a déjà eu lieu sans callback)
