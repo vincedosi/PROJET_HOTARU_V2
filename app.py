@@ -142,18 +142,21 @@ def main():
             st.rerun()
 
     # NAVIGATION
-    tab_home, tab_audit, tab_authority, tab_master, tab_leaf, tab_eco, tab_ai = st.tabs(
-        ["Home", "Audit", "Authority Score", "Master", "Leaf", "Eco-Score", "AI Transformer"]
+    tab_home, tab_audit, tab_master, tab_leaf, tab_eco, tab_ai = st.tabs(
+        ["Home", "Audit", "Master", "Leaf", "Eco-Score", "AI Transformer"]
     )
 
     with tab_home:
         render_home()
 
     with tab_audit:
-        render_audit_geo()
-
-    with tab_authority:
-        render_authority_score()
+        sub_tab_geo, sub_tab_authority = st.tabs(
+            ["Audit GEO", "Authority Score"]
+        )
+        with sub_tab_geo:
+            render_audit_geo()
+        with sub_tab_authority:
+            render_authority_score()
 
     with tab_master:
         render_master_tab()
