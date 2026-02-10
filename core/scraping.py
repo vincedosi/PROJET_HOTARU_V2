@@ -1,5 +1,6 @@
 """
-SMART SCRAPER HYBRIDE (V8 - FIX JSON-LD SPA/REACT)
+SMART SCRAPER HYBRIDE (V9 - FIX DÉTECTION SPA AMÉLIORÉE)
+- Détection SPA robuste (attributs src/href + type=module)
 - Extraction JSON-LD via JavaScript pour sites SPA (React, Vue, Nuxt, Next.js)
 - Logs visibles dans l'interface Streamlit
 - Compteur de pages en temps réel
@@ -123,11 +124,13 @@ class SmartScraper:
             self.log_callback(message)
 
     def _is_spa_site(self):
-        """Détecte si le site utilise un framework JS"""
+        """Détecte si le site utilise un framework JS (HTML + attributs scripts)"""
         try:
             resp = self.session.get(self.start_urls[0], timeout=5)
             html = resp.text.lower()
-            spa_patterns = [
+            
+            # Patterns dans le HTML textuel
+            text_patterns = [
                 "react",
                 "vue",
                 "angular",
@@ -139,9 +142,41 @@ class SmartScraper:
                 "nuxt",
                 "_nuxt",
             ]
-            detected = any(pattern in html for pattern in spa_patterns)
-            return detected
-        except Exception:
+            
+            # Vérification dans le texte
+            if any(pattern in html for pattern in text_patterns):
+                return True
+            
+            # Vérification dans les attributs src/href des scripts/links (CRUCIAL pour Nuxt)
+            soup = BeautifulSoup(html, "html.parser")
+            
+            # Scripts avec src contenant des patterns SPA
+            for script in soup.find_all("script", src=True):
+                src = script["src"].lower()
+                if any(p in src for p in ["_nuxt", "__next", "react", "vue", "angular", "webpack", "vite"]):
+                    print(f"   🎯 SPA détecté via script: {script['src'][:80]}")
+                    return True
+            
+            # Links vers des préchargements de modules (typique Nuxt/Next)
+            for link in soup.find_all("link", rel=True):
+                rel = " ".join(link["rel"]).lower() if isinstance(link["rel"], list) else link["rel"].lower()
+                href = link.get("href", "").lower()
+                
+                # modulepreload, preload avec .js, ou liens vers _nuxt
+                if ("modulepreload" in rel or "preload" in rel) and (".js" in href or "_nuxt" in href):
+                    print(f"   🎯 SPA détecté via link modulepreload: {href[:80]}")
+                    return True
+            
+            # Scripts de type module (ES modules, typique des apps modernes)
+            module_scripts = soup.find_all("script", type="module")
+            if len(module_scripts) > 0:
+                print(f"   🎯 SPA probable: {len(module_scripts)} script(s) de type 'module' détecté(s)")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            print(f"⚠️ Erreur détection SPA: {e}")
             return False
 
     def _init_selenium(self):
@@ -642,10 +677,12 @@ if __name__ == "__main__":
     scraper = SmartScraper(
         "https://lamarinerecrute.gouv.fr/", 
         max_urls=1, 
-        use_selenium=True
+        use_selenium=False  # On teste la détection automatique
     )
     scraper.log_callback = log_callback
 
+    print(f"\n🔍 Mode Selenium activé: {scraper.use_selenium}")
+    
     data = scraper.get_page_details("https://lamarinerecrute.gouv.fr/")
 
     if data:
