@@ -4,11 +4,15 @@ Interface Brutaliste Monochrome pour l'enrichissement et l'édition des données
 """
 
 import os
-from typing import Dict, List
+import json
+import difflib
+from typing import Dict, List, Tuple
 
 import requests
 import streamlit as st
+from bs4 import BeautifulSoup
 
+from core.scraping import fetch_page
 from engine.master_handler import MasterDataHandler, MasterData, WikidataAPI
 from engine.template_builder import TemplateBuilder
 
@@ -77,6 +81,134 @@ def _search_insee_candidates(query: str) -> List[Dict]:
     except Exception as e:  # pragma: no cover - réseau extérieur
         st.warning(f"Erreur INSEE: {e}")
         return []
+
+
+def extract_jsonld_from_url(url: str, timeout: int = 15) -> str:
+    """
+    Récupère le JSON-LD d'une page web donnée.
+
+    Utilise la même logique de requêtes que le scraper (fetch_page)
+    puis parse le premier <script type="application/ld+json"> trouvé.
+    Retourne une chaîne JSON jolie (indentée) prête pour affichage / diff.
+    """
+    # Normalisation simple de l'URL
+    url = url.strip()
+    if not url:
+        raise ValueError("URL vide.")
+
+    try:
+        raw_html = fetch_page(url, timeout=timeout)
+    except requests.RequestException as e:  # type: ignore[no-untyped-call]
+        raise RuntimeError(f"Erreur réseau lors de la récupération de la page: {e}")
+
+    soup = BeautifulSoup(raw_html, "html.parser")
+    scripts = soup.find_all("script", type="application/ld+json")
+    if not scripts:
+        raise RuntimeError("Aucun script JSON-LD (<script type=\"application/ld+json\">) trouvé sur cette page.")
+
+    # On prend le premier script JSON-LD non vide
+    content = ""
+    for tag in scripts:
+        if tag.string and tag.string.strip():
+            content = tag.string.strip()
+            break
+        text = tag.get_text(strip=True)
+        if text:
+            content = text
+            break
+
+    if not content:
+        raise RuntimeError("Balise JSON-LD trouvée mais vide.")
+
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"JSON-LD invalide sur la page: {e}")
+
+    pretty = json.dumps(parsed, indent=2, ensure_ascii=False)
+    return pretty
+
+
+def _escape_html(text: str) -> str:
+    """Échappe les caractères HTML pour un rendu sûr."""
+    return (
+        str(text)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#x27;")
+    )
+
+
+def build_json_diff_blocks(client_json: str, hotaru_json: str) -> Tuple[str, str]:
+    """
+    Construit deux blocs HTML (<pre>...) pour un diff visuel côte à côte.
+
+    - client_json : JSON-LD extrait du site client (gauche)
+    - hotaru_json : JSON-LD généré par HOTARU (droite)
+
+    Convention de couleurs :
+    - Lignes identiques : fond gris léger
+    - Lignes présentes uniquement chez HOTARU : fond vert clair + gras
+    - Lignes présentes uniquement chez le client : fond rouge clair
+    """
+    client_lines = client_json.splitlines()
+    hotaru_lines = hotaru_json.splitlines()
+
+    sm = difflib.SequenceMatcher(a=client_lines, b=hotaru_lines)
+
+    left_segments: List[Tuple[str, str]] = []
+    right_segments: List[Tuple[str, str]] = []
+
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "equal":
+            for i in range(i1, i2):
+                left_segments.append(("equal", client_lines[i]))
+            for j in range(j1, j2):
+                right_segments.append(("equal", hotaru_lines[j]))
+        elif tag == "replace":
+            for i in range(i1, i2):
+                left_segments.append(("removed", client_lines[i]))
+            for j in range(j1, j2):
+                right_segments.append(("added", hotaru_lines[j]))
+        elif tag == "delete":
+            for i in range(i1, i2):
+                left_segments.append(("removed", client_lines[i]))
+        elif tag == "insert":
+            for j in range(j1, j2):
+                right_segments.append(("added", hotaru_lines[j]))
+
+    def _build_pre_html(segments: List[Tuple[str, str]], side: str) -> str:
+        pre_style = (
+            "font-family:'SF Mono','Fira Code','Consolas',monospace;"
+            "font-size:0.8rem;"
+            "padding:12px;"
+            "background:#FFFFFF;"
+            "border:1px solid rgba(0,0,0,0.12);"
+            "white-space:pre;"
+            "overflow-x:auto;"
+        )
+        html = [f'<pre style="{pre_style}">']
+        for kind, line in segments:
+            style = ""
+            if kind == "equal":
+                style = "background:#f5f5f5;color:#111111;"
+            elif kind == "added":
+                # Ajout HOTARU (vert)
+                style = "background:#e6ffed;color:#065f46;font-weight:700;"
+            elif kind == "removed":
+                # Présent uniquement chez le client (rouge)
+                style = "background:#ffeef0;color:#b91c1c;"
+
+            escaped = _escape_html(line)
+            html.append(f'<span style="{style}">{escaped}</span>')
+        html.append("</pre>")
+        return "\n".join(html)
+
+    left_html = _build_pre_html(left_segments, side="left")
+    right_html = _build_pre_html(right_segments, side="right")
+    return left_html, right_html
 
 
 def render_master_tab():
@@ -547,3 +679,68 @@ def _render_master_data_content():
                 st.rerun()
 
         st.markdown("</div>", unsafe_allow_html=True)
+
+    # =====================================================================
+    # ETAPE 4 : AUDIT & GAP ANALYSIS
+    # =====================================================================
+
+    st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="section-title">04 / AUDIT & GAP ANALYSIS</p>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        '<div class="section-container" style="padding:24px;">',
+        unsafe_allow_html=True,
+    )
+
+    url_client = st.text_input(
+        "URL DU SITE CLIENT",
+        placeholder="https://www.exemple.com/page",
+        key="audit_gap_url",
+    )
+
+    compare_clicked = st.button(
+        "EXTRAIRE & COMPARER", use_container_width=True, key="audit_gap_btn"
+    )
+
+    if compare_clicked:
+        if not url_client:
+            st.error("Merci de renseigner une URL du site client.")
+        elif "jsonld_master" not in st.session_state or not st.session_state.jsonld_master:
+            st.error(
+                "Générez d'abord le JSON-LD Master dans la section 03 / COMPILATION."
+            )
+        else:
+            try:
+                with st.spinner("Extraction du JSON-LD du site client..."):
+                    client_json = extract_jsonld_from_url(url_client)
+                hotaru_json = st.session_state.jsonld_master
+                left_html, right_html = build_json_diff_blocks(client_json, hotaru_json)
+                st.session_state["audit_gap_client_html"] = left_html
+                st.session_state["audit_gap_hotaru_html"] = right_html
+            except Exception as e:  # pragma: no cover - robustesse réseau / parsing
+                st.error(f"Erreur lors de l'audit JSON-LD: {e}")
+
+    client_html = st.session_state.get("audit_gap_client_html")
+    hotaru_html = st.session_state.get("audit_gap_hotaru_html")
+
+    if client_html and hotaru_html:
+        col_left, col_right = st.columns(2)
+
+        with col_left:
+            st.markdown(
+                '<div class="label-caps">JSON-LD / SITE CLIENT</div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown(client_html, unsafe_allow_html=True)
+
+        with col_right:
+            st.markdown(
+                '<div class="label-caps">JSON-LD / HOTARU MASTER</div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown(hotaru_html, unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
