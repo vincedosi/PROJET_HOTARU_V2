@@ -17,11 +17,22 @@ HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority I
 
 ---
 
+## Versioning
+
+À **chaque push ou merge sur `main`** (pull request), mettre à jour **`version.py`** :
+- `BUILD_DATE = "YYYY-MM-DD HH:MM"` (date et heure courantes)
+- `VERSION` : incrémenter si besoin (ex. 3.0.2 → 3.0.3)
+
+L'app affiche **V {VERSION} // {BUILD_DATE}** dans le header et le footer. Ne jamais pusher sans mettre à jour `version.py`.
+
+---
+
 ## Structure du projet
 
 ```
 PROJET_HOTARU_V2/
 ├── app.py                      # Point d'entrée : auth, header, 5 tabs, footer
+├── version.py                  # VERSION + BUILD_DATE (à mettre à jour à chaque push/PR)
 ├── packages.txt                # Streamlit Cloud : chromium, chromium-driver
 ├── requirements.txt            # Python deps (selenium, webdriver-manager, sentence-transformers, etc.)
 ├── assets/

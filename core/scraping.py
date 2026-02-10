@@ -19,7 +19,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 class SmartScraper:
-    def __init__(self, start_urls, max_urls=500, use_selenium=False, log_callback=None):
+    def __init__(self, start_urls, max_urls=500, use_selenium=False, selenium_mode=None, log_callback=None):
+        """
+        Args:
+            selenium_mode: "light" pour eager loading + wait JSON-LD, None sinon
+        """
         # Support ancien format (string unique) et nouveau (liste)
         if isinstance(start_urls, str):
             start_urls = [start_urls]
@@ -31,6 +35,7 @@ class SmartScraper:
         self.visited = set()
         self.results = []
         self.use_selenium = use_selenium
+        self.selenium_mode = selenium_mode
         self.driver = None
         self.log_callback = log_callback  # ← CRITIQUE : dès le début
 
@@ -195,6 +200,10 @@ class SmartScraper:
             chrome_options.add_argument("--disable-gpu")
             chrome_options.add_argument("--disable-software-rasterizer")
 
+            if getattr(self, "selenium_mode", None) == "light":
+                chrome_options.page_load_strategy = "eager"
+                self._log("   ⚡ Mode Selenium Light activé (eager loading)")
+
             # Recherche chromium installé via packages.txt
             import shutil
 
@@ -313,22 +322,34 @@ class SmartScraper:
                     self._log(f"🔍 [Selenium] {url}")
                     self.driver.get(url)
 
-                    WebDriverWait(self.driver, 10).until(
-                        EC.presence_of_element_located((By.TAG_NAME, "body"))
-                    )
-                    
-                    self._log("   ⏳ Attente JSON-LD...")
-                    try:
-                        WebDriverWait(self.driver, 10).until(
-                            lambda d: d.execute_script(
-                                'return document.querySelectorAll(\'script[type*="ld+json" i]\').length > 0'
+                    if getattr(self, "selenium_mode", None) == "light":
+                        try:
+                            WebDriverWait(self.driver, 10).until(
+                                EC.presence_of_element_located((
+                                    By.XPATH,
+                                    "//script[@type='application/ld+json']",
+                                ))
                             )
+                            elapsed = time.time() - start_time
+                            self._log(f"   ✅ JSON-LD injecté après {elapsed:.2f}s")
+                        except Exception:
+                            elapsed = time.time() - start_time
+                            self._log(f"   ⚠️ JSON-LD non détecté après {elapsed:.2f}s")
+                    else:
+                        WebDriverWait(self.driver, 10).until(
+                            EC.presence_of_element_located((By.TAG_NAME, "body"))
                         )
-                        self._log("   ✅ JSON-LD dans DOM")
-                    except Exception:
-                        self._log("   ⚠️ Timeout JSON-LD")
-                    
-                    time.sleep(2)
+                        self._log("   ⏳ Attente JSON-LD...")
+                        try:
+                            WebDriverWait(self.driver, 10).until(
+                                lambda d: d.execute_script(
+                                    'return document.querySelectorAll(\'script[type*="ld+json" i]\').length > 0'
+                                )
+                            )
+                            self._log("   ✅ JSON-LD dans DOM")
+                        except Exception:
+                            self._log("   ⚠️ Timeout JSON-LD")
+                        time.sleep(2)
 
                     # Cookies
                     try:

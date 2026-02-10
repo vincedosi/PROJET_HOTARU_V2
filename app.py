@@ -5,10 +5,10 @@ The AI-Readable Web - GEO Audit & JSON-LD Generator
 
 import base64
 import os
-from datetime import datetime
 
 import streamlit as st
 
+from version import BUILD_DATE, VERSION
 from core.auth import AuthManager
 from core.database import AuditDatabase
 from core.session_keys import (
@@ -25,11 +25,7 @@ from modules.leaf import render_leaf_tab
 from modules.eco_impact import render_eco_tab
 from modules.ai_transformer_page import render_ai_transformer_tab
 
-# =============================================================================
-# VERSION (date + heure à chaque run / déploiement)
-# =============================================================================
-VERSION = "3.0.1"
-BUILD_DATE = datetime.now().strftime("%Y-%m-%d %H:%M")
+# VERSION et BUILD_DATE : définis dans version.py (mis à jour à chaque push/PR)
 
 # =============================================================================
 # CONFIGURATION

@@ -1380,6 +1380,53 @@ def render_audit_geo():
 
         st.markdown("<br>", unsafe_allow_html=True)
 
+        # ========== CRAWL EN ATTENTE (après choix Flash / Selenium) ==========
+        pending_urls = st.session_state.get("geo_pending_urls")
+        pending_decision = st.session_state.get("geo_crawl_decision")
+        if pending_urls and pending_decision:
+            bar = st.progress(0, "Crawl en cours...")
+            crawl_logs = []
+            def add_crawl_log(msg):
+                crawl_logs.append(msg)
+            selenium_enabled = pending_decision == "selenium"
+            selenium_mode = "light" if selenium_enabled else None
+            try:
+                scr = SmartScraper(
+                    pending_urls,
+                    max_urls=st.session_state.get("geo_pending_limit", 100),
+                    use_selenium=selenium_enabled,
+                    selenium_mode=selenium_mode,
+                    log_callback=add_crawl_log,
+                )
+                res, crawl_meta = scr.run_analysis(
+                    progress_callback=lambda m, v: bar.progress(v, m)
+                )
+                base_url = pending_urls[0]
+                pending_ws = st.session_state.get("geo_pending_ws") or "Non classe"
+                infra, score = check_geo_infrastructure(base_url, crawl_results=res)
+                ai_access = check_ai_accessibility(base_url, res)
+                for k in ("geo_pending_urls", "geo_pending_limit", "geo_pending_ws", "geo_pending_base_url", "geo_crawl_decision"):
+                    st.session_state.pop(k, None)
+                st.session_state.update({
+                    "results": res,
+                    "clusters": scr.get_pattern_summary(),
+                    "target_url": base_url,
+                    "start_urls": pending_urls,
+                    "current_ws": pending_ws,
+                    "crawl_stats": crawl_meta.get("stats", {}),
+                    "filtered_log": crawl_meta.get("filtered_log", []),
+                    "duplicate_log": crawl_meta.get("duplicate_log", []),
+                    "ai_accessibility": ai_access,
+                    "geo_infra": infra,
+                    "geo_score": score,
+                })
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erreur lors du crawl : {e}")
+                for k in ("geo_pending_urls", "geo_pending_limit", "geo_pending_ws", "geo_pending_base_url", "geo_crawl_decision"):
+                    st.session_state.pop(k, None)
+            return
+
         if st.button("LANCER L'ANALYSE", use_container_width=True, type="primary"):
             if url_input:
                 urls = [line.strip() for line in url_input.strip().split('\n') if line.strip()]
@@ -1401,36 +1448,110 @@ def render_audit_geo():
                     return
 
                 base_url = urls[0]
+                if not base_url.startswith(("http://", "https://")):
+                    base_url = "https://" + base_url
+                base_url = base_url.rstrip("/")
+
+                # ========== ÉTAPE 1 : ANALYSE HOME (FLASH) ==========
+                with st.spinner("🔍 Analyse de la page d'accueil..."):
+                    try:
+                        response = requests.get(
+                            base_url,
+                            timeout=10,
+                            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+                        )
+                        soup = BeautifulSoup(response.text, "html.parser")
+                        jsonld_scripts = soup.find_all("script", type="application/ld+json")
+                        has_jsonld = len(jsonld_scripts) > 0
+                    except Exception as e:
+                        st.error(f"❌ Impossible d'accéder au site : {e}")
+                        return
+
+                st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+
+                # ========== ÉTAPE 2 : DÉCISION ==========
+                if has_jsonld:
+                    st.success("✅ **JSON-LD détecté sur la page d'accueil**")
+                    st.info(f"📊 {len(jsonld_scripts)} bloc(s) JSON-LD trouvé(s)")
+                    with st.expander("📄 Aperçu du JSON-LD détecté", expanded=False):
+                        try:
+                            jsonld_data = json.loads(jsonld_scripts[0].string)
+                            st.json(jsonld_data)
+                        except Exception:
+                            st.code((jsonld_scripts[0].string or "")[:500])
+                    st.markdown("**Stratégie recommandée** : Mode Flash (rapide, 1-2s/page)")
+                    force_selenium = st.checkbox(
+                        "🔄 Forcer Selenium quand même (utile si pages internes sont SPA)",
+                        value=False,
+                        key="force_selenium_checkbox",
+                    )
+                    selenium_enabled = force_selenium
+                    selenium_mode = "light" if force_selenium else None
+                else:
+                    st.warning("⚠️ **Aucun JSON-LD détecté sur la page d'accueil**")
+                    st.info(
+                        "Le JSON-LD peut être injecté dynamiquement par JavaScript (sites SPA : Nuxt, React, Vue). "
+                        "Selenium peut résoudre ce problème mais ralentit le crawl (4-6s/page au lieu de 1-2s)."
+                    )
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("⚡ **Continuer en Flash**", use_container_width=True, key="btn_flash"):
+                            st.session_state["geo_pending_urls"] = urls
+                            st.session_state["geo_pending_limit"] = limit_in
+                            st.session_state["geo_pending_ws"] = ws_in or "Non classe"
+                            st.session_state["geo_pending_base_url"] = base_url
+                            st.session_state["geo_crawl_decision"] = "flash"
+                            st.rerun()
+                    with col2:
+                        if st.button("🔄 **Activer Selenium**", use_container_width=True, type="primary", key="btn_selenium"):
+                            st.session_state["geo_pending_urls"] = urls
+                            st.session_state["geo_pending_limit"] = limit_in
+                            st.session_state["geo_pending_ws"] = ws_in or "Non classe"
+                            st.session_state["geo_pending_base_url"] = base_url
+                            st.session_state["geo_crawl_decision"] = "selenium"
+                            st.rerun()
+                    if "geo_crawl_decision" not in st.session_state or st.session_state.get("geo_crawl_decision") not in ("flash", "selenium"):
+                        st.info("👆 Choisissez une stratégie pour continuer")
+                        return
+                    selenium_enabled = st.session_state.get("geo_crawl_decision") == "selenium"
+                    selenium_mode = "light" if selenium_enabled else None
+
+                # ========== ÉTAPE 3 : CRAWL ==========
+                st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+                strategy_label = "🔄 Selenium Light" if selenium_enabled else "⚡ Flash (Requests)"
+                st.info(f"**Mode de crawl** : {strategy_label}")
 
                 bar = st.progress(0, "Crawl en cours...")
-                
-                # Callback pour logs
                 crawl_logs = []
                 def add_crawl_log(msg):
                     crawl_logs.append(msg)
 
-                # ✅ CRAWL D'ABORD avec SmartScraper (Selenium activé automatiquement pour SPA)
-                scr = SmartScraper(urls, max_urls=limit_in, log_callback=add_crawl_log)
-                res, stats = scr.run_analysis(
-                    progress_callback=lambda m, v: bar.progress(v, m)
-                )
+                try:
+                    scr = SmartScraper(
+                        urls,
+                        max_urls=limit_in,
+                        use_selenium=selenium_enabled,
+                        selenium_mode=selenium_mode,
+                        log_callback=add_crawl_log,
+                    )
+                    res, crawl_meta = scr.run_analysis(
+                        progress_callback=lambda m, v: bar.progress(v, m)
+                    )
+                except Exception as e:
+                    st.error(f"Erreur lors du crawl : {e}")
+                    return
 
-                # Afficher les logs du crawl (optionnel)
                 if crawl_logs:
                     with st.expander("📋 Logs du crawl", expanded=False):
                         st.code("\n".join(crawl_logs[-50:]))
 
-                # ✅ PUIS analyse infrastructure AVEC les résultats du crawl (fix JSON-LD)
                 bar.progress(0.90, "Analyse infrastructure...")
                 infra, score = check_geo_infrastructure(base_url, crawl_results=res)
-                
-                st.session_state.geo_infra = infra
-                st.session_state.geo_score = score
-
-                # Double verification accessibilite IA (Frontend + API)
-                bar.progress(0.95, "Verification accessibilite IA (Frontend + API)...")
+                bar.progress(0.95, "Vérification accessibilité IA...")
                 ai_access = check_ai_accessibility(base_url, res)
 
+                st.session_state.geo_infra = infra
+                st.session_state.geo_score = score
                 st.session_state.update(
                     {
                         "results": res,
@@ -1438,9 +1559,9 @@ def render_audit_geo():
                         "target_url": base_url,
                         "start_urls": urls,
                         "current_ws": ws_in if ws_in else "Non classe",
-                        "crawl_stats": stats.get("stats", {}),
-                        "filtered_log": stats.get("filtered_log", []),
-                        "duplicate_log": stats.get("duplicate_log", []),
+                        "crawl_stats": crawl_meta.get("stats", {}),
+                        "filtered_log": crawl_meta.get("filtered_log", []),
+                        "duplicate_log": crawl_meta.get("duplicate_log", []),
                         "ai_accessibility": ai_access,
                     }
                 )
