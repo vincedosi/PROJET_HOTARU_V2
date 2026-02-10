@@ -19,7 +19,6 @@ from bs4 import BeautifulSoup
 from core.database import AuditDatabase
 from core.session_keys import get_current_user_email
 from core.scraping import SmartScraper
-from modules.off_page import render_off_page_audit
 
 # =============================================================================
 # CONSTANTE API MISTRAL
@@ -802,3 +801,169 @@ def render_journal_duplicates(duplicate_log):
             f'<span style="font-size:0.75rem;color:#0f172a;">{path}</span></div>',
             unsafe_allow_html=True
         )
+
+
+# =============================================================================
+# 4. POINT D'ENTRÉE STREAMLIT — render_audit_geo (attendu par app.py)
+# =============================================================================
+
+def _render_geo_log_box(logs):
+    """Affiche les logs du crawl dans un bloc monospace (style terminal)."""
+    if not logs:
+        return
+    content = "\n".join(logs[-200:])
+    st.markdown(
+        "<div style='font-family:SFMono-Regular,Menlo,monospace;font-size:0.75rem;"
+        "background:#0f172a;color:#e5e7eb;padding:14px;border-radius:6px;"
+        "max-height:300px;overflow:auto;white-space:pre-wrap;line-height:1.5;'>"
+        f"{html.escape(content)}</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_audit_geo():
+    """Vue principale Audit GEO : formulaire, crawl SmartScraper, infra, journaux (crawlé / filtré / doublons)."""
+    st.markdown(
+        '<p class="section-title">01 / AUDIT GEO</p>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<p style='color:#64748b;margin-bottom:20px;'>"
+        "Analyse de l'infrastructure GEO (robots.txt, sitemap, llms.txt, JSON-LD), crawl du site et journaux par catégorie.</p>",
+        unsafe_allow_html=True,
+    )
+
+    user_email = get_current_user_email()
+    if not user_email:
+        st.warning("Session utilisateur introuvable. Reconnectez-vous.")
+        return
+
+    # Formulaire
+    col_url, col_limit = st.columns([3, 1])
+    with col_url:
+        url_in = st.text_input(
+            "URL du site",
+            placeholder="https://exemple.fr",
+            key="audit_geo_url",
+        )
+    with col_limit:
+        limit_in = st.number_input(
+            "Limite pages",
+            min_value=5,
+            max_value=500,
+            value=50,
+            step=5,
+            key="audit_geo_limit",
+        )
+
+    log_placeholder = st.empty()
+    run_key = "audit_geo_run"
+
+    if st.button("LANCER L'ANALYSE", type="primary", use_container_width=True, key=run_key):
+        if not (url_in and url_in.strip()):
+            st.warning("Saisissez une URL.")
+            return
+
+        target_url = url_in.strip()
+        if not target_url.startswith(("http://", "https://")):
+            target_url = "https://" + target_url
+        base_url = target_url.rstrip("/")
+
+        logs = []
+
+        def log_callback(msg):
+            logs.append(msg)
+            with log_placeholder:
+                _render_geo_log_box(logs)
+
+        try:
+            with log_placeholder:
+                _render_geo_log_box(logs)
+            scraper = SmartScraper(
+                [target_url],
+                max_urls=int(limit_in),
+                use_selenium=False,
+                log_callback=log_callback,
+            )
+            progress = st.progress(0.0)
+            out = scraper.run_analysis(
+                progress_callback=lambda text, pct: progress.progress(min(pct, 1.0)),
+                log_callback=log_callback,
+            )
+            progress.empty()
+            if not out:
+                st.error("Le crawl n'a retourné aucun résultat.")
+                return
+            results, crawl_meta = out
+            filtered_log = crawl_meta.get("filtered_log") or []
+            duplicate_log = crawl_meta.get("duplicate_log") or []
+            stats = crawl_meta.get("stats") or {}
+
+            geo_infra, geo_infra_score = check_geo_infrastructure(base_url, crawl_results=results)
+            ai_accessibility = check_ai_accessibility(base_url, crawl_results=results)
+
+            st.session_state["geo_results"] = results
+            st.session_state["geo_infra"] = geo_infra
+            st.session_state["geo_infra_score"] = geo_infra_score
+            st.session_state["geo_filtered_log"] = filtered_log
+            st.session_state["geo_duplicate_log"] = duplicate_log
+            st.session_state["geo_crawl_logs"] = logs
+            st.session_state["geo_target_url"] = target_url
+            st.session_state["geo_ai_accessibility"] = ai_accessibility
+            st.session_state["geo_stats"] = stats
+            st.rerun()
+        except Exception as e:
+            st.error(f"Erreur lors du crawl : {e}")
+            with log_placeholder:
+                _render_geo_log_box(logs)
+            return
+
+    # Affichage des résultats (après rerun)
+    results = st.session_state.get("geo_results")
+    if not results:
+        return
+
+    target_url = st.session_state.get("geo_target_url", "")
+    geo_infra = st.session_state.get("geo_infra", {})
+    geo_infra_score = st.session_state.get("geo_infra_score", 0)
+    filtered_log = st.session_state.get("geo_filtered_log", [])
+    duplicate_log = st.session_state.get("geo_duplicate_log", [])
+    crawl_logs = st.session_state.get("geo_crawl_logs", [])
+
+    st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="section-title">02 / INFRASTRUCTURE GEO</p>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f'<p style="font-size:0.85rem;color:#64748b;margin-bottom:12px;">Score infrastructure : <strong>{geo_infra_score}/100</strong></p>',
+        unsafe_allow_html=True,
+    )
+    for name, data in geo_infra.items():
+        status = data.get("status", False)
+        meta = data.get("meta", {})
+        desc = meta.get("desc", name)
+        color = "#10b981" if status else "#FF4B4B"
+        st.markdown(
+            f'<div style="display:flex;align-items:center;gap:10px;padding:6px 0;">'
+            f'<span style="width:12px;height:12px;border-radius:50%;background:{color};"></span>'
+            f'<span style="font-weight:600;">{html.escape(name)}</span> — <span style="color:#64748b;">{html.escape(desc)}</span></div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="section-title">03 / JOURNAUX</p>',
+        unsafe_allow_html=True,
+    )
+    tab_crawled, tab_filtered, tab_duplicates = st.tabs(["Journal crawl", "Journal filtré", "Journal doublons"])
+    with tab_crawled:
+        render_journal_crawled(results)
+    with tab_filtered:
+        render_journal_filtered(filtered_log)
+    with tab_duplicates:
+        render_journal_duplicates(duplicate_log)
+
+    if crawl_logs:
+        with st.expander("Logs du crawl", expanded=False):
+            _render_geo_log_box(crawl_logs)

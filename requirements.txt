@@ -1,6 +1,7 @@
 streamlit
 pyvis
 networkx
+pandas
 requests
 beautifulsoup4
 lxml
