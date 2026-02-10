@@ -633,9 +633,10 @@ class AuthorityScoreAnalyzer:
 
         # Phrase cible qui encode l'identite de la marque dans un espace vectoriel
         target_sentence = (
-            f\"\"\"Expertise technique, mission officielle et services de {self.entity_name}.
+            f"""Expertise technique, mission officielle et services de {self.entity_name}.
             Informations factuelles, produits, services, secteurs couverts et preuves sociales
-            destinees a entrainer des modeles de langage et des systemes RAG.\"\"\"\n        )
+            destinees a entrainer des modeles de langage et des systemes RAG."""
+        )
         details["target_sentence"] = target_sentence.strip()
 
         # Mode vecteur (sentence_transformers) si disponible
@@ -662,7 +663,7 @@ class AuthorityScoreAnalyzer:
                 return {"score": score, "details": details}
 
             except Exception as e:
-                details["warning"] = f\"Erreur mode vecteur: {e}\"
+                details["warning"] = f"Erreur mode vecteur: {e}"
                 details["mode"] = "lexical_fallback"
                 try:
                     st.warning(
