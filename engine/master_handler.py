@@ -277,40 +277,118 @@ class MasterDataHandler:
         return master
     
     def auto_complete_with_mistral(self, master: MasterData, api_key: str) -> MasterData:
+        """Appelle l'API Mistral pour enrichir les champs manquants et journalise le détail."""
+
         if not api_key:
             master.errors.append("Clé API Mistral manquante")
             return master
-        
+
         existing = master.to_dict()
         prompt = f"""Tu es expert en enrichissement de données d'entreprises.
-CONTEXTE: {json.dumps(existing, ensure_ascii=False)}
-Complète les champs VIDES. Retourne UNIQUEMENT du JSON valide:
-{{"legal_name":"","slogan":"","phone":"","email":"","street":"","city":"","zip_code":"","region":"","country":"","founder_name":"","annual_revenue":"","ticker_symbol":"","stock_exchange":""}}"""
+CONTEXTE (JSON existant, certains champs peuvent déjà être remplis) :
+{json.dumps(existing, ensure_ascii=False)}
+
+Complète UNIQUEMENT les champs manquants ou vides en respectant strictement ce schéma JSON :
+{{
+  "legal_name": "<raison sociale complète de l'entreprise>",
+  "slogan": "<slogan marketing concis>",
+  "phone": "<numéro de téléphone international (ex: +33...)>",
+  "email": "<adresse email de contact>",
+  "street": "<adresse postale (rue et numéro)>",
+  "city": "<ville>",
+  "zip_code": "<code postal>",
+  "region": "<région ou état>",
+  "country": "<pays>",
+  "founder_name": "<nom du ou des fondateurs>",
+  "annual_revenue": "<chiffre d'affaires annuel (avec devise)>",
+  "ticker_symbol": "<ticker boursier si coté, sinon laisse une chaîne vide>",
+  "stock_exchange": "<nom de la bourse où l'entreprise est cotée, sinon laisse une chaîne vide>"
+}}
+
+IMPORTANT :
+- Ne renvoie que ce JSON (aucun texte avant ou après).
+- Pour un champ inconnu, renvoie une chaîne vide "".
+"""
 
         try:
-            response = requests.post(self.MISTRAL_API_URL,
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json={"model": self.MISTRAL_MODEL, "messages": [{"role": "user", "content": prompt}],
-                      "temperature": 0.1, "max_tokens": 1500}, timeout=30)
-            
+            response = requests.post(
+                self.MISTRAL_API_URL,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self.MISTRAL_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.1,
+                    "max_tokens": 1500,
+                },
+                timeout=30,
+            )
+
+            master.errors.append(f"[Mistral] Statut HTTP: {response.status_code}")
+
             if response.status_code != 200:
-                master.errors.append(f"Erreur Mistral API: {response.status_code}")
+                master.errors.append(
+                    f"[Mistral] Réponse brute: {response.text[:300]}..."
+                )
+                master.errors.append("Erreur Mistral API: statut différent de 200")
                 return master
-            
-            content = response.json()['choices'][0]['message']['content']
-            content = content.replace("```json", "").replace("```", "").strip()
-            enriched = json.loads(content)
-            
+
+            try:
+                resp_json = response.json()
+            except Exception as e_json:
+                master.errors.append(f"[Mistral] Erreur parse JSON brut: {e_json}")
+                master.errors.append(f"[Mistral] Contenu brut: {response.text[:400]}")
+                return master
+
+            content = (
+                resp_json.get("choices", [{}])[0]
+                .get("message", {})
+                .get("content", "")
+            )
+            if not content or not str(content).strip():
+                master.errors.append("[Mistral] Contenu de réponse vide.")
+                return master
+
+            master.errors.append(f"[Mistral] Contenu brut: {str(content)[:300]}...")
+
+            # Nettoyage éventuel des balises ```json
+            if isinstance(content, str):
+                content_clean = (
+                    content.replace("```json", "").replace("```", "").strip()
+                )
+            else:
+                content_clean = str(content).strip()
+
+            try:
+                enriched = json.loads(content_clean or "{}")
+            except json.JSONDecodeError as e_json:
+                master.errors.append(
+                    f"[Mistral] Erreur parsing JSON: {e_json} / payload: {content_clean[:300]}..."
+                )
+                return master
+
+            updated_keys = []
             for key, value in enriched.items():
-                if hasattr(master, key) and value and not getattr(master, key, ""):
-                    setattr(master, key, value)
-            
-            master.status = "complete"
+                if hasattr(master, key) and isinstance(value, str):
+                    if value and not getattr(master, key, ""):
+                        setattr(master, key, value)
+                        updated_keys.append(key)
+
+            if updated_keys:
+                master.errors.append(
+                    "[Mistral] Champs mis à jour: " + ", ".join(updated_keys)
+                )
+                master.status = "complete"
+            else:
+                master.errors.append(
+                    "[Mistral] Aucun champ mis à jour (déjà remplis ou réponses vides)."
+                )
+
             master.last_updated = datetime.now().isoformat()
-        except json.JSONDecodeError:
-            master.errors.append("Erreur parsing JSON")
         except Exception as e:
-            master.errors.append(f"Erreur: {str(e)}")
+            master.errors.append(f"[Mistral] Exception: {str(e)}")
         return master
 
 
