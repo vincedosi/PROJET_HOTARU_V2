@@ -368,7 +368,9 @@ def check_geo_infrastructure(base_url):
         except: results[name] = {"status": False, "meta": data}
     try:
         r = requests.get(domain, timeout=5); soup = BeautifulSoup(r.text, 'html.parser')
-        has_json = bool(soup.find('script', type='application/ld+json'))
+        # Accepter application/ld+json, application/ld+json; charset=utf-8, etc.
+        scripts = soup.find_all('script', type=True)
+        has_json = any('ld+json' in (s.get('type') or '').lower() for s in scripts)
         results["JSON-LD"] = {"status": has_json, "meta": assets["JSON-LD"]}
         if has_json: score += 25
     except: results["JSON-LD"] = {"status": False, "meta": assets["JSON-LD"]}

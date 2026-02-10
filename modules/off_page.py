@@ -1029,8 +1029,8 @@ def render_off_page_audit():
                 """)
         
         else:
-            # Mode classique sans Audit Miroir
-            tab_list, tab_export = st.tabs(["📋 LISTE", "💾 EXPORT"])
+            # Mode classique sans Audit Miroir (liste + export + méthodologie toujours visible)
+            tab_list, tab_export, tab_method = st.tabs(["📋 LISTE", "💾 EXPORT", "🧭 MÉTHODOLOGIE"])
             
             with tab_list:
                 for m in results:
@@ -1073,6 +1073,29 @@ def render_off_page_audit():
                     mime="application/json",
                     use_container_width=True
                 )
+            
+            with tab_method:
+                st.markdown("""
+                ### 🧭 Boussole Méthodologique : Audit Externe (Réputation)
+
+                L'**Audit Externe HOTARU** analyse la réception de votre marque sur Google : quels sites parlent de vous, avec quels angles.
+
+                #### Mode Liste (sans Site Officiel)
+                * **📋 LISTE** : Toutes les mentions trouvées (snippets, titres, URLs).
+                * **💾 EXPORT** : Téléchargement JSON pour analyse externe.
+
+                #### Mode Audit Miroir (avec Site Officiel)
+                Si vous renseignez le **Site Officiel** et relancez le scan, vous débloquez :
+                * **Score d'alignement** : distance sémantique entre votre message officiel (H1, Title, Meta) et ce que Google affiche.
+                * **Dashboard** : concepts alignés / bruit / invisibles.
+                * **Heat Map** : présence de chaque concept sur votre site vs SERP.
+                * **Analyse détaillée** : concept par concept avec sources.
+
+                #### Méthodologie du Score d'Alignement (Audit Miroir)
+                1. **Extraction de l'ADN** : scraping H1, Title, Meta de votre page d'accueil.
+                2. **Analyse du Bruit** : thématiques dominantes dans les 10 premiers résultats Google (hors votre site).
+                3. **Calcul du Gap** : Mistral AI compare les deux corpus (100% = résonance parfaite, moins de 60% = dissonance).
+                """)
     
     # Options avancées
     with st.expander("🔧 Options avancées"):
