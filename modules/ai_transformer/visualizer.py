@@ -26,8 +26,8 @@ class HTMLVisualizer:
     def generate_preview_html(self, html_content: str, title: str = "Preview") -> str:
         """Génère une preview HTML miniature avec iframe."""
 
-        # Amélioration : ajouter du CSS de base pour les previews et normaliser l'HTML
-        safe_html = html_content.replace('"', '&quot;').replace("'", "&#x27;")
+        # Utiliser base64 pour éviter les problèmes d'échappement
+        html_base64 = base64.b64encode(html_content.encode("utf-8")).decode("utf-8")
 
         preview_template = f"""
         <div class="preview-container" style="margin: 16px 0;">
@@ -36,8 +36,8 @@ class HTMLVisualizer:
             </div>
             <div class="preview-iframe-wrapper" style="min-height: 500px; border: 1px solid #e0e0e0; background: white; overflow: auto;">
                 <iframe
-                    srcdoc="{safe_html}"
-                    sandbox="allow-same-origin"
+                    src="data:text/html;base64,{html_base64}"
+                    sandbox="allow-same-origin allow-scripts"
                     scrolling="auto"
                     style="width: 100%; height: 100%; border: none; display: block;"
                 ></iframe>
