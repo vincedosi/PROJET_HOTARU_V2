@@ -185,51 +185,66 @@ class SmartScraper:
             return False
 
     def _init_selenium(self):
-        """Initialise Selenium avec logs détaillés."""
+        """Initialise Selenium - Compatible Streamlit Cloud."""
         try:
-            # ========== TENTATIVE 1 : UNDETECTED_CHROMEDRIVER ==========
-            try:
-                self._log("   → Test undetected_chromedriver...")
-                import undetected_chromedriver as uc
+            self._log("   → Configuration pour Streamlit Cloud...")
 
-                chrome_options = uc.ChromeOptions()
-                chrome_options.add_argument("--headless=new")
-                chrome_options.add_argument("--no-sandbox")
-                chrome_options.add_argument("--disable-dev-shm-usage")
-                chrome_options.add_argument("--disable-gpu")
-
-                self._log("   → Démarrage driver undetected...")
-                self.driver = uc.Chrome(options=chrome_options, version_main=None)
-                self._log("   ✅ Driver undetected OK")
-                return
-                
-            except ImportError:
-                self._log("   ⚠️ undetected_chromedriver non installé")
-            except Exception as e_uc:
-                self._log(f"   ⚠️ Erreur undetected : {str(e_uc)[:150]}")
-
-            # ========== TENTATIVE 2 : SELENIUM STANDARD ==========
-            self._log("   → Test Selenium standard...")
-            
-            from selenium.webdriver.chrome.service import Service
-            from webdriver_manager.chrome import ChromeDriverManager
-            
             chrome_options = Options()
             chrome_options.add_argument("--headless=new")
             chrome_options.add_argument("--no-sandbox")
             chrome_options.add_argument("--disable-dev-shm-usage")
             chrome_options.add_argument("--disable-gpu")
+            chrome_options.add_argument("--disable-software-rasterizer")
 
-            self._log("   → Téléchargement ChromeDriver...")
-            service = Service(ChromeDriverManager().install())
-            
-            self._log("   → Démarrage Chrome...")
-            self.driver = webdriver.Chrome(service=service, options=chrome_options)
-            self._log("   ✅ Driver standard OK")
+            # Sur Streamlit Cloud, chromium est installé via packages.txt
+            import shutil
+
+            # Chemins possibles pour chromium sur Streamlit Cloud
+            chromium_paths = [
+                shutil.which("chromium"),
+                shutil.which("chromium-browser"),
+                "/usr/bin/chromium",
+                "/usr/bin/chromium-browser",
+            ]
+
+            chromium_binary = None
+            for path in chromium_paths:
+                if path:
+                    chromium_binary = path
+                    self._log(f"   → Chromium trouvé : {path}")
+                    break
+
+            if chromium_binary:
+                chrome_options.binary_location = chromium_binary
+
+            # ChromeDriver sur Streamlit Cloud
+            chromedriver_paths = [
+                shutil.which("chromedriver"),
+                "/usr/bin/chromedriver",
+            ]
+
+            chromedriver_binary = None
+            for path in chromedriver_paths:
+                if path:
+                    chromedriver_binary = path
+                    self._log(f"   → ChromeDriver trouvé : {path}")
+                    break
+
+            if chromedriver_binary:
+                from selenium.webdriver.chrome.service import Service
+                service = Service(chromedriver_binary)
+                self._log("   → Démarrage Chromium...")
+                self.driver = webdriver.Chrome(service=service, options=chrome_options)
+            else:
+                self._log("   → Démarrage sans service explicite...")
+                self.driver = webdriver.Chrome(options=chrome_options)
+
+            self._log("   ✅ Selenium initialisé avec succès")
             return
 
         except Exception as e:
-            self._log(f"   ❌ ÉCHEC total : {str(e)[:200]}")
+            self._log(f"   ❌ ÉCHEC Selenium : {str(e)[:250]}")
+            self._log("   → Fallback mode requests")
             self.use_selenium = False
             self.driver = None
 
