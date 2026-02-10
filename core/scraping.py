@@ -315,7 +315,11 @@ class SmartScraper:
 
             # Extraction JSON-LD détaillée
             json_ld_data = []
-            for script in soup.find_all("script", type="application/ld+json"):
+            for script in soup.find_all("script"):
+                t = (script.get("type") or "").lower()
+                # Certains sites utilisent des variantes de type: "application/ld+json; charset=utf-8"
+                if "ld+json" not in t:
+                    continue
                 try:
                     raw = script.string or script.get_text(strip=True) or ""
                     raw = raw.strip()
