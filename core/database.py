@@ -72,6 +72,7 @@ class AuditDatabase:
                     continue
 
                 workspace_value = row[2] if len(row) > 2 else ""
+                master_json = row[9] if len(row) > 9 else ""
 
                 audit = {
                     "audit_id": row[0],
@@ -82,6 +83,7 @@ class AuditDatabase:
                     "nb_pages": row[5] if len(row) > 5 else 0,
                     "data_compressed": row[6] if len(row) > 6 else "",
                     "nom_site": row[7] if len(row) > 7 else "Site Inconnu",
+                    "master_json": master_json,
                 }
                 user_audits.append(audit)
 
@@ -123,4 +125,45 @@ class AuditDatabase:
 
         except Exception as e:
             st.error(f"Erreur de sauvegarde GSheet : {e}")
+            return False
+
+    def save_master_for_audit(self, user_email, workspace, site_url, master_json):
+        """
+        Sauvegarde le JSON-LD Master dans la colonne J ('master') de l'onglet audits
+        pour la ligne correspondant à (user_email, workspace, site_url).
+        """
+        if not self.sheet:
+            st.error("Impossible de sauvegarder le MASTER : connexion BDD échouée")
+            return False
+
+        try:
+            all_rows = self.sheet.get_all_values()
+            if len(all_rows) < 2:
+                st.error("Aucun audit existant pour enregistrer le MASTER.")
+                return False
+
+            email_normalized = (user_email or "").strip().lower()
+            ws_normalized = (workspace or "").strip()
+            url_normalized = (site_url or "").strip()
+
+            for idx, row in enumerate(all_rows[1:], start=2):
+                if len(row) < 5:
+                    continue
+                row_email = (row[1] or "").strip().lower()
+                row_ws = (row[2] or "").strip()
+                row_url = (row[4] or "").strip()
+
+                if (
+                    row_email == email_normalized
+                    and row_ws == ws_normalized
+                    and row_url == url_normalized
+                ):
+                    # Colonne J = index 10 (1-based)
+                    self.sheet.update_cell(idx, 10, master_json)
+                    return True
+
+            st.error("Aucune ligne d'audit correspondante trouvée pour ce MASTER.")
+            return False
+        except Exception as e:
+            st.error(f"Erreur de sauvegarde MASTER GSheet : {e}")
             return False

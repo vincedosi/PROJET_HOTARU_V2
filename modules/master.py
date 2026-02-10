@@ -13,6 +13,8 @@ import streamlit as st
 from bs4 import BeautifulSoup
 
 from core.scraping import fetch_page
+from core.database import AuditDatabase
+from core.session_keys import get_current_user_email
 from engine.master_handler import MasterDataHandler, MasterData, WikidataAPI
 from engine.template_builder import TemplateBuilder
 
@@ -129,6 +131,120 @@ def extract_jsonld_from_url(url: str, timeout: int = 15) -> str:
     return pretty
 
 
+def _find_organization_node(data: object) -> Dict:
+    """Cherche récursivement un noeud Organization / LocalBusiness dans un JSON-LD."""
+    if isinstance(data, dict):
+        t = data.get("@type")
+        types: List[str] = []
+        if isinstance(t, str) and t:
+            types = [t]
+        elif isinstance(t, list):
+            types = [str(x) for x in t]
+
+        if any(tt in ("Organization", "LocalBusiness", "Corporation") for tt in types):
+            return data
+
+        # Parcourir récursivement les sous-objets
+        for v in data.values():
+            found = _find_organization_node(v)
+            if found:
+                return found
+
+    elif isinstance(data, list):
+        for item in data:
+            found = _find_organization_node(item)
+            if found:
+                return found
+
+    return {}
+
+
+def extract_org_fields_from_jsonld(json_text: str) -> Dict[str, str]:
+    """
+    Extrait les champs pertinents d'un JSON-LD (Organization) pour pré-remplir Master.
+
+    Retourne un dict plat avec des clés alignées sur MasterData :
+    - brand_name, legal_name, description, site_url, logo_url,
+      phone, email, street, city, zip_code, region, country,
+      linkedin_url, twitter_url, facebook_url, instagram_url, youtube_url.
+    """
+    try:
+        data = json.loads(json_text)
+    except Exception:
+        return {}
+
+    node = _find_organization_node(data)
+    if not node:
+        return {}
+
+    out: Dict[str, str] = {}
+
+    out["brand_name"] = str(node.get("name", "")).strip()
+    out["legal_name"] = str(node.get("legalName", "")).strip()
+    out["description"] = str(node.get("description", "")).strip()
+    out["site_url"] = str(node.get("url", "")).strip()
+
+    logo = node.get("logo")
+    logo_url = ""
+    if isinstance(logo, str):
+        logo_url = logo
+    elif isinstance(logo, dict):
+        logo_url = str(logo.get("url", "")).strip()
+    out["logo_url"] = logo_url
+
+    out["phone"] = str(node.get("telephone", "")).strip()
+    out["email"] = str(node.get("email", "")).strip()
+
+    addr = node.get("address") or {}
+    if isinstance(addr, dict):
+        out["street"] = str(addr.get("streetAddress", "")).strip()
+        out["city"] = str(addr.get("addressLocality", "")).strip()
+        out["zip_code"] = str(addr.get("postalCode", "")).strip()
+        out["region"] = str(addr.get("addressRegion", "")).strip()
+        country = addr.get("addressCountry", "")
+        if isinstance(country, dict):
+            out["country"] = str(country.get("name", "")).strip()
+        else:
+            out["country"] = str(country).strip()
+
+    # Déduction des réseaux sociaux à partir de sameAs
+    same_as = node.get("sameAs") or []
+    if isinstance(same_as, str):
+        same_as = [same_as]
+
+    for url in same_as:
+        u = str(url).lower()
+        if "linkedin.com" in u and "linkedin_url" not in out:
+            out["linkedin_url"] = url
+        elif ("twitter.com" in u or "x.com" in u) and "twitter_url" not in out:
+            out["twitter_url"] = url
+        elif "facebook.com" in u and "facebook_url" not in out:
+            out["facebook_url"] = url
+        elif "instagram.com" in u and "instagram_url" not in out:
+            out["instagram_url"] = url
+        elif "youtube.com" in u and "youtube_url" not in out:
+            out["youtube_url"] = url
+
+    return {k: v for k, v in out.items() if v}
+
+
+def hydrate_master_from_org(master: MasterData, org_fields: Dict[str, str]) -> List[str]:
+    """
+    Injecte dans MasterData les champs issus du JSON-LD client (sans écraser l'existant).
+
+    Retourne la liste des champs effectivement mis à jour.
+    """
+    updated: List[str] = []
+    if not org_fields:
+        return updated
+
+    for key, value in org_fields.items():
+        if hasattr(master, key) and value:
+            current = getattr(master, key, "")
+            if not current:
+                setattr(master, key, value)
+                updated.append(key)
+    return updated
 def _escape_html(text: str) -> str:
     """Échappe les caractères HTML pour un rendu sûr."""
     return (
@@ -226,6 +342,13 @@ def render_master_tab():
     if "master_data" not in st.session_state:
         st.session_state.master_data = None
 
+    # Sélecteur de MASTER sauvegardés (depuis l'onglet audits)
+    db = AuditDatabase()
+    saved_audits = db.load_user_audits(get_current_user_email() or "")
+    saved_masters = [
+        a for a in saved_audits if (a.get("master_json") or "").strip()
+    ]
+
     # Header
     st.markdown('<h1 class="zen-title">MASTER DATA</h1>', unsafe_allow_html=True)
     st.markdown(
@@ -233,8 +356,27 @@ def render_master_tab():
         unsafe_allow_html=True,
     )
 
+    # Sous-onglets : Données / Méthodologie
     tab_donnees, tab_methodo = st.tabs(["Données", "Méthodologie"])
     with tab_donnees:
+        # Bandeau de sélection/chargement des MASTER existants
+        if saved_masters:
+            options = {
+                f"{a.get('nom_site','Site')} // {a.get('site_url','')} ({a.get('date','')})": a
+                for a in saved_masters
+            }
+            c1, c2 = st.columns([3, 1])
+            choice = c1.selectbox(
+                "Charger un MASTER existant (depuis audits)",
+                list(options.keys()),
+                index=0,
+                key="master_load_select",
+            )
+            if c2.button("CHARGER MASTER", use_container_width=True, key="load_master_btn"):
+                selected = options[choice]
+                st.session_state.jsonld_master = selected.get("master_json", "")
+                st.success("MASTER chargé depuis l'onglet audits. Vous pouvez l'utiliser pour l'AUDIT & GAP ANALYSIS.")
+
         _render_master_data_content()
     with tab_methodo:
         from modules.methodologie_blocks import render_methodologie_for_module
@@ -682,6 +824,24 @@ def _render_master_data_content():
             st.metric("LIGNES", len(st.session_state.jsonld_master.split("\n")))
             st.metric("TAILLE", f"{len(st.session_state.jsonld_master)} chars")
 
+            # Sauvegarde dans Google Sheet (colonne J 'master')
+            if st.button("ENREGISTRER DANS AUDITS", use_container_width=True, key="save_master_to_audits"):
+                db = AuditDatabase()
+                user_email = get_current_user_email() or ""
+                workspace = st.session_state.get("current_ws", "Non classé")
+                site_url = st.session_state.get("target_url", "").strip()
+                if not site_url:
+                    st.error("Impossible de sauvegarder : aucune URL de site (target_url) en mémoire.")
+                else:
+                    ok = db.save_master_for_audit(
+                        user_email=user_email,
+                        workspace=workspace,
+                        site_url=site_url,
+                        master_json=st.session_state.jsonld_master,
+                    )
+                    if ok:
+                        st.success("MASTER enregistré dans l'onglet audits (colonne J).")
+
             if st.button("NOUVEAU", use_container_width=True, key="reset_btn"):
                 st.session_state.master_data = None
                 st.session_state.pop("jsonld_master", None)
@@ -748,6 +908,7 @@ def _render_master_data_content():
                 left_html, right_html = build_json_diff_blocks(client_json, hotaru_json)
                 st.session_state["audit_gap_client_html"] = left_html
                 st.session_state["audit_gap_hotaru_html"] = right_html
+                st.session_state["audit_gap_client_json_raw"] = client_json
             except Exception as e:  # pragma: no cover - robustesse réseau / parsing
                 st.error(f"Erreur lors de l'audit JSON-LD: {e}")
 
@@ -770,5 +931,40 @@ def _render_master_data_content():
                 unsafe_allow_html=True,
             )
             st.markdown(hotaru_html, unsafe_allow_html=True)
+
+        # Bouton pour utiliser le JSON-LD client afin de compléter MASTER
+        if st.button(
+            "UTILISER LE JSON-LD CLIENT POUR REMPLIR MASTER",
+            use_container_width=True,
+            key="hydrate_master_from_client_jsonld",
+        ):
+            raw_client_json = st.session_state.get("audit_gap_client_json_raw", "")
+            if not raw_client_json:
+                st.error("Aucun JSON-LD client en mémoire. Relancez l'extraction.")
+            else:
+                try:
+                    org_fields = extract_org_fields_from_jsonld(raw_client_json)
+                    if not org_fields:
+                        st.error(
+                            "Aucun noeud Organization trouvé dans le JSON-LD client."
+                        )
+                    else:
+                        if not st.session_state.master_data:
+                            st.session_state.master_data = MasterData()
+                        updated = hydrate_master_from_org(
+                            st.session_state.master_data, org_fields
+                        )
+                        if updated:
+                            st.success(
+                                "Champs mis à jour depuis le JSON-LD client : "
+                                + ", ".join(updated)
+                            )
+                            st.rerun()
+                        else:
+                            st.info(
+                                "Aucun champ MASTER n'a été mis à jour (déjà remplis ou valeurs vides)."
+                            )
+                except Exception as e:  # pragma: no cover
+                    st.error(f"Erreur lors de l'hydratation MASTER: {e}")
 
     st.markdown("</div>", unsafe_allow_html=True)
