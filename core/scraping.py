@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urlparse, urljoin, urlunparse
 import time
 import re
+import json
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -312,7 +313,20 @@ class SmartScraper:
             unique_links = list(set(links))
             self.stats["links_discovered"] += len(unique_links)
 
-            has_structured_data = bool(soup.find("script", type="application/ld+json"))
+            # Extraction JSON-LD détaillée
+            json_ld_data = []
+            for script in soup.find_all("script", type="application/ld+json"):
+                try:
+                    raw = script.string or script.get_text(strip=True) or ""
+                    raw = raw.strip()
+                    if not raw:
+                        continue
+                    parsed = json.loads(raw)
+                    json_ld_data.append(parsed)
+                except (json.JSONDecodeError, TypeError):
+                    continue
+
+            has_structured_data = bool(json_ld_data)
             h2_count = len(soup.find_all("h2"))
             lists_count = len(soup.find_all(["ul", "ol"]))
 
@@ -326,6 +340,7 @@ class SmartScraper:
                 "html_content": html_content,
                 "last_modified": "",
                 "has_structured_data": has_structured_data,
+                "json_ld": json_ld_data,
                 "h2_count": h2_count,
                 "lists_count": lists_count,
             }
