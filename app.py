@@ -16,14 +16,6 @@ from core.session_keys import (
     SESSION_USER_EMAIL,
     get_current_user_email,
 )
-from modules.home import render_home
-from modules.audit_geo import render_audit_geo
-from modules.authority_score import render_authority_score
-from modules.audit_scraping import render_scraping_debug_tab
-from modules.master import render_master_tab
-from modules.leaf import render_leaf_tab
-from modules.eco_impact import render_eco_tab
-from modules.ai_transformer_page import render_ai_transformer_tab
 
 # VERSION et BUILD_DATE : définis dans version.py (mis à jour à chaque push/PR)
 
@@ -37,6 +29,7 @@ st.set_page_config(
 )
 
 
+@st.cache_resource
 def load_styles():
     css_path = "assets/style.css"
     if os.path.exists(css_path):
@@ -44,6 +37,7 @@ def load_styles():
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 
+@st.cache_resource
 def get_logo_base64():
     """Logo pour le header (assets/logo.png) en base64."""
     path = "assets/logo.png"
@@ -51,6 +45,52 @@ def get_logo_base64():
         return None
     with open(path, "rb") as f:
         return base64.b64encode(f.read()).decode()
+
+
+# =============================================================================
+# LAZY LOADING MODULE RENDERERS
+# =============================================================================
+def get_render_home():
+    from modules.home import render_home
+    return render_home
+
+def get_render_audit_geo():
+    from modules.audit_geo import render_audit_geo
+    return render_audit_geo
+
+def get_render_authority_score():
+    from modules.authority_score import render_authority_score
+    return render_authority_score
+
+def get_render_scraping_debug_tab():
+    from modules.audit_scraping import render_scraping_debug_tab
+    return render_scraping_debug_tab
+
+def get_render_master_tab():
+    from modules.master import render_master_tab
+    return render_master_tab
+
+def get_render_leaf_tab():
+    from modules.leaf import render_leaf_tab
+    return render_leaf_tab
+
+def get_render_eco_tab():
+    from modules.eco_impact import render_eco_tab
+    return render_eco_tab
+
+def get_render_ai_transformer_tab():
+    from modules.ai_transformer_page import render_ai_transformer_tab
+    return render_ai_transformer_tab
+
+
+# =============================================================================
+# CACHED DATABASE ACCESS
+# =============================================================================
+def get_cached_database():
+    """Retourne AuditDatabase cachée dans session_state."""
+    if "db_instance" not in st.session_state:
+        st.session_state.db_instance = AuditDatabase()
+    return st.session_state.db_instance
 
 
 # =============================================================================
@@ -120,7 +160,7 @@ def main():
     )
 
     # Workspace (niveau LOGOUT) + LOGOUT
-    db = AuditDatabase()
+    db = get_cached_database()
     all_audits = db.load_user_audits(get_current_user_email() or "")
     ws_set = {str(a.get("workspace", "")).strip() or "Non classé" for a in all_audits}
     ws_list = ["Nouveau"] if not ws_set else sorted(ws_set) + ["+ Creer Nouveau"]
@@ -148,6 +188,7 @@ def main():
     ])
 
     with tab_home:
+        render_home = get_render_home()
         render_home()
 
     with tab_audit:
@@ -155,24 +196,31 @@ def main():
             ["Audit GEO", "Authority Score", "Scraping"]
         )
         with sub_tab_geo:
+            render_audit_geo = get_render_audit_geo()
             render_audit_geo()
         with sub_tab_authority:
+            render_authority_score = get_render_authority_score()
             render_authority_score()
         with sub_tab_scraping:
+            render_scraping_debug_tab = get_render_scraping_debug_tab()
             render_scraping_debug_tab()
 
     with tab_jsonld:
         # Sous-onglets Master et Leaf uniquement ici (pas d'onglet Master/Leaf au top)
         sub_master, sub_leaf = st.tabs(["Master", "Leaf"])
         with sub_master:
+            render_master_tab = get_render_master_tab()
             render_master_tab()
         with sub_leaf:
+            render_leaf_tab = get_render_leaf_tab()
             render_leaf_tab()
 
     with tab_eco:
+        render_eco_tab = get_render_eco_tab()
         render_eco_tab()
 
     with tab_ai:
+        render_ai_transformer_tab = get_render_ai_transformer_tab()
         render_ai_transformer_tab()
 
     # FOOTER
