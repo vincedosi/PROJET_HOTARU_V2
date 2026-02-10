@@ -798,5 +798,7 @@ def render_journal_duplicates(duplicate_log):
         path = urlparse(url).path or '/'
         st.markdown(
             f'<div style="display:flex;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid #f8fafc;">'
-            f'<span style="background:#0f172a;color:#fff;padding:2px 10px;font-size:0.65rem;font-weight:800;'
-            f'min-width:40px;text-align:center;"
+            f'<span style="background:#0f172a;color:#fff;padding:2px 10px;font-size:0.65rem;font-weight:800;min-width:40px;text-align:center;">{count}</span>'
+            f'<span style="font-size:0.75rem;color:#0f172a;">{path}</span></div>',
+            unsafe_allow_html=True
+        )

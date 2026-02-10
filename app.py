@@ -142,10 +142,14 @@ def main():
             st.session_state.clear()
             st.rerun()
 
-    # NAVIGATION
-    tab_home, tab_audit, tab_jsonld, tab_eco, tab_ai = st.tabs(
-        ["Home", "Audit", "JSON-LD", "Eco-Score", "AI Transformer"]
-    )
+    # NAVIGATION — 5 onglets uniquement (Master et Leaf sont DANS JSON-LD)
+    tab_home, tab_audit, tab_jsonld, tab_eco, tab_ai = st.tabs([
+        "Home",
+        "Audit",
+        "JSON-LD",   # contient Master + Leaf en sous-onglets
+        "Eco-Score",
+        "AI Transformer",
+    ])
 
     with tab_home:
         render_home()
@@ -162,10 +166,11 @@ def main():
             render_scraping_debug_tab()
 
     with tab_jsonld:
-        sub_tab_master, sub_tab_leaf = st.tabs(["Master", "Leaf"])
-        with sub_tab_master:
+        # Sous-onglets Master et Leaf uniquement ici (pas d'onglet Master/Leaf au top)
+        sub_master, sub_leaf = st.tabs(["Master", "Leaf"])
+        with sub_master:
             render_master_tab()
-        with sub_tab_leaf:
+        with sub_leaf:
             render_leaf_tab()
 
     with tab_eco:
