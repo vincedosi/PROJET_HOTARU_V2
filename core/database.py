@@ -49,8 +49,10 @@ class AuditDatabase:
             st.error(f"Impossible d'ouvrir le GSheet. Erreur: {e}")
             self.sheet = None
 
+    @st.cache_data(ttl=300)
     def load_user_audits(self, user_email):
-        """Charge uniquement les audits de l'utilisateur connecté (isolation SaaS)."""
+        """Charge uniquement les audits de l'utilisateur connecté (isolation SaaS).
+        Résultat cachés 5 minutes par email utilisateur."""
         if not self.sheet:
             return []
 
