@@ -19,6 +19,7 @@ from core.session_keys import (
 from modules.home import render_home
 from modules.audit_geo import render_audit_geo
 from modules.authority_score import render_authority_score
+from modules.audit_scraping import render_scraping_debug_tab
 from modules.master import render_master_tab
 from modules.leaf import render_leaf_tab
 from modules.eco_impact import render_eco_tab
@@ -150,13 +151,15 @@ def main():
         render_home()
 
     with tab_audit:
-        sub_tab_geo, sub_tab_authority = st.tabs(
-            ["Audit GEO", "Authority Score"]
+        sub_tab_geo, sub_tab_authority, sub_tab_scraping = st.tabs(
+            ["Audit GEO", "Authority Score", "Scraping"]
         )
         with sub_tab_geo:
             render_audit_geo()
         with sub_tab_authority:
             render_authority_score()
+        with sub_tab_scraping:
+            render_scraping_debug_tab()
 
     with tab_master:
         render_master_tab()
