@@ -1,8 +1,9 @@
 # =============================================================================
 # AUTHORITY SCORE - AI AUTHORITY INDEX
 # Mesure la probabilite qu'une entite soit citee par les LLMs
-# 5 piliers : Knowledge Graph, Structured Data, Citation Authority,
-#              Semantic Completeness, Content Freshness
+# 5 piliers : Ancrage Knowledge Graph, Interoperabilite des donnees,
+#              Autorite de citation, Densite vectorielle (Semantic Density),
+#              Fraicheur de contenu
 # =============================================================================
 
 import streamlit as st
@@ -23,10 +24,11 @@ except ImportError:
     HAS_TRAFILATURA = False
 
 try:
-    from sklearn.feature_extraction.text import TfidfVectorizer
-    HAS_SKLEARN = True
+    from sentence_transformers import SentenceTransformer
+    HAS_SENTENCE_TRANSFORMERS = True
 except ImportError:
-    HAS_SKLEARN = False
+    SentenceTransformer = None  # type: ignore
+    HAS_SENTENCE_TRANSFORMERS = False
 
 
 # =============================================================================
@@ -76,7 +78,7 @@ class AuthorityScoreAnalyzer:
         breakdown = {}
         errors = []
 
-        # Pilier 1 : Knowledge Graph Coverage (30%)
+        # Pilier 1 : Ancrage Knowledge Graph (30%)
         try:
             kg = self._analyze_knowledge_graph()
         except Exception as e:
@@ -84,7 +86,7 @@ class AuthorityScoreAnalyzer:
             errors.append(("Knowledge Graph", str(e)))
         breakdown["knowledge_graph"] = kg
 
-        # Pilier 2 : Structured Data Footprint (25%)
+        # Pilier 2 : Interoperabilite des donnees (25%)
         try:
             sd = self._analyze_structured_data()
         except Exception as e:
@@ -100,12 +102,12 @@ class AuthorityScoreAnalyzer:
             errors.append(("Citation Authority", str(e)))
         breakdown["citation_authority"] = ca
 
-        # Pilier 4 : Semantic Completeness (15%)
+        # Pilier 4 : Densite vectorielle (Semantic Density) (15%)
         try:
             sc = self._analyze_semantic_completeness()
         except Exception as e:
             sc = {"score": 0, "details": {}, "error": str(e)}
-            errors.append(("Semantic Completeness", str(e)))
+            errors.append(("Densite vectorielle (Semantic Density)", str(e)))
         breakdown["semantic_completeness"] = sc
 
         # Pilier 5 : Content Freshness (10%)
@@ -267,6 +269,9 @@ class AuthorityScoreAnalyzer:
             "schema_types": [],
             "has_organization": False,
             "jsonld_percentage": 0.0,
+            # Nouveaux indicateurs AI-native
+            "has_same_as": False,
+            "same_as_count": 0,
         }
 
         # Collecter les URLs a analyser
@@ -286,20 +291,31 @@ class AuthorityScoreAnalyzer:
                 details["pages_analyzed"] += 1
 
                 soup = BeautifulSoup(r.text, "html.parser")
-                scripts = soup.find_all("script", type="application/ld+json")
+                # Accepte toutes les variantes de type contenant "ld+json"
+                scripts = soup.find_all(
+                    "script",
+                    type=lambda t: isinstance(t, str) and "ld+json" in t.lower(),
+                )
 
                 if scripts:
                     pages_with_jsonld += 1
 
                 for script in scripts:
                     try:
-                        ld_data = json.loads(script.string or "{}")
+                        ld_raw = script.string or script.text or ""
+                        if not ld_raw.strip():
+                            continue
+                        ld_data = json.loads(ld_raw)
                         types = self._extract_schema_types(ld_data)
                         all_types.update(types)
                         if "Organization" in types:
                             has_org = True
+                        same_as_count = self._count_same_as(ld_data)
+                        if same_as_count > 0:
+                            details["has_same_as"] = True
+                            details["same_as_count"] += same_as_count
                     except (json.JSONDecodeError, TypeError):
-                        pass
+                        continue
             except Exception:
                 continue
 
@@ -309,14 +325,24 @@ class AuthorityScoreAnalyzer:
 
         analyzed = details["pages_analyzed"]
         if analyzed > 0:
-            details["jsonld_percentage"] = round(pages_with_jsonld / analyzed * 100, 1)
+            details["jsonld_percentage"] = round(
+                pages_with_jsonld / analyzed * 100, 1
+            )
 
-        # Formule du score
-        score = min(100, (
+        # Formule du score (AI-native) :
+        # - couverture JSON-LD
+        # - diversite des types Schema.org
+        # - presence d'une Organization racine
+        # - BONUS sameAs pour la resolution d'entite / RAG
+        score = (
             pages_with_jsonld * 2
-            + len(all_types) * 10
-            + (50 if has_org else 0)
-        ))
+            + len(all_types) * 8
+            + (40 if has_org else 0)
+        )
+        if details["has_same_as"]:
+            score += 10
+
+        score = min(100, score)
 
         return {"score": score, "details": details}
 
@@ -338,6 +364,23 @@ class AuthorityScoreAnalyzer:
             for item in ld_data:
                 types.update(self._extract_schema_types(item))
         return types
+
+    def _count_same_as(self, ld_data):
+        """Compte le nombre de liens sameAs dans un bloc JSON-LD."""
+        count = 0
+        if isinstance(ld_data, dict):
+            for key, value in ld_data.items():
+                if key == "sameAs":
+                    if isinstance(value, list):
+                        count += len(value)
+                    elif isinstance(value, str):
+                        count += 1
+                else:
+                    count += self._count_same_as(value)
+        elif isinstance(ld_data, list):
+            for item in ld_data:
+                count += self._count_same_as(item)
+        return count
 
     def _collect_site_urls(self):
         """Collecte les URLs du site via sitemap ou crawl leger"""
@@ -543,52 +586,107 @@ class AuthorityScoreAnalyzer:
             pass
         return platforms
 
+    def _similarity_to_score(self, similarity: float) -> float:
+        """
+        Mapping non-lineaire de la similarite cosine vers un score 0-100.
+        - < 0.3  : tres faible alignement
+        - 0.3-0.6 : zone de progression
+        - 0.6-0.85 : bon alignement
+        - > 0.85 : excellent alignement
+        """
+        sim = max(0.0, min(similarity, 1.0))
+        if sim <= 0.3:
+            return sim / 0.3 * 40.0
+        elif sim <= 0.6:
+            return 40.0 + (sim - 0.3) / 0.3 * 30.0
+        elif sim <= 0.85:
+            return 70.0 + (sim - 0.6) / 0.25 * 20.0
+        else:
+            return 90.0 + (sim - 0.85) / 0.15 * 10.0
+
     # =========================================================================
-    # PILIER 4 : SEMANTIC COMPLETENESS (15%)
+    # PILIER 4 : DENSITE VECTORIELLE (Semantic Density) (15%)
     # =========================================================================
     def _analyze_semantic_completeness(self):
-        """Analyse la completude semantique du contenu"""
+        """
+        Analyse la densite vectorielle (Semantic Density) du contenu.
+
+        Objectif : mesurer dans l'espace d'embeddings a quel point le contenu
+        du site est aligne avec une phrase cible representant l'identite
+        et l'offre officielle de la marque.
+        """
         details = {
-            "unique_concepts": 0,
-            "coverage_score": 0.0,
-            "top_terms": [],
-            "competitor_overlap": 0.0,
+            "mode": "vector" if HAS_SENTENCE_TRANSFORMERS else "lexical_fallback",
+            "similarity": 0.0,
+            "target_sentence": "",
+            "site_tokens": 0,
+            "warning": None,
         }
 
-        # Extraire le contenu du site
+        # Extraire le contenu du site (texte brut aggrege sur quelques pages)
         site_text = self._extract_site_text()
         if not site_text:
             return {"score": 0, "details": details}
 
-        # Extraire les termes du site
-        site_terms = self._extract_key_terms(site_text)
-        details["unique_concepts"] = len(site_terms)
-        details["top_terms"] = site_terms[:20]
+        tokens = re.findall(r"\w+", site_text)
+        details["site_tokens"] = len(tokens)
 
-        # Comparer avec les concurrents si disponibles
-        if self.competitors:
-            competitor_texts = []
-            for comp_url in self.competitors[:3]:
-                comp_text = self._extract_text_from_url(comp_url)
-                if comp_text:
-                    competitor_texts.append(comp_text)
+        # Phrase cible qui encode l'identite de la marque dans un espace vectoriel
+        target_sentence = (
+            f\"\"\"Expertise technique, mission officielle et services de {self.entity_name}.
+            Informations factuelles, produits, services, secteurs couverts et preuves sociales
+            destinees a entrainer des modeles de langage et des systemes RAG.\"\"\"\n        )
+        details["target_sentence"] = target_sentence.strip()
 
-            if competitor_texts and HAS_SKLEARN:
-                coverage = self._compute_coverage(site_text, competitor_texts)
-                details["coverage_score"] = round(coverage * 100, 1)
-                details["competitor_overlap"] = round(coverage * 100, 1)
-            else:
-                # Sans concurrents ou sans sklearn, baser sur la richesse seule
-                details["coverage_score"] = min(100, len(site_terms) * 2)
-        else:
-            details["coverage_score"] = min(100, len(site_terms) * 2)
+        # Mode vecteur (sentence_transformers) si disponible
+        if HAS_SENTENCE_TRANSFORMERS:
+            try:
+                if not hasattr(self, "_st_model"):
+                    # Modele generaliste, leger et largement supporte
+                    self._st_model = SentenceTransformer("all-MiniLM-L6-v2")
 
-        # Formule du score
-        coverage_component = details["coverage_score"] * 0.7
-        terms_component = min(100, len(site_terms) / 5 * 100) * 0.3
-        score = min(100, coverage_component + terms_component)
+                embeddings = self._st_model.encode(
+                    [site_text, details["target_sentence"]],
+                    normalize_embeddings=True,
+                )
+                site_vec, target_vec = embeddings
 
-        return {"score": round(score, 1), "details": details}
+                # Produit scalaire car vecteurs normalises => cosine similarity
+                similarity = float((site_vec * target_vec).sum())
+                similarity = max(min(similarity, 1.0), -1.0)
+                details["similarity"] = round(similarity, 4)
+
+                # Mapping non-lineaire cosine -> score 0-100 (plus discriminant)
+                score = round(self._similarity_to_score(similarity), 1)
+
+                return {"score": score, "details": details}
+
+            except Exception as e:
+                details["warning"] = f\"Erreur mode vecteur: {e}\"
+                details["mode"] = "lexical_fallback"
+                try:
+                    st.warning(
+                        "Mode Vecteur indisponible, fallback lexical active. "
+                        "Installez 'sentence_transformers' pour un scoring vectoriel precis."
+                    )
+                except Exception:
+                    # En contexte non-UI (tests), on ignore le warning visuel
+                    pass
+
+        # Fallback lexical (sans embeddings) : simple recouvrement de tokens
+        sim, score = self._lexical_fallback_similarity(site_text, details["target_sentence"])
+        details["similarity"] = round(sim, 4)
+        if not details["warning"]:
+            details["warning"] = (
+                "Mode Vecteur indisponible, fallback lexical active "
+                "(similarite basee sur le recouvrement de tokens)."
+            )
+        try:
+            st.warning(details["warning"])
+        except Exception:
+            pass
+
+        return {"score": score, "details": details}
 
     def _extract_site_text(self):
         """Extrait le texte principal du site"""
@@ -623,66 +721,28 @@ class AuthorityScoreAnalyzer:
         except Exception:
             return ""
 
-    def _extract_key_terms(self, text):
-        """Extrait les termes cles d'un texte"""
-        if not text:
-            return []
+    def _lexical_fallback_similarity(self, site_text, target_sentence):
+        """
+        Fallback sans embeddings : similarite basee sur le recouvrement de tokens.
 
-        if HAS_SKLEARN:
-            try:
-                vectorizer = TfidfVectorizer(
-                    max_features=100,
-                    stop_words=None,
-                    min_df=1,
-                    ngram_range=(1, 2),
-                )
-                tfidf = vectorizer.fit_transform([text])
-                terms = vectorizer.get_feature_names_out()
-                scores = tfidf.toarray()[0]
-                sorted_terms = sorted(
-                    zip(terms, scores), key=lambda x: x[1], reverse=True
-                )
-                return [t[0] for t in sorted_terms if len(t[0]) > 3][:50]
-            except Exception:
-                pass
+        Utilise un simple ratio d'intersection de vocabulaire pour approximer
+        la proximite entre le contenu du site et la phrase cible.
+        """
+        site_tokens = set(
+            re.findall(r"\w+", site_text.lower())
+        )
+        target_tokens = set(
+            re.findall(r"\w+", target_sentence.lower())
+        )
 
-        # Fallback sans sklearn
-        words = re.findall(r"\b[a-zA-ZàâéèêëïîôùûüÿçÀÂÉÈÊËÏÎÔÙÛÜŸÇ]{4,}\b", text.lower())
-        counter = Counter(words)
-        return [w for w, _ in counter.most_common(50)]
+        if not site_tokens or not target_tokens:
+            return 0.0, 0.0
 
-    def _compute_coverage(self, site_text, competitor_texts):
-        """Calcule la couverture semantique par rapport aux concurrents"""
-        try:
-            all_texts = [site_text] + competitor_texts
-            vectorizer = TfidfVectorizer(max_features=200, ngram_range=(1, 2))
-            tfidf_matrix = vectorizer.fit_transform(all_texts)
-
-            # Termes des concurrents
-            competitor_terms = set()
-            feature_names = vectorizer.get_feature_names_out()
-            for i in range(1, len(all_texts)):
-                scores = tfidf_matrix[i].toarray()[0]
-                top_indices = scores.argsort()[-50:]
-                for idx in top_indices:
-                    if scores[idx] > 0:
-                        competitor_terms.add(feature_names[idx])
-
-            if not competitor_terms:
-                return 0.5
-
-            # Termes du site
-            site_scores = tfidf_matrix[0].toarray()[0]
-            site_terms = set()
-            for idx, score in enumerate(site_scores):
-                if score > 0:
-                    site_terms.add(feature_names[idx])
-
-            overlap = site_terms & competitor_terms
-            return len(overlap) / len(competitor_terms) if competitor_terms else 0.5
-
-        except Exception:
-            return 0.5
+        overlap = site_tokens & target_tokens
+        sim = len(overlap) / len(target_tokens) if target_tokens else 0.0
+        sim = max(0.0, min(sim, 1.0))
+        score = round(sim * 100, 1)
+        return sim, score
 
     # =========================================================================
     # PILIER 5 : CONTENT FRESHNESS (10%)
@@ -810,11 +870,11 @@ class AuthorityScoreAnalyzer:
     def _generate_recommendations(self, breakdown):
         """Genere les 2-3 recommandations prioritaires basees sur les piliers les plus faibles"""
         pillar_scores = [
-            ("Knowledge Graph", breakdown["knowledge_graph"]["score"], "knowledge_graph"),
-            ("Structured Data", breakdown["structured_data"]["score"], "structured_data"),
-            ("Citation Authority", breakdown["citation_authority"]["score"], "citation_authority"),
-            ("Semantic Completeness", breakdown["semantic_completeness"]["score"], "semantic_completeness"),
-            ("Content Freshness", breakdown["content_freshness"]["score"], "content_freshness"),
+            ("Ancrage Knowledge Graph", breakdown["knowledge_graph"]["score"], "knowledge_graph"),
+            ("Interopérabilité des Données", breakdown["structured_data"]["score"], "structured_data"),
+            ("Autorité de Citation", breakdown["citation_authority"]["score"], "citation_authority"),
+            ("Densité Vectorielle", breakdown["semantic_completeness"]["score"], "semantic_completeness"),
+            ("Fraîcheur de Contenu", breakdown["content_freshness"]["score"], "content_freshness"),
         ]
 
         # Trier par score croissant
@@ -830,49 +890,48 @@ class AuthorityScoreAnalyzer:
                 if score == 0:
                     recommendations.append(
                         f"Creer une fiche Wikidata pour '{self.entity_name}' avec les proprietes essentielles "
-                        "(site web, identifiants, description). C'est le facteur #1 de citation par les LLMs."
+                        "(site web officiel, identifiants externes, description factuelle). "
+                        "C'est un point d'ancrage central pour les LLMs et les systemes RAG."
                     )
                 else:
                     recommendations.append(
                         "Enrichir la fiche Wikidata : ajouter des references, identifiants externes "
-                        "et liens vers Wikipedia pour renforcer la couverture Knowledge Graph."
+                        "(ISNI, SIREN, etc.) et des liens vers Wikipedia pour renforcer l'ancrage Knowledge Graph "
+                        "dans les jeux de donnees d'entrainement."
                     )
 
             elif key == "structured_data":
                 if score < 30:
                     recommendations.append(
-                        "Implementer le balisage JSON-LD sur toutes les pages (Organization, Article, FAQPage). "
-                        "Les donnees structurees sont le langage natif des LLMs."
+                        "Implementer un JSON-LD propre et complet (Organization, WebSite, WebPage) sur les pages strategiques. "
+                        "Les donnees structurees sont le langage d'interoperabilite natif des LLMs."
                     )
                 else:
                     recommendations.append(
-                        "Diversifier les types Schema.org (ajouter FAQPage, HowTo, Product) "
-                        "et assurer la presence du type Organization sur la homepage."
+                        "Renforcer l'interoperabilite : "
+                        "utiliser la propriete sameAs pour lier le site aux profils officiels (Wikidata, Wikipedia, reseaux sociaux) "
+                        "et diversifier les types Schema.org (FAQPage, HowTo, Product) sur les pages idoines."
                     )
 
             elif key == "citation_authority":
                 recommendations.append(
                     "Renforcer l'autorite de citation : creer/enrichir la page Wikipedia, "
-                    "obtenir des backlinks depuis des sources autoritaires, "
-                    "et assurer une presence active sur les reseaux sociaux."
+                    "multiplier les citations dans des sources de reference (medias, organismes officiels) "
+                    "et maintenir une presence active sur les reseaux sociaux relies au site officiel."
                 )
 
             elif key == "semantic_completeness":
-                if self.competitors:
-                    recommendations.append(
-                        "Ameliorer la couverture semantique : analyser les termes utilises par les concurrents "
-                        "et enrichir le contenu avec les concepts manquants."
-                    )
-                else:
-                    recommendations.append(
-                        "Enrichir le contenu avec plus de concepts uniques, "
-                        "de donnees factuelles et de termes du domaine d'expertise."
-                    )
+                recommendations.append(
+                    "Augmenter la densite vectorielle : clarifier la proposition de valeur, "
+                    "structurer les pages autour de blocs d'information factuels (qui, quoi, ou, preuves, donnees chiffrées) "
+                    "et injecter des exemples concrets pour faciliter l'encodage en embeddings utiles au RAG."
+                )
 
             elif key == "content_freshness":
                 recommendations.append(
-                    "Publier du contenu frais regulierement et mettre a jour les pages existantes. "
-                    "Ajouter un sitemap.xml avec les dates lastmod pour signaler la fraicheur aux crawlers."
+                    "Publier du contenu frais regulierement, mettre a jour les pages existantes et exposer les dates "
+                    "de mise a jour via sitemap.xml (lastmod). Des contenus recents sont sur-representees dans les "
+                    "datasets recents et les index RAG."
                 )
 
         return recommendations[:3]
@@ -915,7 +974,7 @@ def render_authority_score():
     )
     st.markdown(
         '<p class="zen-subtitle">'
-        "AI AUTHORITY INDEX // MESURE LA PROBABILITE DE CITATION PAR LES LLMS</p>",
+        "AI AUTHORITY INDEX // MESURE LA COMPATIBILITE D'UNE MARQUE AVEC LES LLMS & SYSTEMES RAG</p>",
         unsafe_allow_html=True,
     )
 
@@ -975,10 +1034,10 @@ def _render_authority_analyse_content():
 
         analyzer = AuthorityScoreAnalyzer(entity_name, url, comp_list)
 
-        with st.spinner("Analyse en cours..."):
-            progress = st.progress(0, "Pilier 1/5 : Knowledge Graph Coverage...")
+        with st.spinner("Analyse en cours (graphe de connaissances, JSON-LD, vecteurs)..."):
+            progress = st.progress(0, "Pilier 1/5 : Ancrage Knowledge Graph...")
 
-            progress.progress(0.10, "Pilier 1/5 : Knowledge Graph (Wikidata)...")
+            progress.progress(0.10, "Pilier 1/5 : Ancrage Knowledge Graph (Wikidata)...")
             result = {"breakdown": {}}
 
             try:
@@ -987,28 +1046,28 @@ def _render_authority_analyse_content():
                 kg = {"score": 0, "details": {}, "error": str(e)}
             result["breakdown"]["knowledge_graph"] = kg
 
-            progress.progress(0.30, "Pilier 2/5 : Structured Data (JSON-LD)...")
+            progress.progress(0.30, "Pilier 2/5 : Interopérabilité des Données (JSON-LD, sameAs)...")
             try:
                 sd = analyzer._analyze_structured_data()
             except Exception as e:
                 sd = {"score": 0, "details": {}, "error": str(e)}
             result["breakdown"]["structured_data"] = sd
 
-            progress.progress(0.50, "Pilier 3/5 : Citation Authority...")
+            progress.progress(0.50, "Pilier 3/5 : Autorité de Citation (signaux externes)...")
             try:
                 ca = analyzer._analyze_citation_authority()
             except Exception as e:
                 ca = {"score": 0, "details": {}, "error": str(e)}
             result["breakdown"]["citation_authority"] = ca
 
-            progress.progress(0.70, "Pilier 4/5 : Semantic Completeness...")
+            progress.progress(0.70, "Pilier 4/5 : Densité Vectorielle (Semantic Density)...")
             try:
                 sc = analyzer._analyze_semantic_completeness()
             except Exception as e:
                 sc = {"score": 0, "details": {}, "error": str(e)}
             result["breakdown"]["semantic_completeness"] = sc
 
-            progress.progress(0.90, "Pilier 5/5 : Content Freshness...")
+            progress.progress(0.90, "Pilier 5/5 : Fraîcheur de Contenu...")
             try:
                 cf = analyzer._analyze_content_freshness()
             except Exception as e:
@@ -1096,11 +1155,11 @@ def _render_authority_analyse_content():
     )
 
     pillar_config = [
-        ("Knowledge Graph Coverage", "knowledge_graph", "30%"),
-        ("Structured Data Footprint", "structured_data", "25%"),
-        ("Citation Authority", "citation_authority", "20%"),
-        ("Semantic Completeness", "semantic_completeness", "15%"),
-        ("Content Freshness", "content_freshness", "10%"),
+        ("Ancrage Knowledge Graph", "knowledge_graph", "30%"),
+        ("Interopérabilité des Données", "structured_data", "25%"),
+        ("Autorité de Citation", "citation_authority", "20%"),
+        ("Densité Vectorielle (Semantic Density)", "semantic_completeness", "15%"),
+        ("Fraîcheur de Contenu", "content_freshness", "10%"),
     ]
 
     for display_name, key, weight in pillar_config:
@@ -1139,8 +1198,8 @@ def _render_authority_analyse_content():
         unsafe_allow_html=True,
     )
 
-    # Pilier 1 : Knowledge Graph
-    with st.expander(f"KNOWLEDGE GRAPH COVERAGE  ({bd['knowledge_graph']['score']}/100)", expanded=False):
+    # Pilier 1 : Ancrage Knowledge Graph
+    with st.expander(f"ANCRAGE KNOWLEDGE GRAPH  ({bd['knowledge_graph']['score']}/100)", expanded=False):
         kg_d = bd["knowledge_graph"].get("details", {})
         if kg_d.get("qid"):
             st.markdown(
@@ -1169,16 +1228,18 @@ def _render_authority_analyse_content():
                 unsafe_allow_html=True,
             )
 
-    # Pilier 2 : Structured Data
-    with st.expander(f"STRUCTURED DATA FOOTPRINT  ({bd['structured_data']['score']}/100)", expanded=False):
+    # Pilier 2 : Interopérabilité des Données
+    with st.expander(f"INTEROPÉRABILITÉ DES DONNÉES  ({bd['structured_data']['score']}/100)", expanded=False):
         sd_d = bd["structured_data"].get("details", {})
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("PAGES ANALYSEES", sd_d.get("pages_analyzed", 0))
         with col2:
             st.metric("PAGES AVEC JSON-LD", sd_d.get("pages_with_jsonld", 0))
         with col3:
             st.metric("% JSON-LD", f'{sd_d.get("jsonld_percentage", 0)}%')
+        with col4:
+            st.metric("LIENS sameAs", sd_d.get("same_as_count", 0))
 
         types = sd_d.get("schema_types", [])
         if types:
@@ -1200,8 +1261,16 @@ def _render_authority_analyse_content():
                 unsafe_allow_html=True,
             )
 
-    # Pilier 3 : Citation Authority
-    with st.expander(f"CITATION AUTHORITY  ({bd['citation_authority']['score']}/100)", expanded=False):
+        if sd_d.get("has_same_as"):
+            st.markdown(
+                '<p style="font-size:0.75rem;color:#000;font-weight:700;margin-top:4px;">'
+                "Propriete <code>sameAs</code> detectee : le site est plus facilement resolu "
+                "comme entite unique par les LLMs et les index RAG.</p>",
+                unsafe_allow_html=True,
+            )
+
+    # Pilier 3 : Autorité de Citation
+    with st.expander(f"AUTORITÉ DE CITATION  ({bd['citation_authority']['score']}/100)", expanded=False):
         ca_d = bd["citation_authority"].get("details", {})
         col1, col2 = st.columns(2)
         with col1:
@@ -1227,30 +1296,25 @@ def _render_authority_analyse_content():
                 )
             st.markdown(social_html, unsafe_allow_html=True)
 
-    # Pilier 4 : Semantic Completeness
-    with st.expander(f"SEMANTIC COMPLETENESS  ({bd['semantic_completeness']['score']}/100)", expanded=False):
+    # Pilier 4 : Densité Vectorielle (Semantic Density)
+    with st.expander(f"DENSITÉ VECTORIELLE (SEMANTIC DENSITY)  ({bd['semantic_completeness']['score']}/100)", expanded=False):
         sc_d = bd["semantic_completeness"].get("details", {})
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("CONCEPTS UNIQUES", sc_d.get("unique_concepts", 0))
+            st.metric("MODE", sc_d.get("mode", "N/A"))
         with col2:
-            st.metric("SCORE COUVERTURE", f'{sc_d.get("coverage_score", 0)}%')
+            st.metric("SIMILARITÉ COSINE", sc_d.get("similarity", 0.0))
+        with col3:
+            st.metric("TOKENS CONTENU", sc_d.get("site_tokens", 0))
 
-        top_terms = sc_d.get("top_terms", [])
-        if top_terms:
-            st.markdown(
-                '<span class="label-caps" style="margin-top:12px;">TOP TERMES</span>',
-                unsafe_allow_html=True,
+        warning = sc_d.get("warning")
+        if warning:
+            st.info(
+                f"🧠 {warning}"
             )
-            terms_html = " ".join(
-                f'<span style="display:inline-block;padding:2px 8px;margin:2px;font-size:0.65rem;'
-                f'color:rgba(0,0,0,0.55);border:1px solid rgba(0,0,0,0.12);">{t}</span>'
-                for t in top_terms[:15]
-            )
-            st.markdown(terms_html, unsafe_allow_html=True)
 
-    # Pilier 5 : Content Freshness
-    with st.expander(f"CONTENT FRESHNESS  ({bd['content_freshness']['score']}/100)", expanded=False):
+    # Pilier 5 : Fraîcheur de Contenu
+    with st.expander(f"FRAÎCHEUR DE CONTENU  ({bd['content_freshness']['score']}/100)", expanded=False):
         cf_d = bd["content_freshness"].get("details", {})
         col1, col2, col3 = st.columns(3)
         with col1:

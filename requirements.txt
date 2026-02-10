@@ -8,6 +8,7 @@ trafilatura
 gspread
 google-auth
 scikit-learn
+sentence-transformers
 selenium
 webdriver-manager==4.0.1
 tiktoken
