@@ -12,6 +12,43 @@ import zlib
 import base64
 
 
+@st.cache_data(ttl=300)
+def _cached_load_user_audits_from_sheet(all_rows_list, user_email):
+    """Fonction cachée pour traiter les audits (wrapper pour @st.cache_data)."""
+    if not all_rows_list or len(all_rows_list) < 2:
+        return []
+
+    data_rows = all_rows_list[1:]
+    user_audits = []
+    email_normalized = (user_email or "").strip().lower()
+
+    for row in data_rows:
+        if len(row) < 2:
+            continue
+        # Isolation SaaS : ne retourner que les lignes de cet utilisateur
+        row_email = (row[1] or "").strip().lower()
+        if row_email != email_normalized:
+            continue
+
+        workspace_value = row[2] if len(row) > 2 else ""
+        master_json = row[9] if len(row) > 9 else ""
+
+        audit = {
+            "audit_id": row[0],
+            "user_email": row[1],
+            "workspace": workspace_value.strip() if workspace_value.strip() else "Non classé",
+            "date": row[3] if len(row) > 3 else "",
+            "site_url": row[4] if len(row) > 4 else "",
+            "nb_pages": row[5] if len(row) > 5 else 0,
+            "data_compressed": row[6] if len(row) > 6 else "",
+            "nom_site": row[7] if len(row) > 7 else "Site Inconnu",
+            "master_json": master_json,
+        }
+        user_audits.append(audit)
+
+    return user_audits
+
+
 class AuditDatabase:
     def __init__(self):
         self.scope = [
@@ -49,47 +86,16 @@ class AuditDatabase:
             st.error(f"Impossible d'ouvrir le GSheet. Erreur: {e}")
             self.sheet = None
 
-    @st.cache_data(ttl=300)
     def load_user_audits(self, user_email):
         """Charge uniquement les audits de l'utilisateur connecté (isolation SaaS).
-        Résultat cachés 5 minutes par email utilisateur."""
+        Résultats cachés 5 minutes par email utilisateur."""
         if not self.sheet:
             return []
 
         try:
             all_rows = self.sheet.get_all_values()
-            if len(all_rows) < 2:
-                return []
-
-            data_rows = all_rows[1:]
-            user_audits = []
-            email_normalized = (user_email or "").strip().lower()
-
-            for row in data_rows:
-                if len(row) < 2:
-                    continue
-                # Isolation SaaS : ne retourner que les lignes de cet utilisateur
-                row_email = (row[1] or "").strip().lower()
-                if row_email != email_normalized:
-                    continue
-
-                workspace_value = row[2] if len(row) > 2 else ""
-                master_json = row[9] if len(row) > 9 else ""
-
-                audit = {
-                    "audit_id": row[0],
-                    "user_email": row[1],
-                    "workspace": workspace_value.strip() if workspace_value.strip() else "Non classé",
-                    "date": row[3] if len(row) > 3 else "",
-                    "site_url": row[4] if len(row) > 4 else "",
-                    "nb_pages": row[5] if len(row) > 5 else 0,
-                    "data_compressed": row[6] if len(row) > 6 else "",
-                    "nom_site": row[7] if len(row) > 7 else "Site Inconnu",
-                    "master_json": master_json,
-                }
-                user_audits.append(audit)
-
-            return user_audits
+            # Appel à la fonction cachée avec les données (et non self)
+            return _cached_load_user_audits_from_sheet(all_rows, user_email)
 
         except Exception as e:
             st.error(f"Erreur lors de la lecture des audits : {e}")
