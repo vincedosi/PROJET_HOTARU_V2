@@ -179,7 +179,7 @@ def build_json_diff_blocks(client_json: str, hotaru_json: str) -> Tuple[str, str
             for j in range(j1, j2):
                 right_segments.append(("added", hotaru_lines[j]))
 
-    def _build_pre_html(segments: List[Tuple[str, str]], side: str) -> str:
+    def _build_pre_html(segments: List[Tuple[str, str]]) -> str:
         pre_style = (
             "font-family:'SF Mono','Fira Code','Consolas',monospace;"
             "font-size:0.8rem;"
@@ -190,24 +190,33 @@ def build_json_diff_blocks(client_json: str, hotaru_json: str) -> Tuple[str, str
             "overflow-x:auto;"
         )
         html = [f'<pre style="{pre_style}">']
-        for kind, line in segments:
-            style = ""
+        for idx, (kind, line) in enumerate(segments, start=1):
+            base = "display:block;padding:2px 4px;margin-bottom:1px;"
             if kind == "equal":
-                style = "background:#f5f5f5;color:#111111;"
+                # Lignes identiques : neutre / gris clair
+                style = base + "background:#f5f5f5;color:#111111;"
             elif kind == "added":
                 # Ajout HOTARU (vert)
-                style = "background:#e6ffed;color:#065f46;font-weight:700;"
+                style = base + "background:#e6ffed;color:#166534;font-weight:600;"
             elif kind == "removed":
                 # Présent uniquement chez le client (rouge)
-                style = "background:#ffeef0;color:#b91c1c;"
+                style = base + "background:#fef2f2;color:#b91c1c;"
+            else:
+                style = base
+
+            # Numéro de ligne à gauche
+            ln = (
+                f'<span style="display:inline-block;width:32px;'
+                f'text-align:right;margin-right:8px;color:#9ca3af;">{idx}</span>'
+            )
 
             escaped = _escape_html(line)
-            html.append(f'<span style="{style}">{escaped}</span>')
+            html.append(f'<span style="{style}">{ln}{escaped}</span>')
         html.append("</pre>")
         return "\n".join(html)
 
-    left_html = _build_pre_html(left_segments, side="left")
-    right_html = _build_pre_html(right_segments, side="right")
+    left_html = _build_pre_html(left_segments)
+    right_html = _build_pre_html(right_segments)
     return left_html, right_html
 
 
@@ -687,6 +696,25 @@ def _render_master_data_content():
     st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
     st.markdown(
         '<p class="section-title">04 / AUDIT & GAP ANALYSIS</p>',
+        unsafe_allow_html=True,
+    )
+
+    # Légende visuelle (identique / ajouté / manquant)
+    st.markdown(
+        """
+<div style="font-size:0.7rem;margin-bottom:12px;display:flex;gap:12px;align-items:center;">
+  <span class="label-caps" style="margin-bottom:0;">Legend</span>
+  <span style="padding:2px 6px;background:#f5f5f5;border:1px solid rgba(0,0,0,0.12);">
+    Lignes identiques
+  </span>
+  <span style="padding:2px 6px;background:#e6ffed;border:1px solid rgba(0,0,0,0.12);">
+    Ajouts HOTARU
+  </span>
+  <span style="padding:2px 6px;background:#fef2f2;border:1px solid rgba(0,0,0,0.12);">
+    Présent uniquement sur le site client
+  </span>
+</div>
+        """,
         unsafe_allow_html=True,
     )
 
