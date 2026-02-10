@@ -26,20 +26,20 @@ class HTMLVisualizer:
     def generate_preview_html(self, html_content: str, title: str = "Preview") -> str:
         """Génère une preview HTML miniature avec iframe."""
 
-        # Optionnel : encodage base64 (conservé pour évolutions futures)
-        _html_base64 = base64.b64encode(html_content.encode("utf-8")).decode("utf-8")
+        # Amélioration : ajouter du CSS de base pour les previews et normaliser l'HTML
+        safe_html = html_content.replace('"', '&quot;').replace("'", "&#x27;")
 
         preview_template = f"""
-        <div class="preview-container">
-            <div class="preview-header">
-                <h3>{title}</h3>
+        <div class="preview-container" style="margin: 16px 0;">
+            <div class="preview-header" style="padding: 12px 16px; background: #f8f8f8; border-bottom: 1px solid #e0e0e0; font-weight: 600;">
+                {title if title else "Preview"}
             </div>
-            <div class="preview-iframe-wrapper">
-                <iframe 
-                    srcdoc="{html_content.replace('"', '&quot;')}"
+            <div class="preview-iframe-wrapper" style="min-height: 500px; border: 1px solid #e0e0e0; background: white; overflow: auto;">
+                <iframe
+                    srcdoc="{safe_html}"
                     sandbox="allow-same-origin"
-                    scrolling="yes"
-                    class="preview-iframe"
+                    scrolling="auto"
+                    style="width: 100%; height: 100%; border: none; display: block;"
                 ></iframe>
             </div>
         </div>
@@ -223,20 +223,22 @@ class HTMLVisualizer:
         global_scores = scores.get("global", {})
         before = float(global_scores.get("before", 0.0))
         after = float(global_scores.get("after", 0.0))
+        delta = float(global_scores.get("delta", 0.0))
 
         gauges_html = f"""
         <div class="score-gauges">
             <div class="gauge-container">
                 <div class="gauge-wrapper">
-                    <svg class="gauge" viewBox="0 0 200 200">
-                        <circle cx="100" cy="100" r="80" fill="none" stroke="#e0e0e0" stroke-width="20"/>
-                        <circle cx="100" cy="100" r="80" fill="none" stroke="#ff6b6b" stroke-width="20"
-                                stroke-dasharray="{before * 5.026:.1f} 502.6"
-                                transform="rotate(-90 100 100)"/>
-                        <text x="100" y="100" text-anchor="middle" dy="0.3em" font-size="40" font-weight="bold">
+                    <svg class="gauge" viewBox="0 0 120 120" preserveAspectRatio="xMidYMid meet">
+                        <circle cx="60" cy="60" r="50" fill="none" stroke="#e0e0e0" stroke-width="12"/>
+                        <circle cx="60" cy="60" r="50" fill="none" stroke="#ff6b6b" stroke-width="12"
+                                stroke-dasharray="{before * 3.14159:.1f} 314.159"
+                                stroke-linecap="round"
+                                transform="rotate(-90 60 60)"/>
+                        <text x="60" y="60" text-anchor="middle" dy="0.35em" font-size="28" font-weight="bold">
                             {before:.0f}
                         </text>
-                        <text x="100" y="130" text-anchor="middle" font-size="14" fill="#666">
+                        <text x="60" y="85" text-anchor="middle" font-size="10" fill="#666">
                             AVANT
                         </text>
                     </svg>
@@ -249,28 +251,29 @@ class HTMLVisualizer:
                     </span>
                 </div>
             </div>
-            
+
             <div class="gauge-arrow">
-                <svg width="60" height="60" viewBox="0 0 60 60">
-                    <path d="M10 30 L50 30 M50 30 L40 20 M50 30 L40 40" 
-                          stroke="#4CAF50" stroke-width="3" fill="none"/>
+                <svg width="50" height="50" viewBox="0 0 50 50" style="display: inline-block;">
+                    <path d="M10 25 L40 25 M40 25 L32 17 M40 25 L32 33"
+                          stroke="#4CAF50" stroke-width="2.5" fill="none" stroke-linecap="round"/>
                 </svg>
                 <div class="improvement-badge">
-                    +{global_scores.get('delta', 0):.0f} pts
+                    +{delta:.0f} pts
                 </div>
             </div>
-            
+
             <div class="gauge-container">
                 <div class="gauge-wrapper">
-                    <svg class="gauge" viewBox="0 0 200 200">
-                        <circle cx="100" cy="100" r="80" fill="none" stroke="#e0e0e0" stroke-width="20"/>
-                        <circle cx="100" cy="100" r="80" fill="none" stroke="#4CAF50" stroke-width="20"
-                                stroke-dasharray="{after * 5.026:.1f} 502.6"
-                                transform="rotate(-90 100 100)"/>
-                        <text x="100" y="100" text-anchor="middle" dy="0.3em" font-size="40" font-weight="bold">
+                    <svg class="gauge" viewBox="0 0 120 120" preserveAspectRatio="xMidYMid meet">
+                        <circle cx="60" cy="60" r="50" fill="none" stroke="#e0e0e0" stroke-width="12"/>
+                        <circle cx="60" cy="60" r="50" fill="none" stroke="#4CAF50" stroke-width="12"
+                                stroke-dasharray="{after * 3.14159:.1f} 314.159"
+                                stroke-linecap="round"
+                                transform="rotate(-90 60 60)"/>
+                        <text x="60" y="60" text-anchor="middle" dy="0.35em" font-size="28" font-weight="bold">
                             {after:.0f}
                         </text>
-                        <text x="100" y="130" text-anchor="middle" font-size="14" fill="#666">
+                        <text x="60" y="85" text-anchor="middle" font-size="10" fill="#666">
                             APRÈS
                         </text>
                     </svg>

@@ -60,39 +60,48 @@ def _inject_ai_transformer_css() -> None:
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 40px;
+    gap: 32px;
     flex-wrap: wrap;
     margin-bottom: 32px;
+    max-width: 100%;
 }
 .gauge-container {
     text-align: center;
+    flex: 0 0 auto;
+    max-width: 150px;
 }
 .gauge-wrapper {
     position: relative;
-    width: 180px;
-    height: 180px;
+    width: 150px;
+    height: 150px;
     margin: 0 auto 8px;
+    max-width: 100%;
 }
 .gauge {
     width: 100%;
     height: 100%;
+    max-width: 150px;
+    max-height: 150px;
 }
 .gauge circle {
     transition: stroke-dasharray 0.8s ease-in-out;
 }
 .gauge-label {
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     color: var(--text-muted);
+    margin-top: 4px;
+    line-height: 1.3;
 }
 .grade-badge {
     display: inline-block;
-    padding: 4px 10px;
-    font-size: 0.75rem;
+    padding: 6px 12px;
+    font-size: 0.7rem;
     font-weight: 800;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    border-radius: 0;
+    border-radius: 2px;
     border: 1px solid var(--border-light);
+    margin-top: 4px;
 }
 .grade-aplus,
 .grade-a {
@@ -119,28 +128,36 @@ def _inject_ai_transformer_css() -> None:
     gap: 4px;
 }
 .improvement-badge {
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     font-weight: 800;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
-    padding: 4px 10px;
-    border: 1px solid var(--border);
+    padding: 6px 12px;
+    border: 1px solid #4CAF50;
+    background: #f0f7f0;
+    color: #2d7a2d;
+    border-radius: 2px;
 }
 
 /* Barres par catégorie */
 .category-bars {
     display: grid;
     gap: 16px;
+    margin-top: 24px;
 }
 .category-bar-item {
     border: 1px solid var(--border-light);
     padding: 16px;
+    border-radius: 2px;
+    background: #fafafa;
 }
 .category-bar-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 8px;
+    margin-bottom: 12px;
+    gap: 12px;
+    flex-wrap: wrap;
 }
 .category-label {
     font-size: 0.8rem;
@@ -292,7 +309,8 @@ def _inject_ai_transformer_css() -> None:
 .preview-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 16px;
+    gap: 20px;
+    margin-top: 20px;
 }
 @media (max-width: 1200px) {
     .preview-grid {
@@ -301,19 +319,28 @@ def _inject_ai_transformer_css() -> None:
 }
 .preview-container {
     border: 1px solid var(--border-light);
+    display: flex;
+    flex-direction: column;
 }
 .preview-header {
-    padding: 8px 12px;
+    padding: 12px 16px;
     border-bottom: 1px solid var(--border-light);
+    background: #f8f8f8;
+    font-weight: 600;
+    font-size: 0.9rem;
 }
 .preview-iframe-wrapper {
     background: white;
-    height: 450px;
+    flex: 1;
+    min-height: 600px;
+    overflow: hidden;
+    position: relative;
 }
 .preview-iframe {
     width: 100%;
     height: 100%;
     border: none;
+    display: block;
 }
 </style>
         """,
@@ -453,14 +480,20 @@ def render_ai_transformer_tab() -> None:
         st.markdown(visualizer.generate_code_comparison(), unsafe_allow_html=True)
 
     with tabs[2]:
-        preview_before = visualizer.generate_preview_html(
-            html_before, "AVANT – HTML original"
-        )
-        preview_after = visualizer.generate_preview_html(
-            html_after, "APRÈS – HTML optimisé IA"
-        )
-        st.markdown(
-            f'<div class="preview-grid">{preview_before}{preview_after}</div>',
-            unsafe_allow_html=True,
-        )
+        st.subheader("Comparaison visuelle avant/après")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("### 🔴 AVANT – HTML original")
+            preview_before = visualizer.generate_preview_html(
+                html_before, ""
+            )
+            st.markdown(preview_before, unsafe_allow_html=True)
+
+        with col2:
+            st.markdown("### 🟢 APRÈS – HTML optimisé IA")
+            preview_after = visualizer.generate_preview_html(
+                html_after, ""
+            )
+            st.markdown(preview_after, unsafe_allow_html=True)
 
