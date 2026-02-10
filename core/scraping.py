@@ -101,8 +101,7 @@ class SmartScraper:
                 self._log("❌ Selenium ÉCHEC → Fallback requests")
                 self.use_selenium = False
             else:
-                driver_type = "undetected" if "uc" in str(type(self.driver).__module__) else "standard"
-                self._log(f"✅ Selenium OK (type: {driver_type})")
+                self._log("✅ Selenium OK (Chromium / Streamlit Cloud)")
         else:
             self._log("📄 Mode requests activé")
 
@@ -196,10 +195,9 @@ class SmartScraper:
             chrome_options.add_argument("--disable-gpu")
             chrome_options.add_argument("--disable-software-rasterizer")
 
-            # Sur Streamlit Cloud, chromium est installé via packages.txt
+            # Recherche chromium installé via packages.txt
             import shutil
 
-            # Chemins possibles pour chromium sur Streamlit Cloud
             chromium_paths = [
                 shutil.which("chromium"),
                 shutil.which("chromium-browser"),
@@ -211,13 +209,15 @@ class SmartScraper:
             for path in chromium_paths:
                 if path:
                     chromium_binary = path
-                    self._log(f"   → Chromium trouvé : {path}")
+                    self._log(f"   ✅ Chromium trouvé : {path}")
                     break
 
-            if chromium_binary:
+            if not chromium_binary:
+                self._log("   ❌ Chromium NON trouvé - Vérifie packages.txt")
+            else:
                 chrome_options.binary_location = chromium_binary
 
-            # ChromeDriver sur Streamlit Cloud
+            # Recherche chromedriver
             chromedriver_paths = [
                 shutil.which("chromedriver"),
                 "/usr/bin/chromedriver",
@@ -227,24 +227,27 @@ class SmartScraper:
             for path in chromedriver_paths:
                 if path:
                     chromedriver_binary = path
-                    self._log(f"   → ChromeDriver trouvé : {path}")
+                    self._log(f"   ✅ ChromeDriver trouvé : {path}")
                     break
 
+            if not chromedriver_binary:
+                self._log("   ❌ ChromeDriver NON trouvé - Vérifie packages.txt")
+
+            # Démarrage
             if chromedriver_binary:
                 from selenium.webdriver.chrome.service import Service
                 service = Service(chromedriver_binary)
-                self._log("   → Démarrage Chromium...")
+                self._log("   → Démarrage Chromium avec service...")
                 self.driver = webdriver.Chrome(service=service, options=chrome_options)
             else:
-                self._log("   → Démarrage sans service explicite...")
+                self._log("   → Démarrage Chromium sans service...")
                 self.driver = webdriver.Chrome(options=chrome_options)
 
-            self._log("   ✅ Selenium initialisé avec succès")
+            self._log("   ✅ Selenium OK !")
             return
 
         except Exception as e:
-            self._log(f"   ❌ ÉCHEC Selenium : {str(e)[:250]}")
-            self._log("   → Fallback mode requests")
+            self._log(f"   ❌ ÉCHEC : {str(e)[:300]}")
             self.use_selenium = False
             self.driver = None
 
