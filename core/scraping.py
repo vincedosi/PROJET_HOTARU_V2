@@ -247,21 +247,36 @@ class SmartScraper:
             # --- MODE SELENIUM (Complexe) ---
             if self.use_selenium and self.driver:
                 try:
+                    self._log(f"🔍 Selenium: Chargement {url}")
                     self.driver.get(url)
 
                     # 1. Attendre le chargement du body
                     WebDriverWait(self.driver, 10).until(
                         EC.presence_of_element_located((By.TAG_NAME, "body"))
                     )
-                    time.sleep(2)  # Stabilisation
+                    
+                    # 2. ATTENTE EXPLICITE POUR JSON-LD (crucial pour SPA)
+                    self._log("   ⏳ Attente JSON-LD...")
+                    try:
+                        WebDriverWait(self.driver, 10).until(
+                            lambda d: d.execute_script(
+                                'return document.querySelectorAll(\'script[type*="ld+json" i]\').length > 0'
+                            )
+                        )
+                        self._log("   ✅ JSON-LD détecté dans le DOM")
+                    except Exception as wait_ex:
+                        self._log(f"   ⚠️ Timeout JSON-LD: {wait_ex}")
+                    
+                    time.sleep(2)  # Stabilisation supplémentaire
 
-                    # 2. TENTATIVE DE GESTION COOKIES (Boutons 'Accepter')
+                    # 3. GESTION COOKIES
                     try:
                         self.driver.execute_script(
                             """
                             const buttons = document.querySelectorAll('button, a, div[role="button"]');
                             buttons.forEach(btn => {
-                                if (btn.innerText.toLowerCase().includes('accepter') || btn.innerText.toLowerCase().includes('accept all')) {
+                                const text = btn.innerText.toLowerCase();
+                                if (text.includes('accepter') || text.includes('accept all') || text.includes('tout accepter')) {
                                     btn.click();
                                 }
                             });
@@ -271,55 +286,82 @@ class SmartScraper:
                     except Exception:
                         pass
 
-                    # 3. SCROLL OFFENSIF (Force le chargement du footer/liens cachés)
+                    # 4. SCROLL OFFENSIF
                     try:
                         self.driver.execute_script(
                             "window.scrollTo(0, document.body.scrollHeight);"
                         )
-                        time.sleep(2)
+                        time.sleep(1)
                         self.driver.execute_script("window.scrollTo(0, 0);")
+                        time.sleep(1)
                     except Exception:
                         pass
 
-                    # 4. EXTRACTION JSON-LD VIA JAVASCRIPT (CRUCIAL POUR LES SPA)
-                    # Capture les scripts injectés dynamiquement par React/Vue/Nuxt
+                    # 5. EXTRACTION JSON-LD VIA JAVASCRIPT (VERSION ROBUSTE)
                     try:
+                        self._log("   🔍 Extraction JSON-LD...")
+                        
+                        # Compte d'abord combien il y en a
+                        script_count = self.driver.execute_script(
+                            'return document.querySelectorAll(\'script[type*="ld+json" i]\').length'
+                        )
+                        self._log(f"   📊 {script_count} script(s) JSON-LD trouvé(s)")
+                        
+                        # Extraction avec gestion robuste
                         json_ld_from_js = self.driver.execute_script(
                             """
-                            const scripts = document.querySelectorAll('script[type="application/ld+json"]');
-                            return Array.from(scripts).map(s => {
-                                try { 
-                                    return JSON.parse(s.textContent); 
-                                } catch { 
-                                    return null; 
+                            const scripts = document.querySelectorAll('script[type*="ld+json" i]');
+                            console.log('Scripts JSON-LD trouvés:', scripts.length);
+                            
+                            return Array.from(scripts).map((s, idx) => {
+                                try {
+                                    const content = s.textContent || s.innerText || '';
+                                    console.log('Script', idx, '- longueur:', content.length);
+                                    
+                                    if (!content.trim()) {
+                                        console.warn('Script', idx, 'vide');
+                                        return null;
+                                    }
+                                    
+                                    const parsed = JSON.parse(content);
+                                    console.log('Script', idx, 'parsé avec succès');
+                                    return parsed;
+                                } catch (err) {
+                                    console.error('Script', idx, 'erreur parsing:', err.message);
+                                    return null;
                                 }
-                            }).filter(x => x);
+                            }).filter(x => x !== null);
                             """
                         )
+                        
                         if json_ld_from_js:
-                            self._log(f"   ✅ JSON-LD extrait via JS: {len(json_ld_from_js)} bloc(s)")
+                            self._log(f"   ✅ {len(json_ld_from_js)} bloc(s) JSON-LD extrait(s)")
+                            # Debug: affiche les types
+                            for i, block in enumerate(json_ld_from_js):
+                                block_type = block.get('@type', 'Unknown') if isinstance(block, dict) else 'Array'
+                                self._log(f"      • Bloc {i+1}: {block_type}")
+                        else:
+                            self._log("   ❌ Aucun JSON-LD extrait (tableau vide)")
+                            
                     except Exception as e:
-                        self._log(f"   ⚠️ Erreur extraction JSON-LD JS: {e}")
+                        self._log(f"   ⚠️ ERREUR extraction JSON-LD JS: {e}")
                         json_ld_from_js = []
 
-                    # 5. EXTRACTION LIENS VIA JAVASCRIPT (liens générés par le navigateur)
+                    # 6. EXTRACTION LIENS VIA JAVASCRIPT
                     js_links = self.driver.execute_script(
                         """
                         return Array.from(document.querySelectorAll('a[href]')).map(a => a.href);
                         """
                     )
 
-                    # On récupère aussi le HTML pour le texte
+                    # Récupération HTML
                     html_content = self.driver.page_source
                     soup = BeautifulSoup(html_content, "html.parser")
                     response_time = time.time() - start_time
-
-                    # On utilise les liens JS prioritaires
                     raw_links = js_links or []
 
                 except Exception as se:
                     self._log(f"⚠️ Erreur Selenium sur {url}: {se}")
-                    # On laisse remonter pour que le bloc except global gère l'erreur proprement
                     raise
 
             # --- MODE REQUESTS (Simple) ---
@@ -592,10 +634,17 @@ if __name__ == "__main__":
     print("🧪 TEST: Extraction JSON-LD sur site SPA (lamarinerecrute.gouv.fr)")
     print("=" * 80 + "\n")
 
+    # Callback pour voir les logs en temps réel
+    def log_callback(msg):
+        print(f"[LOG] {msg}")
+
     # Force Selenium pour ce test
     scraper = SmartScraper(
-        "https://lamarinerecrute.gouv.fr/", max_urls=1, use_selenium=True
+        "https://lamarinerecrute.gouv.fr/", 
+        max_urls=1, 
+        use_selenium=True
     )
+    scraper.log_callback = log_callback
 
     data = scraper.get_page_details("https://lamarinerecrute.gouv.fr/")
 
@@ -606,14 +655,13 @@ if __name__ == "__main__":
         print(f"   JSON-LD trouvé: {data['has_structured_data']}")
 
         if data["json_ld"]:
-            print(f"\n✅ JSON-LD extrait ({len(data['json_ld'])} bloc(s)):")
+            print(f"\n✅ SUCCESS: {len(data['json_ld'])} bloc(s) JSON-LD")
             for i, block in enumerate(data["json_ld"], 1):
                 print(f"\n--- Bloc {i} ---")
-                print(json.dumps(block, indent=2, ensure_ascii=False)[:1000])
-                if len(json.dumps(block)) > 1000:
-                    print("... (tronqué)")
+                print(json.dumps(block, indent=2, ensure_ascii=False))
         else:
-            print("\n❌ Aucun JSON-LD trouvé!")
+            print("\n❌ ÉCHEC: Aucun JSON-LD détecté")
+            print(f"HTML length: {len(data.get('html_content', ''))}")
     else:
         print("❌ Échec du scraping")
 
