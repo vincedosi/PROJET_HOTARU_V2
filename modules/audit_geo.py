@@ -19,7 +19,6 @@ from bs4 import BeautifulSoup
 from core.database import AuditDatabase
 from core.session_keys import get_current_user_email
 from core.scraping import SmartScraper
-from modules.off_page import render_off_page_audit
 
 # =============================================================================
 # CONSTANTE API MISTRAL
@@ -1335,588 +1334,325 @@ def render_methodologie():
 
 
 # =============================================================================
-# 7. INTERFACE PRINCIPALE - DESIGN HOTARU STRICT
+# 7. HELPER - LOG BOX
+# =============================================================================
+
+def _render_geo_log_box(logs):
+    """Affiche les logs du crawl dans un bloc monospace (style terminal)."""
+    if not logs:
+        return
+    content = "\n".join(logs[-200:])
+    st.markdown(
+        "<div style='font-family:SFMono-Regular,Menlo,monospace;font-size:0.75rem;"
+        "background:#0f172a;color:#e5e7eb;padding:14px;border-radius:6px;"
+        "max-height:300px;overflow:auto;white-space:pre-wrap;line-height:1.5;'>"
+        f"{html.escape(content)}</div>",
+        unsafe_allow_html=True,
+    )
+
+
+# =============================================================================
+# 8. INTERFACE PRINCIPALE - DESIGN HOTARU STRICT
 # =============================================================================
 
 def render_audit_geo():
-    db = AuditDatabase()
+    """Vue principale Audit GEO : formulaire, crawl SmartScraper, infra, journaux (crawlé / filtré / doublons)."""
+    st.markdown(
+        '<p class="section-title">01 / AUDIT GEO</p>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<p style='color:#64748b;margin-bottom:20px;'>"
+        "Analyse de l'infrastructure GEO (robots.txt, sitemap, llms.txt, JSON-LD), crawl du site et journaux par catégorie.</p>",
+        unsafe_allow_html=True,
+    )
+
     user_email = get_current_user_email()
-    all_audits = db.load_user_audits(user_email or "")
+    if not user_email:
+        st.warning("Session utilisateur introuvable. Reconnectez-vous.")
+        return
 
-    # Workspace géré dans le header (app.py), au niveau du LOGOUT
-    selected_ws = st.session_state.get("audit_workspace_select", "Nouveau")
-    filtered_audits = [a for a in all_audits if (str(a.get('workspace', '')).strip() or "Non classé") == selected_ws]
+    # Formulaire
+    col_url, col_limit = st.columns([3, 1])
+    with col_url:
+        url_in = st.text_input(
+            "URL du site",
+            placeholder="https://exemple.fr",
+            key="audit_geo_url",
+        )
+    with col_limit:
+        limit_in = st.number_input(
+            "Limite pages",
+            min_value=5,
+            max_value=500,
+            value=50,
+            step=5,
+            key="audit_geo_limit",
+        )
 
-    tab1, tab2, tab3 = st.tabs(["Audit Site", "Audit Externe", "Méthodologie"])
+    run_key = "audit_geo_run"
 
-    # ========================== TAB 1 : AUDIT SITE ==========================
-    with tab1:
-        # =================================================================
-        # ZONE DE SCAN
-        # =================================================================
+    # ========================================================
+    # BOUTON LANCER L'ANALYSE - DÉMARRE LE WORKFLOW
+    # ========================================================
+    
+    if st.button("LANCER L'ANALYSE", type="primary", use_container_width=True, key=run_key):
+        if not (url_in and url_in.strip()):
+            st.warning("Saisissez une URL.")
+            return
+
+        target_url = url_in.strip()
+        if not target_url.startswith(("http://", "https://")):
+            target_url = "https://" + target_url
+        base_url = target_url.rstrip("/")
+
+        # Stocker l'URL cible pour les étapes suivantes
+        st.session_state['audit_target_url'] = base_url
+        st.session_state['audit_limit'] = int(limit_in)
+        st.session_state['audit_step'] = 'analyze_home'  # Démarrer l'analyse
+        st.rerun()
+
+    # ========================================================
+    # ÉTAPE 1 : ANALYSE DE LA HOME
+    # ========================================================
+    
+    if st.session_state.get('audit_step') == 'analyze_home':
+        base_url = st.session_state.get('audit_target_url')
+        
+        with st.spinner("🔍 Analyse de la page d'accueil..."):
+            try:
+                response = requests.get(base_url, timeout=10, headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                })
+                soup = BeautifulSoup(response.text, 'html.parser')
+                jsonld_scripts = soup.find_all('script', type='application/ld+json')
+                has_jsonld = len(jsonld_scripts) > 0
+                
+                st.session_state['home_has_jsonld'] = has_jsonld
+                st.session_state['home_jsonld_count'] = len(jsonld_scripts)
+                st.session_state['home_jsonld_preview'] = jsonld_scripts[0].string if jsonld_scripts else None
+                st.session_state['audit_step'] = 'show_decision'
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"❌ Impossible d'accéder au site : {e}")
+                st.session_state['audit_step'] = None
+                return
+
+    # ========================================================
+    # ÉTAPE 2 : AFFICHER LA DÉCISION
+    # ========================================================
+    
+    if st.session_state.get('audit_step') == 'show_decision':
+        base_url = st.session_state.get('audit_target_url')
+        has_jsonld = st.session_state.get('home_has_jsonld', False)
+        
+        st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+        
+        if has_jsonld:
+            # CAS A : JSON-LD détecté ✅
+            jsonld_count = st.session_state.get('home_jsonld_count', 0)
+            st.success("✅ **JSON-LD détecté sur la page d'accueil**")
+            st.info(f"📊 {jsonld_count} bloc(s) JSON-LD trouvé(s)")
+            
+            # Afficher un aperçu
+            preview = st.session_state.get('home_jsonld_preview')
+            if preview:
+                with st.expander("📄 Aperçu du JSON-LD détecté", expanded=False):
+                    try:
+                        import json
+                        jsonld_data = json.loads(preview)
+                        st.json(jsonld_data)
+                    except:
+                        st.code(preview[:500])
+            
+            st.markdown("**Stratégie recommandée** : Mode Flash (rapide, 1-2s/page)")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("⚡ **Lancer en Flash**", use_container_width=True, type="primary", key="btn_flash_auto"):
+                    st.session_state['crawl_selenium_enabled'] = False
+                    st.session_state['audit_step'] = 'crawl'
+                    st.rerun()
+            
+            with col2:
+                if st.button("🔄 **Forcer Selenium**", use_container_width=True, key="btn_selenium_force"):
+                    st.session_state['crawl_selenium_enabled'] = True
+                    st.session_state['audit_step'] = 'crawl'
+                    st.rerun()
+        
+        else:
+            # CAS B : JSON-LD absent ⚠️
+            st.warning("⚠️ **Aucun JSON-LD détecté sur la page d'accueil**")
+            st.info(
+                "Le JSON-LD peut être injecté dynamiquement par JavaScript (sites SPA : Nuxt, React, Vue). "
+                "Selenium peut résoudre ce problème mais ralentit le crawl (4-6s/page au lieu de 1-2s)."
+            )
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("⚡ **Continuer en Flash**", use_container_width=True, key="btn_flash_continue"):
+                    st.session_state['crawl_selenium_enabled'] = False
+                    st.session_state['audit_step'] = 'crawl'
+                    st.rerun()
+            
+            with col2:
+                if st.button("🔄 **Activer Selenium**", use_container_width=True, type="primary", key="btn_selenium_activate"):
+                    st.session_state['crawl_selenium_enabled'] = True
+                    st.session_state['audit_step'] = 'crawl'
+                    st.rerun()
+
+    # ========================================================
+    # ÉTAPE 3 : CRAWL COMPLET
+    # ========================================================
+    
+    if st.session_state.get('audit_step') == 'crawl':
+        base_url = st.session_state.get('audit_target_url')
+        limit_in = st.session_state.get('audit_limit', 50)
+        selenium_enabled = st.session_state.get('crawl_selenium_enabled', False)
+        selenium_mode = "light" if selenium_enabled else None
+        
+        st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+        
+        strategy_label = "🔄 Selenium Light" if selenium_enabled else "⚡ Flash (Requests)"
+        st.info(f"**Mode de crawl** : {strategy_label}")
+        
+        logs = []
+        log_placeholder = st.empty()
+
+        def log_callback(msg):
+            logs.append(msg)
+            with log_placeholder:
+                _render_geo_log_box(logs)
+
+        try:
+            with log_placeholder:
+                _render_geo_log_box(logs)
+                
+            progress = st.progress(0.0)
+            
+            scraper = SmartScraper(
+                [base_url],
+                max_urls=limit_in,
+                use_selenium=selenium_enabled,
+                selenium_mode=selenium_mode,
+                log_callback=log_callback,
+            )
+            
+            out = scraper.run_analysis(
+                progress_callback=lambda text, pct: progress.progress(min(pct, 1.0)),
+                log_callback=log_callback,
+            )
+            progress.empty()
+            
+            if not out:
+                st.error("Le crawl n'a retourné aucun résultat.")
+                # Nettoyer l'état
+                for key in ['audit_step', 'audit_target_url', 'audit_limit', 'crawl_selenium_enabled', 
+                           'home_has_jsonld', 'home_jsonld_count', 'home_jsonld_preview']:
+                    st.session_state.pop(key, None)
+                return
+                
+            results, crawl_meta = out
+            filtered_log = crawl_meta.get("filtered_log") or []
+            duplicate_log = crawl_meta.get("duplicate_log") or []
+            stats = crawl_meta.get("stats") or {}
+
+            geo_infra, geo_infra_score = check_geo_infrastructure(base_url, crawl_results=results)
+            ai_accessibility = check_ai_accessibility(base_url, crawl_results=results)
+
+            st.session_state["geo_results"] = results
+            st.session_state["geo_infra"] = geo_infra
+            st.session_state["geo_infra_score"] = geo_infra_score
+            st.session_state["geo_filtered_log"] = filtered_log
+            st.session_state["geo_duplicate_log"] = duplicate_log
+            st.session_state["geo_crawl_logs"] = logs
+            st.session_state["geo_target_url"] = base_url
+            st.session_state["geo_ai_accessibility"] = ai_accessibility
+            st.session_state["geo_stats"] = stats
+            
+            # Nettoyer l'état du workflow
+            for key in ['audit_step', 'audit_target_url', 'audit_limit', 'crawl_selenium_enabled', 
+                       'home_has_jsonld', 'home_jsonld_count', 'home_jsonld_preview']:
+                st.session_state.pop(key, None)
+            
+            # Nettoyer optimisations Mistral précédentes
+            for key in ("geo_robots_optimized", "geo_robots_analysis", "geo_llms_optimized"):
+                st.session_state.pop(key, None)
+                
+            st.rerun()
+            
+        except Exception as e:
+            st.error(f"Erreur lors du crawl : {e}")
+            with log_placeholder:
+                _render_geo_log_box(logs)
+            
+            # Nettoyer l'état
+            for key in ['audit_step', 'audit_target_url', 'audit_limit', 'crawl_selenium_enabled', 
+                       'home_has_jsonld', 'home_jsonld_count', 'home_jsonld_preview']:
+                st.session_state.pop(key, None)
+            return
+
+    # ========================================================
+    # AFFICHAGE DES RÉSULTATS (après rerun)
+    # ========================================================
+    
+    results = st.session_state.get("geo_results")
+    if not results:
+        return
+
+    target_url = st.session_state.get("geo_target_url", "")
+    geo_infra = st.session_state.get("geo_infra", {})
+    geo_infra_score = st.session_state.get("geo_infra_score", 0)
+    filtered_log = st.session_state.get("geo_filtered_log", [])
+    duplicate_log = st.session_state.get("geo_duplicate_log", [])
+    crawl_logs = st.session_state.get("geo_crawl_logs", [])
+
+    st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="section-title">02 / INFRASTRUCTURE GEO</p>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f'<p style="font-size:0.85rem;color:#64748b;margin-bottom:12px;">Score infrastructure : <strong>{geo_infra_score}/100</strong></p>',
+        unsafe_allow_html=True,
+    )
+    for name, data in geo_infra.items():
+        status = data.get("status", False)
+        meta = data.get("meta", {})
+        desc = meta.get("desc", name)
+        color = "#10b981" if status else "#FF4B4B"
         st.markdown(
-            '<p class="section-title">01 / NOUVELLE ANALYSE</p>',
+            f'<div style="display:flex;align-items:center;gap:10px;padding:6px 0;">'
+            f'<span style="width:12px;height:12px;border-radius:50%;background:{color};"></span>'
+            f'<span style="font-weight:600;">{html.escape(name)}</span> — <span style="color:#64748b;">{html.escape(desc)}</span></div>',
             unsafe_allow_html=True,
         )
 
-        c1, c2 = st.columns([3, 1])
-
-        url_input = c1.text_area(
-            "URLs a analyser (une par ligne)",
-            placeholder="https://example.com/\nhttps://example.com/section1",
-            height=100,
-            label_visibility="collapsed"
-        )
-
-        default_ws = "" if selected_ws == "+ Creer Nouveau" else selected_ws
-        ws_in = c2.text_input("Nom du Projet", value=default_ws, label_visibility="collapsed",
-                              placeholder="Nom du projet")
-
-        limit_in = st.select_slider(
-            "Pages",
-            options=[10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000],
-            value=100
-        )
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        # ========== CRAWL EN ATTENTE (après choix Flash / Selenium) ==========
-        pending_urls = st.session_state.get("geo_pending_urls")
-        pending_decision = st.session_state.get("geo_crawl_decision")
-        if pending_urls and pending_decision:
-            bar = st.progress(0, "Crawl en cours...")
-            crawl_logs = []
-            def add_crawl_log(msg):
-                crawl_logs.append(msg)
-            selenium_enabled = pending_decision == "selenium"
-            selenium_mode = "light" if selenium_enabled else None
-            try:
-                scr = SmartScraper(
-                    pending_urls,
-                    max_urls=st.session_state.get("geo_pending_limit", 100),
-                    use_selenium=selenium_enabled,
-                    selenium_mode=selenium_mode,
-                    log_callback=add_crawl_log,
-                )
-                res, crawl_meta = scr.run_analysis(
-                    progress_callback=lambda m, v: bar.progress(v, m)
-                )
-                base_url = pending_urls[0]
-                pending_ws = st.session_state.get("geo_pending_ws") or "Non classe"
-                infra, score = check_geo_infrastructure(base_url, crawl_results=res)
-                ai_access = check_ai_accessibility(base_url, res)
-                for k in ("geo_pending_urls", "geo_pending_limit", "geo_pending_ws", "geo_pending_base_url", "geo_crawl_decision"):
-                    st.session_state.pop(k, None)
-                st.session_state.update({
-                    "results": res,
-                    "clusters": scr.get_pattern_summary(),
-                    "target_url": base_url,
-                    "start_urls": pending_urls,
-                    "current_ws": pending_ws,
-                    "crawl_stats": crawl_meta.get("stats", {}),
-                    "filtered_log": crawl_meta.get("filtered_log", []),
-                    "duplicate_log": crawl_meta.get("duplicate_log", []),
-                    "ai_accessibility": ai_access,
-                    "geo_infra": infra,
-                    "geo_score": score,
-                })
-                st.rerun()
-            except Exception as e:
-                st.error(f"Erreur lors du crawl : {e}")
-                for k in ("geo_pending_urls", "geo_pending_limit", "geo_pending_ws", "geo_pending_base_url", "geo_crawl_decision"):
-                    st.session_state.pop(k, None)
-            return
-
-        if st.button("LANCER L'ANALYSE", use_container_width=True, type="primary"):
-            if url_input:
-                urls = [line.strip() for line in url_input.strip().split('\n') if line.strip()]
-
-                if not urls:
-                    st.markdown(
-                        '<p style="color:#FF4B4B;font-weight:700;font-size:0.85rem;">Veuillez entrer au moins une URL.</p>',
-                        unsafe_allow_html=True,
-                    )
-                    return
-
-                domains = [urlparse(url).netloc for url in urls]
-                if len(set(domains)) > 1:
-                    st.markdown(
-                        f'<p style="color:#FF4B4B;font-weight:700;font-size:0.85rem;">'
-                        f'Toutes les URLs doivent etre du meme domaine. Trouve : {", ".join(set(domains))}</p>',
-                        unsafe_allow_html=True,
-                    )
-                    return
-
-                base_url = urls[0]
-                if not base_url.startswith(("http://", "https://")):
-                    base_url = "https://" + base_url
-                base_url = base_url.rstrip("/")
-
-                # ========== ÉTAPE 1 : ANALYSE HOME (FLASH) ==========
-                with st.spinner("🔍 Analyse de la page d'accueil..."):
-                    try:
-                        response = requests.get(
-                            base_url,
-                            timeout=10,
-                            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-                        )
-                        soup = BeautifulSoup(response.text, "html.parser")
-                        jsonld_scripts = soup.find_all("script", type="application/ld+json")
-                        has_jsonld = len(jsonld_scripts) > 0
-                    except Exception as e:
-                        st.error(f"❌ Impossible d'accéder au site : {e}")
-                        return
-
-                st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-
-                # ========== ÉTAPE 2 : DÉCISION ==========
-                if has_jsonld:
-                    st.success("✅ **JSON-LD détecté sur la page d'accueil**")
-                    st.info(f"📊 {len(jsonld_scripts)} bloc(s) JSON-LD trouvé(s)")
-                    with st.expander("📄 Aperçu du JSON-LD détecté", expanded=False):
-                        try:
-                            jsonld_data = json.loads(jsonld_scripts[0].string)
-                            st.json(jsonld_data)
-                        except Exception:
-                            st.code((jsonld_scripts[0].string or "")[:500])
-                    st.markdown("**Stratégie recommandée** : Mode Flash (rapide, 1-2s/page)")
-                    force_selenium = st.checkbox(
-                        "🔄 Forcer Selenium quand même (utile si pages internes sont SPA)",
-                        value=False,
-                        key="force_selenium_checkbox",
-                    )
-                    selenium_enabled = force_selenium
-                    selenium_mode = "light" if force_selenium else None
-                else:
-                    st.warning("⚠️ **Aucun JSON-LD détecté sur la page d'accueil**")
-                    st.info(
-                        "Le JSON-LD peut être injecté dynamiquement par JavaScript (sites SPA : Nuxt, React, Vue). "
-                        "Selenium peut résoudre ce problème mais ralentit le crawl (4-6s/page au lieu de 1-2s)."
-                    )
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if st.button("⚡ **Continuer en Flash**", use_container_width=True, key="btn_flash"):
-                            st.session_state["geo_pending_urls"] = urls
-                            st.session_state["geo_pending_limit"] = limit_in
-                            st.session_state["geo_pending_ws"] = ws_in or "Non classe"
-                            st.session_state["geo_pending_base_url"] = base_url
-                            st.session_state["geo_crawl_decision"] = "flash"
-                            st.rerun()
-                    with col2:
-                        if st.button("🔄 **Activer Selenium**", use_container_width=True, type="primary", key="btn_selenium"):
-                            st.session_state["geo_pending_urls"] = urls
-                            st.session_state["geo_pending_limit"] = limit_in
-                            st.session_state["geo_pending_ws"] = ws_in or "Non classe"
-                            st.session_state["geo_pending_base_url"] = base_url
-                            st.session_state["geo_crawl_decision"] = "selenium"
-                            st.rerun()
-                    if "geo_crawl_decision" not in st.session_state or st.session_state.get("geo_crawl_decision") not in ("flash", "selenium"):
-                        st.info("👆 Choisissez une stratégie pour continuer")
-                        return
-                    selenium_enabled = st.session_state.get("geo_crawl_decision") == "selenium"
-                    selenium_mode = "light" if selenium_enabled else None
-
-                # ========== ÉTAPE 3 : CRAWL ==========
-                st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-                strategy_label = "🔄 Selenium Light" if selenium_enabled else "⚡ Flash (Requests)"
-                st.info(f"**Mode de crawl** : {strategy_label}")
-
-                bar = st.progress(0, "Crawl en cours...")
-                crawl_logs = []
-                def add_crawl_log(msg):
-                    crawl_logs.append(msg)
-
-                try:
-                    scr = SmartScraper(
-                        urls,
-                        max_urls=limit_in,
-                        use_selenium=selenium_enabled,
-                        selenium_mode=selenium_mode,
-                        log_callback=add_crawl_log,
-                    )
-                    res, crawl_meta = scr.run_analysis(
-                        progress_callback=lambda m, v: bar.progress(v, m)
-                    )
-                except Exception as e:
-                    st.error(f"Erreur lors du crawl : {e}")
-                    return
-
-                if crawl_logs:
-                    with st.expander("📋 Logs du crawl", expanded=False):
-                        st.code("\n".join(crawl_logs[-50:]))
-
-                bar.progress(0.90, "Analyse infrastructure...")
-                infra, score = check_geo_infrastructure(base_url, crawl_results=res)
-                bar.progress(0.95, "Vérification accessibilité IA...")
-                ai_access = check_ai_accessibility(base_url, res)
-
-                st.session_state.geo_infra = infra
-                st.session_state.geo_score = score
-                st.session_state.update(
-                    {
-                        "results": res,
-                        "clusters": scr.get_pattern_summary(),
-                        "target_url": base_url,
-                        "start_urls": urls,
-                        "current_ws": ws_in if ws_in else "Non classe",
-                        "crawl_stats": crawl_meta.get("stats", {}),
-                        "filtered_log": crawl_meta.get("filtered_log", []),
-                        "duplicate_log": crawl_meta.get("duplicate_log", []),
-                        "ai_accessibility": ai_access,
-                    }
-                )
-                st.rerun()
-
-        # =================================================================
-        # ARCHIVES
-        # =================================================================
-        if filtered_audits:
-            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-            st.markdown(
-                '<p class="section-title">ARCHIVES</p>',
-                unsafe_allow_html=True
-            )
-
-            audit_labels = {f"{a.get('nom_site') or 'Audit'} ({a.get('date')})": a for a in filtered_audits}
-
-            col1, col2 = st.columns([3, 1])
-            choice = col1.selectbox("Charger un audit", list(audit_labels.keys()), label_visibility="collapsed")
-
-            if col2.button("VISUALISER", use_container_width=True, type="primary"):
-                r = audit_labels[choice]
-                raw_data = zlib.decompress(base64.b64decode(r['data_compressed'])).decode('utf-8')
-                data = json.loads(raw_data)
-                st.session_state.update({
-                    "results": data['results'],
-                    "clusters": data['clusters'],
-                    "target_url": r['site_url'],
-                    "geo_infra": data.get('geo_infra', {}),
-                    "geo_score": data.get('geo_score', 0),
-                    "current_ws": selected_ws,
-                    "crawl_stats": data.get('stats', {}),
-                    "filtered_log": data.get('filtered_log', []),
-                    "duplicate_log": data.get('duplicate_log', []),
-                    "ai_accessibility": data.get('ai_accessibility', {})
-                })
-                st.rerun()
-
-        # =================================================================
-        # RESULTATS (affiché seulement si un Audit Site a été lancé)
-        # =================================================================
-        if "results" in st.session_state:
-            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-
-            # ========== 02 / SCORE AI-READABLE ==========
-            st.markdown(
-                '<p class="section-title">02 / SCORE AI-READABLE</p>',
-                unsafe_allow_html=True
-            )
-
-            g_score = st.session_state.get("geo_score", 0)
-            score_color = _score_color(g_score)
-            score_label = _score_label(g_score)
-
-            st.markdown(
-                f'<div style="display:flex;align-items:flex-end;gap:16px;margin-bottom:12px;">'
-                f'<span style="font-size:5rem;font-weight:900;color:{score_color};line-height:1;letter-spacing:-0.04em;">{g_score}</span>'
-                f'<span style="font-size:1.2rem;font-weight:700;color:#94a3b8;margin-bottom:10px;">/100</span>'
-                f'</div>',
-                unsafe_allow_html=True
-            )
-
-            st.markdown(
-                f'<span style="display:inline-block;padding:6px 20px;font-size:0.6rem;font-weight:800;'
-                f'letter-spacing:0.2em;text-transform:uppercase;background:{score_color};color:#fff;'
-                f'border:1px solid {score_color};">{score_label}</span>',
-                unsafe_allow_html=True
-            )
-
-            st.markdown("<br><br>", unsafe_allow_html=True)
-
-            # ========== INFRASTRUCTURE ==========
-            st.markdown(
-                '<p class="section-title">03 / INFRASTRUCTURE IA</p>',
-                unsafe_allow_html=True
-            )
-
-            if st.session_state.get("geo_infra"):
-                cols = st.columns(4)
-                for i, (name, d) in enumerate(st.session_state.geo_infra.items()):
-                    with cols[i]:
-                        if d['status']:
-                            status_html = (
-                                '<span style="font-size:0.7rem;font-weight:800;color:#10b981;'
-                                'letter-spacing:0.1em;">PRESENT</span>'
-                            )
-                        else:
-                            status_html = (
-                                '<span style="font-size:0.7rem;font-weight:800;color:#FF4B4B;'
-                                'letter-spacing:0.1em;">ABSENT</span>'
-                            )
-
-                        st.markdown(
-                            f'<div style="padding:20px;border:1px solid #e2e8f0;border-left:3px solid '
-                            f'{"#10b981" if d["status"] else "#FF4B4B"};">'
-                            f'<div style="font-weight:800;font-size:0.85rem;margin-bottom:8px;">{name}</div>'
-                            f'{status_html}'
-                            f'<div style="font-size:0.75rem;color:#94a3b8;margin-top:8px;line-height:1.4;'
-                            f'font-style:italic;">{d["meta"]["desc"]}</div>'
-                            f'</div>',
-                            unsafe_allow_html=True
-                        )
-
-            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-
-            # ========== 04 / STATISTIQUES DU CRAWL ==========
-            if "crawl_stats" in st.session_state and st.session_state.crawl_stats:
-                st.markdown(
-                    '<p class="section-title">04 / STATISTIQUES DU CRAWL</p>',
-                    unsafe_allow_html=True
-                )
-
-                stats = st.session_state.crawl_stats
-
-                # Points d'entree multiples
-                if "start_urls" in st.session_state and len(st.session_state.start_urls) > 1:
-                    with st.expander(f"Points d'entree : {len(st.session_state.start_urls)}", expanded=False):
-                        for i, url in enumerate(st.session_state.start_urls, 1):
-                            st.markdown(
-                                f'<div style="padding:4px 0;font-size:0.8rem;font-family:\'Courier New\',monospace;'
-                                f'color:#64748b;">{i}. {url}</div>',
-                                unsafe_allow_html=True
-                            )
-
-                # Metriques principales - style massif
-                col1, col2, col3, col4 = st.columns(4)
-
-                metrics = [
-                    (col1, stats.get("pages_crawled", 0), "Pages crawlees"),
-                    (col2, stats.get("links_discovered", 0), "Liens decouverts"),
-                    (col3, stats.get("links_duplicate", 0), "Doublons"),
-                    (col4, stats.get("errors", 0), "Erreurs"),
-                ]
-
-                for col, value, label in metrics:
-                    with col:
-                        st.markdown(
-                            f'<div style="text-align:center;padding:24px;border:1px solid #e2e8f0;">'
-                            f'<div style="font-size:2.5rem;font-weight:900;line-height:1;color:#0f172a;">{value}</div>'
-                            f'<div style="font-size:0.6rem;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;'
-                            f'color:#94a3b8;margin-top:10px;">{label}</div>'
-                            f'</div>',
-                            unsafe_allow_html=True
-                        )
-
-                st.markdown("<br>", unsafe_allow_html=True)
-
-                # Metriques secondaires - discrets, italiques
-                s_col1, s_col2, s_col3 = st.columns(3)
-                with s_col1:
-                    st.markdown(
-                        f'<p style="font-size:0.75rem;color:#94a3b8;font-style:italic;">'
-                        f'Pages ignorees : <strong>{stats.get("pages_skipped", 0)}</strong></p>',
-                        unsafe_allow_html=True
-                    )
-                with s_col2:
-                    st.markdown(
-                        f'<p style="font-size:0.75rem;color:#94a3b8;font-style:italic;">'
-                        f'Liens filtres : <strong>{stats.get("links_filtered", 0)}</strong></p>',
-                        unsafe_allow_html=True
-                    )
-                with s_col3:
-                    st.markdown(
-                        f'<p style="font-size:0.75rem;color:#94a3b8;font-style:italic;">'
-                        f'URLs visitees : <strong>{len(st.session_state.results)}</strong></p>',
-                        unsafe_allow_html=True
-                    )
-
-            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-
-            # ========== 04.5 / RAPPORT D'AUDIT GEO & DATA ==========
-            render_geo_report(
-                st.session_state.get("target_url", ""),
-                st.session_state.get("ai_accessibility", {})
-            )
-
-            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-
-            # ========== MISTRAL OPTIMIZATION ==========
-            render_mistral_optimization(st.session_state.get("target_url", ""))
-
-            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-
-            # ========== 06 / GRAPHE DE MAILLAGE ==========
-            st.markdown(
-                '<p class="section-title">06 / GRAPHE DE MAILLAGE</p>',
-                unsafe_allow_html=True
-            )
-
-            c_expert, c_save_name, c_save_btn = st.columns([1, 2, 1])
-            expert_on = c_expert.toggle("Score AI-READABLE", value=False)
-
-            domain = urlparse(st.session_state.target_url).netloc
-            s_name = c_save_name.text_input("Nom sauvegarde", value=domain.split('.')[0], label_visibility="collapsed")
-
-            # Sauvegarde
-            if c_save_btn.button("SAUVEGARDER", use_container_width=True):
-                max_pages_to_save = 100
-                results_to_save = st.session_state.results[:max_pages_to_save]
-
-                clean_results = []
-                for r in results_to_save:
-                    clean_results.append({
-                        "url": r.get("url"),
-                        "title": r.get("title", "")[:50],
-                        "description": r.get("description", "")[:100],
-                        "h1": r.get("h1", "")[:50],
-                        "response_time": round(r.get("response_time", 0), 2),
-                        "has_structured_data": r.get("has_structured_data", False),
-                        "h2_count": r.get("h2_count", 0)
-                    })
-
-                compact_clusters = []
-                for cluster in st.session_state.clusters:
-                    compact_clusters.append({
-                        "name": cluster["name"],
-                        "count": cluster["count"],
-                        "samples": []
-                    })
-
-                payload = {
-                    "results": clean_results,
-                    "clusters": compact_clusters,
-                    "geo_infra": st.session_state.get('geo_infra', {}),
-                    "geo_score": st.session_state.get('geo_score', 0),
-                    "stats": {
-                        "pages_crawled": st.session_state.crawl_stats.get('pages_crawled', 0),
-                        "links_discovered": st.session_state.crawl_stats.get('links_discovered', 0),
-                        "links_filtered": st.session_state.crawl_stats.get('links_filtered', 0),
-                        "links_duplicate": st.session_state.crawl_stats.get('links_duplicate', 0),
-                        "pages_skipped": st.session_state.crawl_stats.get('pages_skipped', 0),
-                        "errors": st.session_state.crawl_stats.get('errors', 0),
-                        "start_urls_count": st.session_state.crawl_stats.get('start_urls_count', 1)
-                    },
-                    "start_urls": st.session_state.get('start_urls', [st.session_state.target_url])[:5],
-                    "ai_accessibility": st.session_state.get('ai_accessibility', {})
-                }
-
-                if len(st.session_state.results) > max_pages_to_save:
-                    st.markdown(
-                        f'<p style="color:#FFA500;font-weight:700;font-size:0.8rem;">'
-                        f'Seules les {max_pages_to_save} premieres pages sur {len(st.session_state.results)} seront sauvegardees '
-                        f'(limite Google Sheets)</p>',
-                        unsafe_allow_html=True
-                    )
-
-                db.save_audit(user_email, st.session_state.current_ws, st.session_state.target_url, s_name, payload)
-                st.toast("Audit sauvegarde")
-
-            # Construction du graphe
-            G = nx.DiGraph()
-            G.add_node(
-                st.session_state.target_url,
-                label=domain.upper(),
-                size=35,
-                color="#0f172a",
-                font={'color': '#ffffff', 'face': 'Inter'}
-            )
-
-            for c in st.session_state.clusters:
-                c_id = f"group_{c['name']}"
-                G.add_node(
-                    c_id,
-                    label=c['name'].upper(),
-                    color="#cbd5e1",
-                    size=25,
-                    font={'color': '#0f172a', 'face': 'Inter'}
-                )
-                G.add_edge(st.session_state.target_url, c_id)
-
-                for p in c['samples'][:40]:
-                    score_data = calculate_page_score(p)
-                    if isinstance(score_data, tuple):
-                        sc, grade, breakdown, recommendations = score_data
-                    else:
-                        sc = score_data
-                        grade = 'N/A'
-                        breakdown = {}
-                        recommendations = []
-
-                    if expert_on:
-                        col = _score_color(sc)
-                    else:
-                        col = "#e2e8f0"
-
-                    label = get_clean_label(p.get('title', ''), p.get('url', ''), domain)
-                    if not (label or '').strip():
-                        label = (urlparse(p.get('url', '')).path or '/').strip('/').replace('-', ' ').title() or 'Page'
-                    if expert_on and isinstance(score_data, tuple):
-                        label = f"{label}\\n[{grade}]"
-
-                    tooltip_parts = []
-                    if expert_on and isinstance(score_data, tuple):
-                        tooltip_parts.append(f"Score AI-READABLE: {sc}/100 - Grade: {grade}")
-
-                        missing = []
-                        if not p.get('description'):
-                            missing.append("Meta description manquante")
-                        if not p.get('h1'):
-                            missing.append("H1 manquant")
-                        if not p.get('has_structured_data'):
-                            missing.append("JSON-LD manquant")
-                        if p.get('h2_count', 0) < 2:
-                            missing.append("Peu de H2")
-
-                        if missing:
-                            tooltip_parts.append("\\n\\nElements manquants:\\n" + "\\n".join(f"- {m}" for m in missing))
-
-                        if recommendations:
-                            top_reco = recommendations[:2]
-                            tooltip_parts.append("\\n\\nRecommandations:\\n" + "\\n".join(f"- {r}" for r in top_reco))
-
-                    tooltip = "\\n".join(tooltip_parts) if tooltip_parts else ""
-
-                    G.add_node(
-                        p['url'],
-                        label=label,
-                        size=12,
-                        color=col,
-                        font={'color': '#0f172a', 'face': 'Inter'},
-                        title=tooltip
-                    )
-                    G.add_edge(c_id, p['url'])
-
-            render_interactive_graph(G, show_health=expert_on)
-
-            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-
-            # ========== 07 / JOURNAUX ==========
-            st.markdown(
-                '<p class="section-title">07 / JOURNAUX</p>',
-                unsafe_allow_html=True
-            )
-
-            j_tab1, j_tab2, j_tab3 = st.tabs([
-                "PAGES CRAWLEES",
-                "LIENS FILTRES",
-                "DOUBLONS"
-            ])
-
-            with j_tab1:
-                render_journal_crawled(st.session_state.results)
-
-            with j_tab2:
-                render_journal_filtered(st.session_state.get("filtered_log", []))
-
-            with j_tab3:
-                render_journal_duplicates(st.session_state.get("duplicate_log", []))
-
-    # ========================== TAB 2 : AUDIT EXTERNE ==========================
-    with tab2:
-        render_off_page_audit()
-
-    # ========================== TAB 3 : MÉTHODOLOGIE ==========================
-    with tab3:
-        st.markdown("")  # ancrage pour affichage de l'onglet
-        with st.container():
-            render_methodologie()
+    # Rapport GEO & Data
+    st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+    render_geo_report(target_url, st.session_state.get("geo_ai_accessibility", {}))
+
+    # Optimisation Mistral
+    st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+    render_mistral_optimization(target_url)
+
+    # Journaux
+    st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="section-title">07 / JOURNAUX</p>',
+        unsafe_allow_html=True,
+    )
+    tab_crawled, tab_filtered, tab_duplicates = st.tabs(["Journal crawl", "Journal filtré", "Journal doublons"])
+    with tab_crawled:
+        render_journal_crawled(results)
+    with tab_filtered:
+        render_journal_filtered(filtered_log)
+    with tab_duplicates:
+        render_journal_duplicates(duplicate_log)
+
+    if crawl_logs:
+        with st.expander("Logs du crawl", expanded=False):
+            _render_geo_log_box(crawl_logs)
