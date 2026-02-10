@@ -6,91 +6,100 @@ Contenu Markdown unique affiché dans l'onglet Méthodologie des modules concern
 import streamlit as st
 
 METHODOLOGIE_AUTHORITY_MD = """
-## Synthèse : L'AI Authority Index en bref
+## Synthèse : L'AI Authority Index (Version 2.0 - AI Native)
 
-L'indice repose sur une réalité technique : les IA ne \"devinent\" pas qui est une autorité, elles compilent des preuves structurées et citées. Notre algorithme scanne **5 piliers stratégiques** pour calculer un score sur 100 :
+**La réalité technique :** Les IA génératives (LLMs) ne \"lisent\" pas le web comme des humains. Elles traitent des probabilités, des vecteurs et des entités.
 
-1. **Knowledge Graph (30%)** : L'entité existe-t-elle dans la base de données universelle (Wikidata) ?
-2. **Données Structurées (25%)** : Le site parle-t-il le \"langage machine\" (JSON-LD) ?
-3. **Autorité de Citation (20%)** : La marque est-elle référencée par des tiers de confiance (Wikipedia, réseaux sociaux) ?
-4. **Complétude Sémantique (15%)** : Le contenu couvre-t-il tout le champ lexical de son expertise ?
-5. **Fraîcheur (10%)** : Les informations sont-elles à jour pour éviter les hallucinations ?
+Notre algorithme ne cherche pas à plaire à un moteur de recherche classique, il audite la **capacité de votre marque à être ingérée, comprise et restituée par une IA**.
 
-**Objectif :** Plus le score est élevé, plus la probabilité que l'IA cite votre marque comme référence lors d'une requête utilisateur est forte.
+Nous scannons **5 piliers techniques** pour calculer un **Score de Compatibilité IA** sur 100 :
+
+1. **Ancrage Knowledge Graph (30%)** : L'entité existe-t-elle sans ambiguïté dans la mémoire de l'IA ?
+2. **Interopérabilité des Données (25%)** : Le contenu est-il structuré pour être \"lu\" instantanément par les machines ?
+3. **Autorité & Confiance (20%)** : La marque est-elle validée par les sources d'entraînement prioritaires ?
+4. **Densité Vectorielle (15%)** : Le contenu couvre-t-il mathématiquement le cœur du sujet (sans bruit) ?
+5. **Fraîcheur Temporelle (10%)** : L'information est-elle assez récente pour être sélectionnée par les agents de recherche (RAG) ?
 
 ---
 
 ## Méthodologie Détaillée
 
-### 1. Couverture Knowledge Graph (Poids : 30%)
+### 1. Ancrage Knowledge Graph (Poids : 30%)
 
-C’est le socle de l'identité numérique. Les LLMs utilisent des bases de connaissances comme **Wikidata** pour relier les concepts entre eux.
+**Le système d'identité de l'IA.** Pour une IA, s'il n'y a pas d'entité nommée, il n'y a que du texte. Nous vérifions si votre marque est reconnue comme une **\"Entité\"** (un objet unique avec des attributs) et non comme une simple chaîne de mots.
 
-* **Ce que le code vérifie :** La présence d'un identifiant unique (**QID**).
-* **Indicateurs de performance :**
-  * Nombre de propriétés renseignées (ex: fondateur, date de création).
-  * Présence d'un lien vers une page Wikipedia associée.
-  * Nombre de \"claims\" (affirmations) sourcées par des références externes.
+* **Ce que l'algo vérifie :** L'existence d'un nœud dans le Knowledge Graph universel (Wikidata) et la richesse de ses connexions.
+* **Indicateurs Clés :**
+  * Présence d'un ID unique (QID).
+  * Interconnexions (Le graphe relie-t-il la marque à ses fondateurs, ses produits, son secteur ?).
+  * Validation par des tiers (Sources fiables liées à l'entité).
+* **Impact IA :** Une entité reconnue dans le Graph réduit drastiquement les hallucinations. L'IA \"sait\" de qui elle parle avant même de générer le premier mot.
 
-* **Impact IA :** Une entité absente de Wikidata est souvent considérée comme une \"simple chaîne de caractères\" et non comme une entité réelle par les modèles d'IA.
+### 2. Interopérabilité des Données (Poids : 25%)
 
-### 2. Empreinte des Données Structurées (Poids : 25%)
+**Le langage natif de la machine.**
 
-Les LLMs préfèrent les données organisées. Le balisage **Schema.org** en format **JSON-LD** permet d'injecter du sens directement dans le code sans ambiguïté.
+Les LLMs modernes utilisent des outils de recherche (RAG) pour trouver l'info. Ces outils privilégient les données qui ne demandent aucun effort d'interprétation. Le **JSON-LD** est ce standard.
 
-* **Ce que le code vérifie :** Il scanne jusqu'à 50 pages du site pour détecter les scripts `ld+json`.
-* **Indicateurs de performance :**
-  * Pourcentage de pages balisées.
-  * Diversité des types utilisés (`Organization`, `Article`, `FAQPage`, `Product`).
-  * Présence cruciale du type `Organization` sur la page d'accueil.
+* **Ce que l'algo vérifie :** L'injection de données structurées (Schema.org) qui décrivent explicitement le contenu sans ambiguïté.
+* **Indicateurs Clés :**
+  * Couverture du balisage (Organization, Product, Person, FAQ).
+  * Résolution des entités (Lier votre site à vos profils sociaux et Wikipedia via le code **sameAs**).
+* **Impact IA :** Cela permet à l'IA d'extraire des faits (Prix, Auteur, Note) avec une confiance de 100%, sans avoir à \"deviner\" en lisant le texte visuel.
 
-* **Impact IA :** Cela aide l'IA à extraire des faits précis (prix, auteur, localisation) sans risque d'erreur d'interprétation.
+### 3. Autorité de Citation (Poids : 20%)
 
-### 3. Autorité de Citation & Confiance (Poids : 20%)
+**La validation par le corpus d'entraînement.**
 
-Ici, on mesure la preuve sociale et la crédibilité technique.
+Les modèles sont entraînés à minimiser l'erreur. Ils accordent plus de \"poids\" statistique aux informations provenant de domaines à haute fiabilité (Universités, Gouvernement, Wikipédia, Presse de référence).
 
-* **Ce que le code vérifie :**
-  * **Mentions Wikipedia :** Recherche via l'API Wikipedia pour voir si le nom de l'entité apparaît dans des articles existants.
-  * **Signaux de Réassurance :** Analyse de la page d'accueil à la recherche de mentions légales, politiques de confidentialité, et coordonnées (email/téléphone).
-  * **Présence Sociale :** Détection des liens vers LinkedIn, Twitter, Facebook, etc.
+* **Ce que l'algo vérifie :** La présence de la marque dans des environnements numériques de haute confiance.
+* **Indicateurs Clés :**
+  * Mentions dans Wikipédia et sources académiques/officielles.
+  * Cohérence des signaux de confiance sur le site (Pages \"À propos\", Politique de confidentialité claire, auteurs identifiés).
+* **Impact IA :** L'IA considère ces sources comme la \"vérité terrain\". Être cité par elles transfère cette autorité à votre marque.
 
-* **Impact IA :** Les modèles sont entraînés pour privilégier les sources qui affichent des signaux de confiance (E-E-A-T).
+### 4. Densité Vectorielle & Sémantique (Poids : 15%)
 
-### 4. Complétude Sémantique (Poids : 15%)
+**La compréhension du sens profond.**
 
-L'IA évalue si vous êtes un expert en observant la richesse de votre vocabulaire métier.
+Oubliez les mots-clés. Les IA fonctionnent par **Embeddings** (représentation mathématique du sens). Nous mesurons si votre contenu se situe mathématiquement au \"centre\" de votre sujet d'expertise.
 
-* **Ce que le code vérifie :** Extraction des termes clés via un algorithme de traitement de texte (**TF-IDF**).
-* **Indicateurs de performance :**
-  * Nombre de concepts uniques identifiés.
-  * **Analyse concurrentielle :** Si des URLs concurrentes sont fournies, le code compare le \"recouvrement\" sémantique.
+* **Ce que l'algo vérifie :** Nous transformons votre contenu en vecteurs et calculons sa \"distance\" par rapport au concept idéal de votre expertise.
+* **Indicateurs Clés :**
+  * **Proximité Sémantique :** Votre contenu répond-il précisément à l'intention ou divague-t-il ?
+  * **Densité d'Information :** Le ratio faits/mots. L'IA pénalise le \"remplissage\" marketing vide de sens.
+  * **Couverture Contextuelle :** Le contenu aborde-t-il les sous-concepts logiques attendus par le modèle ?
+* **Impact IA :** Un contenu avec une forte densité vectorielle \"active\" plus fortement les neurones du modèle liés à l'expertise, augmentant la probabilité d'être utilisé dans la réponse.
 
-* **Impact IA :** Un contenu pauvre ou trop généraliste sera jugé moins pertinent qu'un site couvrant tout le spectre sémantique d'une thématique.
+### 5. Fraîcheur Temporelle (Poids : 10%)
 
-### 5. Fraîcheur du Contenu (Poids : 10%)
+**La priorité de récupération.**
 
-Une donnée périmée est une donnée risquée pour une IA.
+Les IA connectées au web (ChatGPT Search, Perplexity, Google AI Overviews) filtrent l'information par date pour répondre aux questions actuelles. Une information ancienne est souvent ignorée par sécurité.
 
-* **Ce que le code vérifie :** Analyse du fichier `sitemap.xml` et des balises `lastmod`.
-* **Indicateurs de performance :**
-  * Âge moyen des pages en jours.
-  * Date de la dernière publication détectée.
-
-* **Impact IA :** Les modèles récents (avec accès web) privilégient les informations à jour pour répondre aux questions d'actualité.
+* **Ce que l'algo vérifie :** La récence des mises à jour techniques et éditoriales.
+* **Indicateurs Clés :**
+  * Date de dernière modification (lastmod) dans le Sitemap.
+  * Fréquence de mise à jour du contenu \"froid\".
+* **Impact IA :** C'est un filtre binaire pour les agents de recherche (RAG). Si l'info est jugée obsolète, elle n'est même pas transmise au modèle pour analyse.
 
 ---
 
-## Interprétation des Résultats
+## Interprétation des Scores
 
-| Score | Niveau d'Autorité | Impact LLM |
+| Score | Niveau d'Autorité IA | Conséquence pour la Marque |
 | --- | --- | --- |
-| **80 - 100** | **Forte** | Référence prioritaire. Très haute probabilité de citation directe. |
-| **60 - 79** | **Moyenne** | Autorité reconnue. Citation probable sur des requêtes spécifiques. |
-| **40 - 59** | **Faible** | Présence détectée mais manque de preuves de confiance ou de structure. |
-| **0 - 39** | **Très Faible** | \"Bruit de fond\". L'IA connaît le nom mais ne peut pas confirmer l'autorité. |
+| **80 - 100** | **Référence \"Gold\"** | La marque est une entité racine. Très haute probabilité de citation directe et factuelle. |
+| **60 - 79** | **Autorité Validée** | L'IA comprend le sujet. Citation probable si la requête est précise. |
+| **40 - 59** | **Signal Faible** | L'IA détecte le contenu mais manque de preuves structurées pour lui faire confiance. Risque d'hallucination. |
+| **0 - 39** | **Bruit de Fond** | Invisible pour les modèles. L'IA traitera le contenu comme du texte générique sans autorité. |
 
 ---
+
+## Pourquoi cette méthodologie est unique ? (Argumentaire Client)
+
+*\"Contrairement au SEO classique qui cherche à placer des mots-clés pour un moteur de recherche, cette méthodologie audite la **digestibilité de votre marque pour une intelligence artificielle**. Nous ne travaillons pas sur le positionnement d'une page, mais sur la **compréhension fondamentale de votre entreprise par les modèles qui façonneront le web de demain.**\"*
 """
 
 
@@ -99,11 +108,11 @@ Une donnée périmée est une donnée risquée pour une IA.
 METHODOLOGIE_CONTENT = {
     "authority": {
         "title": "AUTHORITY SCORE — MÉTHODOLOGIE",
-        "subtitle": "AI Authority Index // 5 piliers",
+        "subtitle": "AI Authority Index v2.0 — AI Native // Score de Compatibilité IA",
         "sections": [
-            ("01. INDICATEUR", "L'AI Authority Index mesure la probabilité qu'une entité soit citée par les LLMs (ChatGPT, Claude, Perplexity). Score sur 100, basé sur 5 piliers pondérés."),
-            ("02. LES 5 PILIERS", "Knowledge Graph (30 %) — Présence Wikidata. Structured Data (25 %) — JSON-LD. Citation Authority (20 %) — Wikipédia, backlinks. Semantic Completeness (15 %) — Richesse sémantique. Content Freshness (10 %) — Fraîcheur des données."),
-            ("03. INTERPRÉTATION", "80+ : Autorité forte. 60–79 : Autorité moyenne. 40–59 : Autorité faible. < 40 : Très faible visibilité pour les LLMs."),
+            ("01. INDICATEUR", "L'AI Authority Index (v2.0) audite la capacité de votre marque à être ingérée, comprise et restituée par les LLMs. Score sur 100, 5 piliers techniques."),
+            ("02. LES 5 PILIERS", "Ancrage Knowledge Graph (30 %) — Interopérabilité des Données (25 %) — Autorité & Confiance (20 %) — Densité Vectorielle (15 %) — Fraîcheur Temporelle (10 %)."),
+            ("03. INTERPRÉTATION", "80–100 : Référence Gold. 60–79 : Autorité validée. 40–59 : Signal faible. 0–39 : Bruit de fond, invisible pour les modèles."),
         ],
     },
     "master": {
