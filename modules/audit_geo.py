@@ -804,8 +804,67 @@ def render_journal_duplicates(duplicate_log):
 
 
 # =============================================================================
-# 4. POINT D'ENTRÉE STREAMLIT — render_audit_geo (attendu par app.py)
+# 4. GRAPHE INTERACTIF (NETWORKX + PYVIS)
 # =============================================================================
+
+def _build_geo_graph_html(results):
+    """Construit un graphe orienté des pages crawlées (liens internes) et retourne le HTML pyvis."""
+    if not results:
+        return None
+    domain = urlparse(results[0].get("url", "")).netloc if results else ""
+    url_to_page = {}
+    for p in results:
+        u = p.get("url") or ""
+        if u:
+            url_to_page[u] = p
+    G = nx.DiGraph()
+    for p in results:
+        url = p.get("url")
+        if not url:
+            continue
+        score_data = calculate_page_score(p)
+        if isinstance(score_data, tuple):
+            sc, grade = score_data[0], score_data[1]
+        else:
+            sc, grade = 70, "B"
+        label = get_clean_label(p.get("title"), url, domain)
+        color = _grade_color(grade)
+        G.add_node(url, label=label, title=url, color=color)
+    for p in results:
+        src = p.get("url")
+        if not src:
+            continue
+        for link in p.get("links") or []:
+            if link in url_to_page and link != src:
+                G.add_edge(src, link)
+    if G.number_of_nodes() == 0:
+        return None
+    try:
+        net = Network(
+            height="450px",
+            width="100%",
+            bgcolor="#ffffff",
+            font_color="#0f172a",
+            directed=True,
+        )
+        net.from_nx(G)
+        import tempfile
+        import os
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".html", delete=False, encoding="utf-8") as f:
+            tmp = f.name
+        try:
+            net.save_graph(tmp)
+            with open(tmp, "r", encoding="utf-8") as f:
+                html_content = f.read()
+            return html_content
+        finally:
+            try:
+                os.unlink(tmp)
+            except Exception:
+                pass
+    except Exception:
+        return None
+
 
 def _render_geo_log_box(logs):
     """Affiche les logs du crawl dans un bloc monospace (style terminal)."""
@@ -911,6 +970,8 @@ def render_audit_geo():
             st.session_state["geo_target_url"] = target_url
             st.session_state["geo_ai_accessibility"] = ai_accessibility
             st.session_state["geo_stats"] = stats
+            for key in ("geo_robots_optimized", "geo_robots_analysis", "geo_llms_optimized"):
+                st.session_state.pop(key, None)
             st.rerun()
         except Exception as e:
             st.error(f"Erreur lors du crawl : {e}")
@@ -951,9 +1012,88 @@ def render_audit_geo():
             unsafe_allow_html=True,
         )
 
+    # ---------- Graphe du site ----------
     st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
     st.markdown(
-        '<p class="section-title">03 / JOURNAUX</p>',
+        '<p class="section-title">03 / GRAPHE DU SITE</p>',
+        unsafe_allow_html=True,
+    )
+    graph_html = _build_geo_graph_html(results)
+    if graph_html:
+        components.html(graph_html, height=500, scrolling=False)
+    else:
+        st.markdown(
+            '<p style="font-size:0.85rem;color:#94a3b8;">Graphe non disponible (trop peu de pages ou erreur).</p>',
+            unsafe_allow_html=True,
+        )
+
+    # ---------- Robots.txt : contenu actuel + optimisation Mistral ----------
+    base_url = (target_url or "").rstrip("/")
+    if base_url:
+        st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+        st.markdown(
+            '<p class="section-title">04 / ROBOTS.TXT</p>',
+            unsafe_allow_html=True,
+        )
+        robots_content, robots_found = fetch_file_content(base_url, "robots.txt")
+        with st.expander("Contenu actuel robots.txt", expanded=True):
+            st.code(robots_content, language="text")
+        if st.button("Optimiser avec Mistral (code + analyse)", key="geo_robots_optimize"):
+            with st.spinner("Génération robots.txt optimisé et analyse..."):
+                optimized, analysis = generate_robots_optimization(robots_content, base_url, robots_found)
+            if optimized is None:
+                st.warning(analysis)
+            else:
+                st.session_state["geo_robots_optimized"] = optimized
+                st.session_state["geo_robots_analysis"] = analysis
+                st.rerun()
+        if st.session_state.get("geo_robots_optimized"):
+            with st.expander("Code robots.txt optimisé (Mistral)", expanded=True):
+                st.code(st.session_state["geo_robots_optimized"], language="text")
+            with st.expander("Analyse comparative (Mistral)", expanded=False):
+                st.markdown(st.session_state.get("geo_robots_analysis", ""))
+
+    # ---------- llms.txt ----------
+    if base_url:
+        st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+        st.markdown(
+            '<p class="section-title">05 / LLMS.TXT</p>',
+            unsafe_allow_html=True,
+        )
+        llms_content, llms_found = fetch_file_content(base_url, "llms.txt")
+        with st.expander("Contenu actuel llms.txt", expanded=llms_found):
+            st.code(llms_content, language="text")
+        if st.button("Générer llms.txt Gold Standard (Mistral)", key="geo_llms_optimize"):
+            with st.spinner("Génération llms.txt..."):
+                out = generate_llms_optimization(llms_content, base_url, llms_found)
+            if out.startswith("Cle API") or out.startswith("Erreur"):
+                st.warning(out)
+            else:
+                st.session_state["geo_llms_optimized"] = out
+                st.rerun()
+        if st.session_state.get("geo_llms_optimized"):
+            with st.expander("llms.txt proposé (Mistral)", expanded=True):
+                st.code(st.session_state["geo_llms_optimized"], language="text")
+
+    # ---------- Rapport GEO (Mistral) ----------
+    ai_accessibility = st.session_state.get("geo_ai_accessibility", {})
+    domain = urlparse(target_url or "").netloc or ""
+    if domain and ai_accessibility:
+        st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+        st.markdown(
+            '<p class="section-title">06 / RAPPORT GEO & DATA</p>',
+            unsafe_allow_html=True,
+        )
+        report = generate_geo_report(domain, ai_accessibility)
+        if report and not (report.startswith("Cle API") or report.startswith("Erreur")):
+            st.markdown(report)
+        elif report:
+            st.warning(report)
+
+    # ---------- Journaux ----------
+    st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="section-title">07 / JOURNAUX</p>',
         unsafe_allow_html=True,
     )
     tab_crawled, tab_filtered, tab_duplicates = st.tabs(["Journal crawl", "Journal filtré", "Journal doublons"])
