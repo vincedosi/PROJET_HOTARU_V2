@@ -192,9 +192,7 @@ def _render_master_data_content():
                         key=f"master_wiki_{item.get('id','')}",
                         use_container_width=True,
                     ):
-                        # Remplir les champs de recherche + enrichir MasterData
-                        st.session_state["company_search"] = label
-                        st.session_state["qid_search"] = item.get("id", "")
+                        # Enrichir directement MasterData à partir du QID sélectionné
                         handler = MasterDataHandler()
                         st.session_state.master_data = handler.auto_enrich(
                             search_query=label,
@@ -218,8 +216,6 @@ def _render_master_data_content():
                     key = f"master_insee_{item.get('siren','')}_{idx}"
                     if st.button(label, key=key, use_container_width=True):
                         siren = item.get("siren", "")
-                        st.session_state["company_search"] = name
-                        st.session_state["siren_search"] = siren
                         handler = MasterDataHandler()
                         st.session_state.master_data = handler.auto_enrich(
                             search_query=name or None,
