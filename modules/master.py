@@ -1,11 +1,15 @@
 """
 HOTARU v3 - Module MASTER DATA
-Interface Brutaliste Monochrome pour l'enrichissement et l'edition des donnees d'entite
+Interface Brutaliste Monochrome pour l'enrichissement et l'édition des données d'entité.
 """
 
 import os
+from typing import Dict, List
+
+import requests
 import streamlit as st
-from engine.master_handler import MasterDataHandler, MasterData
+
+from engine.master_handler import MasterDataHandler, MasterData, WikidataAPI
 from engine.template_builder import TemplateBuilder
 
 
@@ -14,6 +18,65 @@ def _get_mistral_key():
         return st.secrets["mistral"]["api_key"]
     except Exception:
         return ""
+
+
+def _ensure_search_state() -> None:
+    """Initialise les listes de résultats de recherche dans la session."""
+    if "master_wiki_results" not in st.session_state:
+        st.session_state.master_wiki_results: List[Dict] = []
+    if "master_insee_results" not in st.session_state:
+        st.session_state.master_insee_results: List[Dict] = []
+
+
+def _search_wikidata_candidates(query: str) -> List[Dict]:
+    """Recherche d'entités sur Wikidata (mode liste de candidats)."""
+    raw = WikidataAPI.search_entity(query, limit=10)
+    results: List[Dict] = []
+    for item in raw:
+        results.append(
+            {
+                "id": item.get("id"),
+                "label": item.get("label", item.get("id", "")),
+                "desc": item.get("description", "Pas de description"),
+            }
+        )
+    return results
+
+
+def _search_insee_candidates(query: str) -> List[Dict]:
+    """Recherche d'entreprises via l'API publique INSEE / Entreprises."""
+    try:
+        r = requests.get(
+            "https://recherche-entreprises.api.gouv.fr/search",
+            params={"q": query, "per_page": 10},
+            timeout=10,
+        )
+        r.raise_for_status()
+        payload = r.json()
+        results = payload.get("results", [])
+        formatted: List[Dict] = []
+        for item in results:
+            siege = item.get("siege", {}) or {}
+            formatted.append(
+                {
+                    "siren": item.get("siren", ""),
+                    "name": item.get("nom_complet", ""),
+                    "address": " ".join(
+                        part
+                        for part in [
+                            siege.get("adresse", ""),
+                            siege.get("code_postal", ""),
+                            siege.get("commune", ""),
+                        ]
+                        if part
+                    ).strip(),
+                    "active": item.get("etat_administratif") == "A",
+                }
+            )
+        return formatted
+    except Exception as e:  # pragma: no cover - réseau extérieur
+        st.warning(f"Erreur INSEE: {e}")
+        return []
 
 
 def render_master_tab():
@@ -39,6 +102,7 @@ def render_master_tab():
 
 def _render_master_data_content():
     """Contenu de l'onglet Données (Master)."""
+    _ensure_search_state()
     # =========================================================================
     # ETAPE 1 : RECHERCHE & ENRICHISSEMENT
     # =========================================================================
@@ -77,19 +141,20 @@ def _render_master_data_content():
 
     col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
 
+    # Recherche d'entités (Wikidata + INSEE) pour laisser l'utilisateur choisir
     with col_btn1:
-        if st.button("SEARCH", use_container_width=True, key="search_btn"):
+        if st.button("SEARCH ENTITIES", use_container_width=True, key="search_btn"):
             if company_name or qid_manual or siren_manual:
-                with st.spinner("Interrogation de Wikidata..."):
-                    handler = MasterDataHandler()
-                    st.session_state.master_data = handler.auto_enrich(
-                        search_query=company_name or None,
-                        qid=qid_manual or None,
-                        siren=siren_manual or None,
+                query = company_name or qid_manual or siren_manual
+                with st.spinner("Recherche Wikidata / INSEE..."):
+                    st.session_state.master_wiki_results = _search_wikidata_candidates(
+                        query
                     )
-                    st.rerun()
+                    st.session_state.master_insee_results = _search_insee_candidates(
+                        query
+                    )
             else:
-                st.error("Entrez au moins un critere")
+                st.error("Entrez au moins un critère")
 
     with col_btn2:
         if st.button(
@@ -100,15 +165,72 @@ def _render_master_data_content():
             disabled=not st.session_state.master_data,
         ):
             mistral_key = _get_mistral_key()
-            if mistral_key and st.session_state.master_data.qid:
-                with st.spinner("Mistral enrichit les donnees..."):
+            if mistral_key and st.session_state.master_data and st.session_state.master_data.qid:
+                with st.spinner("Mistral enrichit les données..."):
                     handler = MasterDataHandler()
                     st.session_state.master_data = handler.auto_complete_with_mistral(
                         st.session_state.master_data, mistral_key
                     )
                     st.rerun()
             else:
-                st.error("Cle Mistral ou QID manquant")
+                st.error("Clé Mistral ou QID manquant")
+
+    # Résultats de recherche (Wikidata / INSEE) et sélection utilisateur
+    if st.session_state.master_wiki_results or st.session_state.master_insee_results:
+        st.markdown("<br>", unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+
+        with c1:
+            st.markdown("#### Wikidata")
+            if st.session_state.master_wiki_results:
+                for item in st.session_state.master_wiki_results:
+                    label = item.get("label", "")
+                    desc = item.get("desc", "")
+                    button_label = f"🆔 {label}\n{desc}"
+                    if st.button(
+                        button_label,
+                        key=f"master_wiki_{item.get('id','')}",
+                        use_container_width=True,
+                    ):
+                        # Remplir les champs de recherche + enrichir MasterData
+                        st.session_state["company_search"] = label
+                        st.session_state["qid_search"] = item.get("id", "")
+                        handler = MasterDataHandler()
+                        st.session_state.master_data = handler.auto_enrich(
+                            search_query=label,
+                            qid=item.get("id", ""),
+                            siren=None,
+                        )
+                        st.session_state.master_wiki_results = []
+                        st.session_state.master_insee_results = []
+                        st.rerun()
+            else:
+                st.info("Aucun résultat Wikidata.")
+
+        with c2:
+            st.markdown("#### INSEE / SIREN")
+            if st.session_state.master_insee_results:
+                for idx, item in enumerate(st.session_state.master_insee_results):
+                    statut = "🟢" if item.get("active") else "🔴"
+                    name = item.get("name", "")
+                    addr = item.get("address", "")
+                    label = f"{statut} {name}\n{addr}"
+                    key = f"master_insee_{item.get('siren','')}_{idx}"
+                    if st.button(label, key=key, use_container_width=True):
+                        siren = item.get("siren", "")
+                        st.session_state["company_search"] = name
+                        st.session_state["siren_search"] = siren
+                        handler = MasterDataHandler()
+                        st.session_state.master_data = handler.auto_enrich(
+                            search_query=name or None,
+                            qid=None,
+                            siren=siren or None,
+                        )
+                        st.session_state.master_wiki_results = []
+                        st.session_state.master_insee_results = []
+                        st.rerun()
+            else:
+                st.info("Aucun résultat INSEE.")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
