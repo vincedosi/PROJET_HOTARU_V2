@@ -143,8 +143,8 @@ def main():
             st.rerun()
 
     # NAVIGATION
-    tab_home, tab_audit, tab_master, tab_leaf, tab_eco, tab_ai = st.tabs(
-        ["Home", "Audit", "Master", "Leaf", "Eco-Score", "AI Transformer"]
+    tab_home, tab_audit, tab_jsonld, tab_eco, tab_ai = st.tabs(
+        ["Home", "Audit", "JSON-LD", "Eco-Score", "AI Transformer"]
     )
 
     with tab_home:
@@ -161,11 +161,12 @@ def main():
         with sub_tab_scraping:
             render_scraping_debug_tab()
 
-    with tab_master:
-        render_master_tab()
-
-    with tab_leaf:
-        render_leaf_tab()
+    with tab_jsonld:
+        sub_tab_master, sub_tab_leaf = st.tabs(["Master", "Leaf"])
+        with sub_tab_master:
+            render_master_tab()
+        with sub_tab_leaf:
+            render_leaf_tab()
 
     with tab_eco:
         render_eco_tab()
