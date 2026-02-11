@@ -30,7 +30,7 @@ KWH_PER_1K_TOKENS = 0.0004
 GCO2_PER_KWH = 475
 
 
-class EcoImpactCalculator:
+class AIOImpactCalculator:
     """
     Calcule l'économie de tokens et l'impact carbone
     entre une page "brute" (HTML complet) et une page optimisée HOTARU (signal pur).
@@ -136,10 +136,16 @@ class EcoImpactCalculator:
         clean_text = re.sub(r"\s+", " ", clean_text)
         return self._count_tokens(clean_text)
 
-    def calculate(self, url: str) -> dict:
+    def calculate(
+        self,
+        url: str,
+        total_pages: int = 1000,
+        daily_views_per_page: int = 100,
+    ) -> dict:
         """
-        Calcule l'économie : tokens, kWh, gCO2.
-        Renvoie un dictionnaire avec toutes les métriques + données pour le graphique.
+        Calcule l'économie : tokens, kWh, gCO2 (par page et par vue).
+        Total annuel = Economie_Par_Page * total_pages * daily_views_per_page * 365.
+        Renvoie un dictionnaire avec métriques par vue + annuelles.
         """
         if not HAS_TIKTOKEN:
             return {
@@ -149,6 +155,9 @@ class EcoImpactCalculator:
                 "tokens_saved": 0,
                 "kwh_saved": 0.0,
                 "co2_saved": 0.0,
+                "annual_tokens_saved": 0,
+                "annual_kwh_saved": 0.0,
+                "annual_co2_grammes": 0.0,
             }
         try:
             tokens_dirty = self.get_dirty_tokens(url)
@@ -161,10 +170,18 @@ class EcoImpactCalculator:
                 "tokens_saved": 0,
                 "kwh_saved": 0.0,
                 "co2_saved": 0.0,
+                "annual_tokens_saved": 0,
+                "annual_kwh_saved": 0.0,
+                "annual_co2_grammes": 0.0,
             }
         tokens_saved = max(0, tokens_dirty - tokens_clean)
         kwh_saved = (tokens_saved / 1000.0) * KWH_PER_1K_TOKENS
         co2_saved = kwh_saved * GCO2_PER_KWH
+
+        # Total annuel : Economie_Par_Page * total_pages * daily_views_per_page * 365
+        annual_tokens_saved = tokens_saved * total_pages * daily_views_per_page * 365
+        annual_kwh_saved = kwh_saved * total_pages * daily_views_per_page * 365
+        annual_co2_grammes = co2_saved * total_pages * daily_views_per_page * 365
 
         return {
             "error": None,
@@ -173,6 +190,9 @@ class EcoImpactCalculator:
             "tokens_saved": tokens_saved,
             "kwh_saved": round(kwh_saved, 6),
             "co2_saved": round(co2_saved, 2),
+            "annual_tokens_saved": annual_tokens_saved,
+            "annual_kwh_saved": round(annual_kwh_saved, 2),
+            "annual_co2_grammes": round(annual_co2_grammes, 2),
         }
 
 
@@ -202,11 +222,34 @@ def render_eco_tab():
         _render_methodologie()
 
 
+# Jours cumulés en fin de mois (année non bissextile)
+_DAYS_CUMUL_MOIS = [31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365]
+
+
 def _render_calculatrice():
     import streamlit as st
     import plotly.graph_objects as go
 
-    st.markdown("#### Calculatrice d'Impact Carbone")
+    with st.sidebar:
+        st.markdown("### Paramètres du Site")
+        total_pages = st.slider(
+            "Nombre de pages du catalogue",
+            min_value=1,
+            max_value=100_000,
+            value=1_000,
+            step=100,
+            key="eco_total_pages",
+        )
+        daily_views = st.slider(
+            "Vues IA/Crawls par jour par page",
+            min_value=1,
+            max_value=1_000,
+            value=100,
+            step=10,
+            key="eco_daily_views",
+        )
+
+    st.markdown("#### AIO Efficiency : Levier de Sobriété Numérique")
     url = st.text_input(
         "URL du site web",
         placeholder="https://www.example.com",
@@ -217,16 +260,35 @@ def _render_calculatrice():
             st.warning("Veuillez saisir une URL.")
             return
         with st.spinner("Analyse du poids cognitif en cours..."):
-            calc = EcoImpactCalculator()
-            result = calc.calculate(url.strip())
+            calc = AIOImpactCalculator()
+            result = calc.calculate(url.strip(), total_pages=total_pages, daily_views_per_page=daily_views)
 
         if result.get("error"):
             st.error(result["error"])
             return
 
-        st.markdown("---")
-        st.markdown("##### Métriques clés")
+        # Conversion pour les Big Numbers (formule fournie)
+        co2_total_grammes = result["co2_saved"] * total_pages * daily_views * 365
+        co2_total_tonnes = co2_total_grammes / 1_000_000
+        vols_pny = round(co2_total_tonnes, 1)
+        annual_kwh = result["kwh_saved"] * total_pages * daily_views * 365
+        annual_mwh = annual_kwh / 1_000
 
+        st.markdown("---")
+        st.markdown("##### Impact Global (annuel)")
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if co2_total_tonnes >= 1:
+                st.metric("CO₂ économisé / an", f"{co2_total_tonnes:.2f} t", delta="Économie annuelle")
+            else:
+                st.metric("CO₂ économisé / an", f"{co2_total_grammes:,.0f} g", delta="Économie annuelle")
+        with col2:
+            st.metric("Énergie économisée", f"{annual_mwh:.2f} MWh", delta="Économie annuelle")
+        with col3:
+            st.metric("Équivalent Vols Paris-NY", f"✈️ {vols_pny}", delta="Économie annuelle")
+
+        st.markdown("##### Métriques par page (une vue)")
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Tokens économisés", f"{result['tokens_saved']:,}")
@@ -235,14 +297,86 @@ def _render_calculatrice():
         with col3:
             st.metric("gCO₂ évité", f"{result['co2_saved']:.2f}")
 
-        st.markdown("##### Comparatif : Poids cognitif")
-        fig = go.Figure(
+        # Projection sur l'année : cumul mois par mois
+        tokens_per_day = result["tokens_saved"] * total_pages * daily_views
+        kwh_per_day = result["kwh_saved"] * total_pages * daily_views
+        co2_per_day = result["co2_saved"] * total_pages * daily_views
+
+        mois = list(range(1, 13))
+        cumul_tokens = [tokens_per_day * d for d in _DAYS_CUMUL_MOIS]
+        cumul_kwh = [kwh_per_day * d for d in _DAYS_CUMUL_MOIS]
+        cumul_gco2 = [co2_per_day * d for d in _DAYS_CUMUL_MOIS]
+
+        fig = go.Figure()
+        fig.add_trace(
+            go.Scatter(
+                x=mois,
+                y=cumul_tokens,
+                name="Tokens économisés (cumul)",
+                line=dict(color="#3498db", width=2),
+                yaxis="y",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=mois,
+                y=cumul_kwh,
+                name="kWh économisés (cumul)",
+                line=dict(color="#27ae60", width=2),
+                yaxis="y2",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=mois,
+                y=cumul_gco2,
+                name="gCO₂ évité (cumul)",
+                line=dict(color="#e74c3c", width=2),
+                yaxis="y3",
+            )
+        )
+        fig.update_layout(
+            template="plotly_white",
+            margin=dict(l=60, r=80, t=50, b=50),
+            height=400,
+            font=dict(size=11),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02),
+            xaxis=dict(title="Mois", dtick=1),
+            yaxis=dict(
+                title="Tokens (cumul)",
+                titlefont=dict(color="#3498db"),
+                tickfont=dict(color="#3498db"),
+                side="left",
+                anchor="x",
+            ),
+            yaxis2=dict(
+                title="kWh (cumul)",
+                titlefont=dict(color="#27ae60"),
+                tickfont=dict(color="#27ae60"),
+                side="right",
+                anchor="x",
+                overlaying="y",
+            ),
+            yaxis3=dict(
+                title="gCO₂ (cumul)",
+                titlefont=dict(color="#e74c3c"),
+                tickfont=dict(color="#e74c3c"),
+                side="right",
+                anchor="free",
+                overlaying="y",
+                position=0.92,
+            ),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.markdown("##### Comparatif : Poids cognitif (par page)")
+        fig_bar = go.Figure(
             data=[
                 go.Bar(name="Poids cognitif actuel (brut)", x=["Tokens"], y=[result["tokens_dirty"]], marker_color="#e74c3c"),
                 go.Bar(name="Poids cognitif HOTARU (optimisé)", x=["Tokens"], y=[result["tokens_clean"]], marker_color="#27ae60"),
             ]
         )
-        fig.update_layout(
+        fig_bar.update_layout(
             barmode="group",
             template="plotly_white",
             margin=dict(l=40, r=40, t=40, b=40),
@@ -252,7 +386,7 @@ def _render_calculatrice():
             xaxis_title="",
             yaxis_title="Nombre de tokens",
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig_bar, use_container_width=True)
 
 
 def _render_methodologie():
