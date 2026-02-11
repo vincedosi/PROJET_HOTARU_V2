@@ -6,6 +6,8 @@
 
 import re
 import json
+import requests
+from typing import Optional
 from urllib.parse import urlparse
 from collections import defaultdict
 
@@ -363,6 +365,109 @@ def get_cluster_url_pattern(urls: list) -> str:
 
 
 # =============================================================================
+# Étape 3 : Nommage intelligent (Mistral AI)
+# =============================================================================
+
+MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions"
+MISTRAL_MODEL = "mistral-small-latest"
+MISTRAL_TIMEOUT = 25
+
+
+def _parse_mistral_json(content: str):
+    """Extrait un objet JSON de la réponse Mistral (texte ou bloc markdown)."""
+    content = (content or "").strip()
+    # Bloc ```json ... ```
+    m = re.search(r"```(?:json)?\s*([\s\S]*?)```", content)
+    if m:
+        try:
+            return json.loads(m.group(1).strip())
+        except json.JSONDecodeError:
+            pass
+    # Objet {...} brut
+    m = re.search(r"\{[\s\S]*\}", content)
+    if m:
+        try:
+            return json.loads(m.group(0))
+        except json.JSONDecodeError:
+            pass
+    return None
+
+
+def name_cluster_with_mistral(api_key: str, results: list, cluster_indices: list, timeout: Optional[int] = None) -> Optional[dict]:
+    """
+    Demande à Mistral un nom de modèle et un type Schema.org pour un cluster.
+    Utilise 3 à 5 URLs exemples avec H1 et meta description.
+
+    Returns:
+        {"model_name": "...", "schema_type": "..."} ou None en cas d'erreur.
+    """
+    if timeout is None:
+        timeout = MISTRAL_TIMEOUT
+    samples = []
+    for idx in cluster_indices[:5]:
+        if idx >= len(results):
+            continue
+        r = results[idx]
+        url = r.get("url", "")
+        h1 = (r.get("h1") or "").strip()[:200]
+        desc = (r.get("description") or "").strip()[:300]
+        samples.append(f"- URL : {url} | H1 : {h1} | Meta : {desc}")
+
+    if not samples:
+        return None
+
+    user_prompt = """Analyse ces URLs d'un même groupe :
+
+"""
+    user_prompt += "\n".join(samples)
+    user_prompt += """
+
+Génère :
+1. Nom du modèle (2-4 mots, français, professionnel). Exemples : "Offres d'emploi", "Fiches produits", "Articles blog".
+2. Type Schema.org recommandé (un seul). Exemples : JobPosting, Product, Article, Event, Organization, LocalBusiness.
+
+Réponds UNIQUEMENT avec un JSON valide, sans texte avant ou après :
+{"model_name": "...", "schema_type": "..."}
+"""
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    payload = {
+        "model": MISTRAL_MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": "Tu es un expert en données structurées (Schema.org) et en architecture d'information. Tu réponds uniquement en JSON valide.",
+            },
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.2,
+        "max_tokens": 300,
+    }
+
+    try:
+        response = requests.post(MISTRAL_API_URL, headers=headers, json=payload, timeout=timeout)
+        response.raise_for_status()
+        data = response.json()
+        raw = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
+        parsed = _parse_mistral_json(raw)
+        if not parsed or not isinstance(parsed, dict):
+            return None
+        model_name = (parsed.get("model_name") or "").strip() or "Modèle sans nom"
+        schema_type = (parsed.get("schema_type") or "").strip() or "WebPage"
+        return {"model_name": model_name, "schema_type": schema_type}
+    except requests.exceptions.Timeout:
+        return None
+    except requests.exceptions.RequestException:
+        return None
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return None
+
+
+# =============================================================================
 # Étape 2 : Interface Streamlit basique (input + résultats texte)
 # =============================================================================
 
@@ -442,23 +547,71 @@ def render_jsonld_analyzer_tab():
         with st.spinner("Clustering des pages..."):
             clusters = cluster_pages(res)
 
-        # Résultats texte
+        # Nommage Mistral (étape 3)
+        cluster_labels = []
+        try:
+            mistral_key = st.secrets["mistral"]["api_key"]
+        except Exception:
+            mistral_key = None
+
+        if mistral_key:
+            for i, cluster_indices in enumerate(clusters):
+                with st.spinner(f"Nommage Mistral — cluster {i + 1}/{len(clusters)}..."):
+                    out = name_cluster_with_mistral(mistral_key, res, cluster_indices)
+                if out:
+                    cluster_labels.append(out)
+                else:
+                    cluster_labels.append({"model_name": f"Cluster {i + 1}", "schema_type": "WebPage"})
+        else:
+            cluster_labels = [
+                {"model_name": f"Cluster {i + 1}", "schema_type": "—"}
+                for i in range(len(clusters))
+            ]
+            st.info("Clé API Mistral absente : nommage automatique désactivé. Configurez `st.secrets['mistral']['api_key']` pour activer.")
+
         domain = urlparse(url).netloc or "site"
+        # Sauvegarde en session (sans HTML) pour affichage persistant après rerun
+        cluster_urls = [[res[idx]["url"] for idx in indices] for indices in clusters]
+        st.session_state["jsonld_analyzer_results"] = {
+            "domain": domain,
+            "total_pages": len(res),
+            "cluster_labels": cluster_labels,
+            "cluster_urls": cluster_urls,
+            "logs": logs,
+        }
+        st.rerun()
+
+    # Affichage des résultats (depuis session_state, persistant après rerun)
+    if "jsonld_analyzer_results" in st.session_state:
+        data = st.session_state["jsonld_analyzer_results"]
+        domain = data["domain"]
+        total_pages = data["total_pages"]
+        cluster_labels = data["cluster_labels"]
+        cluster_urls = data["cluster_urls"]
+        logs = data.get("logs", [])
+        num_clusters = len(cluster_labels)
+
         st.markdown("---")
         st.markdown("##### Vue d'ensemble")
         st.markdown(f"- **Site :** {domain}")
-        st.markdown(f"- **Pages analysées :** {len(res)}")
-        st.markdown(f"- **Modèles détectés :** {len(clusters)}")
+        st.markdown(f"- **Pages analysées :** {total_pages}")
+        st.markdown(f"- **Modèles détectés :** {num_clusters}")
 
         st.markdown("---")
         st.markdown("##### Détail des clusters")
 
-        for i, cluster_indices in enumerate(clusters, 1):
-            urls_in_cluster = [res[idx]["url"] for idx in cluster_indices]
+        for i in range(num_clusters):
+            label = cluster_labels[i] if i < len(cluster_labels) else {"model_name": f"Cluster {i + 1}", "schema_type": "WebPage"}
+            urls_in_cluster = cluster_urls[i] if i < len(cluster_urls) else []
             pattern = get_cluster_url_pattern(urls_in_cluster)
             sample = urls_in_cluster[:5]
+            # Libellés toujours non vides (texte simple pour le titre d'expander)
+            name = (label.get("model_name") or "").strip() or f"Cluster {i + 1}"
+            schema_type = (label.get("schema_type") or "").strip() or "—"
+            expander_label = f"{name} — {schema_type} — {len(urls_in_cluster)} page(s) — {pattern}"
 
-            with st.expander(f"**Cluster {i}** — {len(cluster_indices)} page(s) — Pattern : `{pattern}`"):
+            with st.expander(expander_label, expanded=False, key=f"jsonld_cluster_exp_{i}"):
+                st.markdown(f"**Type Schema.org recommandé :** `{schema_type}`")
                 st.markdown("**Exemples d'URLs :**")
                 for u in sample:
                     st.code(u, language=None)
@@ -466,5 +619,5 @@ def render_jsonld_analyzer_tab():
                     st.caption(f"... et {len(urls_in_cluster) - 5} autre(s) page(s).")
 
         if logs:
-            with st.expander("Logs de crawl"):
+            with st.expander("Logs de crawl", key="jsonld_analyzer_logs"):
                 st.text("\n".join(logs[-150:]))

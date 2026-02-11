@@ -1,5 +1,5 @@
 # HOTARU — Version affichée dans l'app (header + footer)
 # À METTRE À JOUR à chaque push / merge sur main (PR) avec la date et l'heure courantes.
 
-VERSION = "3.0.11"
-BUILD_DATE = "2026-02-11 17:14"
+VERSION = "3.0.12"
+BUILD_DATE = "2026-02-11 17:31"
