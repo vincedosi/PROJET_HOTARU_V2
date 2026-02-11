@@ -600,18 +600,28 @@ def render_jsonld_analyzer_tab():
         st.markdown("---")
         st.markdown("##### Détail des clusters")
 
+        # Onglets plutôt que expanders (noms visibles dans les libellés)
+        tab_labels = []
         for i in range(num_clusters):
             label = cluster_labels[i] if i < len(cluster_labels) else {"model_name": f"Cluster {i + 1}", "schema_type": "WebPage"}
-            urls_in_cluster = cluster_urls[i] if i < len(cluster_urls) else []
-            pattern = get_cluster_url_pattern(urls_in_cluster)
-            sample = urls_in_cluster[:5]
-            # Libellés toujours non vides (texte simple pour le titre d'expander)
             name = (label.get("model_name") or "").strip() or f"Cluster {i + 1}"
-            schema_type = (label.get("schema_type") or "").strip() or "—"
-            expander_label = f"{name} — {schema_type} — {len(urls_in_cluster)} page(s) — {pattern}"
+            n = len(cluster_urls[i]) if i < len(cluster_urls) else 0
+            tab_labels.append(f"{i + 1}. {name} ({n} p.)")
 
-            with st.expander(expander_label, expanded=False):
-                st.markdown(f"**Type Schema.org recommandé :** `{schema_type}`")
+        cluster_tabs = st.tabs(tab_labels)
+
+        for i, tab in enumerate(cluster_tabs):
+            with tab:
+                label = cluster_labels[i] if i < len(cluster_labels) else {"model_name": f"Cluster {i + 1}", "schema_type": "WebPage"}
+                urls_in_cluster = cluster_urls[i] if i < len(cluster_urls) else []
+                pattern = get_cluster_url_pattern(urls_in_cluster)
+                sample = urls_in_cluster[:5]
+                name = (label.get("model_name") or "").strip() or f"Cluster {i + 1}"
+                schema_type = (label.get("schema_type") or "").strip() or "—"
+
+                st.markdown(f"**Modèle :** {name}")
+                st.markdown(f"**Type Schema.org :** `{schema_type}`")
+                st.markdown(f"**Pattern URL :** `{pattern}`")
                 st.markdown("**Exemples d'URLs :**")
                 for u in sample:
                     st.code(u, language=None)
