@@ -74,6 +74,10 @@ def get_render_leaf_tab():
     from modules.jsonld import render_leaf_tab
     return render_leaf_tab
 
+def get_render_jsonld_analyzer_tab():
+    from modules.jsonld import render_jsonld_analyzer_tab
+    return render_jsonld_analyzer_tab
+
 def get_render_eco_tab():
     from modules.eco import render_eco_tab
     return render_eco_tab
@@ -206,14 +210,17 @@ def main():
             render_scraping_debug_tab()
 
     with tab_jsonld:
-        # Sous-onglets Master et Leaf uniquement ici (pas d'onglet Master/Leaf au top)
-        sub_master, sub_leaf = st.tabs(["Master", "Leaf"])
+        # Sous-onglets Master, Leaf, Analyse JSON-LD
+        sub_master, sub_leaf, sub_analyzer = st.tabs(["Master", "Leaf", "Analyse JSON-LD"])
         with sub_master:
             render_master_tab = get_render_master_tab()
             render_master_tab()
         with sub_leaf:
             render_leaf_tab = get_render_leaf_tab()
             render_leaf_tab()
+        with sub_analyzer:
+            render_jsonld_analyzer_tab = get_render_jsonld_analyzer_tab()
+            render_jsonld_analyzer_tab()
 
     with tab_eco:
         render_eco_tab = get_render_eco_tab()

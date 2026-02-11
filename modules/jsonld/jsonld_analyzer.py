@@ -360,3 +360,111 @@ def get_cluster_url_pattern(urls: list) -> str:
     # Prendre le plus long ou le plus fréquent comme base
     base = max(patterns, key=len)
     return "/" + "/".join(base)
+
+
+# =============================================================================
+# Étape 2 : Interface Streamlit basique (input + résultats texte)
+# =============================================================================
+
+def render_jsonld_analyzer_tab():
+    """Onglet Analyse JSON-LD : crawl + clustering, affichage résultats texte."""
+    import streamlit as st
+    from core.scraping import SmartScraper
+
+    st.markdown(
+        "<p class='section-title'>ANALYSE JSON-LD</p>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<p class='home-tagline' style='margin-bottom:1.5rem;'>"
+        "Détection des types de pages par structure DOM et pattern d'URL. Clustering intelligent (seuil 85 %).</p>",
+        unsafe_allow_html=True,
+    )
+
+    url_input = st.text_input(
+        "URL du site à analyser",
+        placeholder="https://www.example.com",
+        key="jsonld_analyzer_url",
+    )
+    max_pages = st.slider(
+        "Nombre de pages à crawler",
+        min_value=50,
+        max_value=500,
+        value=150,
+        step=10,
+        key="jsonld_analyzer_max_pages",
+    )
+
+    if st.button("LANCER L'ANALYSE", type="primary", use_container_width=True, key="jsonld_analyzer_btn"):
+        if not url_input or not url_input.strip():
+            st.warning("Veuillez saisir une URL.")
+            return
+
+        url = url_input.strip()
+        if not url.startswith(("http://", "https://")):
+            url = "https://" + url
+
+        logs = []
+        def add_log(msg):
+            logs.append(msg)
+
+        progress_placeholder = st.empty()
+        log_placeholder = st.container()
+
+        with progress_placeholder:
+            bar = st.progress(0.0, "Initialisation...")
+
+        try:
+            scr = SmartScraper(
+                [url],
+                max_urls=max_pages,
+                use_selenium=False,
+                log_callback=add_log,
+            )
+            res, crawl_meta = scr.run_analysis(
+                progress_callback=lambda msg, val: bar.progress(min(val, 1.0), msg),
+            )
+        except Exception as e:
+            progress_placeholder.empty()
+            st.error(f"Erreur lors du crawl : {e}")
+            return
+
+        progress_placeholder.empty()
+
+        if not res:
+            st.warning("Aucune page récupérée. Vérifiez l'URL et réessayez.")
+            if logs:
+                with st.expander("Logs de crawl"):
+                    st.text("\n".join(logs[-100:]))
+            return
+
+        # Clustering
+        with st.spinner("Clustering des pages..."):
+            clusters = cluster_pages(res)
+
+        # Résultats texte
+        domain = urlparse(url).netloc or "site"
+        st.markdown("---")
+        st.markdown("##### Vue d'ensemble")
+        st.markdown(f"- **Site :** {domain}")
+        st.markdown(f"- **Pages analysées :** {len(res)}")
+        st.markdown(f"- **Modèles détectés :** {len(clusters)}")
+
+        st.markdown("---")
+        st.markdown("##### Détail des clusters")
+
+        for i, cluster_indices in enumerate(clusters, 1):
+            urls_in_cluster = [res[idx]["url"] for idx in cluster_indices]
+            pattern = get_cluster_url_pattern(urls_in_cluster)
+            sample = urls_in_cluster[:5]
+
+            with st.expander(f"**Cluster {i}** — {len(cluster_indices)} page(s) — Pattern : `{pattern}`"):
+                st.markdown("**Exemples d'URLs :**")
+                for u in sample:
+                    st.code(u, language=None)
+                if len(urls_in_cluster) > 5:
+                    st.caption(f"... et {len(urls_in_cluster) - 5} autre(s) page(s).")
+
+        if logs:
+            with st.expander("Logs de crawl"):
+                st.text("\n".join(logs[-150:]))
