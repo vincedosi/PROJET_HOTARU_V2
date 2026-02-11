@@ -272,6 +272,34 @@ class AuditDatabase:
             st.error(f"Erreur sauvegarde JSON-LD GSheet : {e}")
             return False
 
+    def _decompress_from_sheet(self, s: str):
+        """Parse une chaîne du Sheet : JSON brut ou base64+zlib."""
+        if not s or not s.strip():
+            return None
+        s = s.strip()
+        try:
+            return json.loads(s)
+        except json.JSONDecodeError:
+            pass
+        try:
+            raw = base64.b64decode(s)
+            return json.loads(zlib.decompress(raw).decode("utf-8"))
+        except Exception:
+            return None
+
+    def list_jsonld_sites(self, user_email: str):
+        """
+        Retourne la liste des (site_url, workspace) sauvegardés pour l'utilisateur.
+        Format: [{"site_url": str, "workspace": str, "created_at": str}, ...]
+        """
+        models = self.load_jsonld_models(user_email, site_url=None)
+        seen = {}
+        for m in models:
+            key = (m.get("site_url") or "", m.get("workspace") or "Non classé")
+            if key not in seen or (m.get("created_at") or "") > (seen[key].get("created_at") or ""):
+                seen[key] = {"site_url": key[0], "workspace": key[1], "created_at": m.get("created_at", "")}
+        return list(seen.values())
+
     def load_jsonld_models(self, user_email: str, site_url: str = None):
         """
         Charge les modèles JSON-LD depuis l'onglet 'jsonld'.
@@ -307,8 +335,8 @@ class AuditDatabase:
                     "dom_structure": row[6] if len(row) > 6 else "",
                     "existing_jsonld": row[7] if len(row) > 7 else "",
                     "recommended_schema": row[8] if len(row) > 8 else "",
-                    "created_at": row[9] if len(row) > 9 else "",
-                    "workspace": row[10] if len(row) > 10 else "",
+                    "created_at": row[10] if len(row) > 10 else "",
+                    "workspace": row[11] if len(row) > 11 else "",
                 })
             return models
         except Exception as e:

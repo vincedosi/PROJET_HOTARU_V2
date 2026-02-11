@@ -480,8 +480,16 @@ Réponds UNIQUEMENT avec un JSON valide, sans texte avant ou après :
 # Étape 4 : Graphe interactif (pyvis + networkx)
 # =============================================================================
 
+# Palette de couleurs pour les nœuds cluster (chaque cluster = couleur distincte)
+CLUSTER_NODE_COLORS = [
+    "#dc2626", "#ea580c", "#ca8a04", "#16a34a", "#2563eb",
+    "#7c3aed", "#db2777", "#0d9488", "#f59e0b", "#6366f1",
+    "#ef4444", "#84cc16", "#06b6d4", "#8b5cf6", "#ec4899",
+]
+
+
 def build_jsonld_graph_html(domain: str, cluster_labels: list, cluster_urls: list) -> str:
-    """Construit le graphe pyvis : domaine -> clusters -> URLs exemples."""
+    """Construit le graphe pyvis : domaine -> clusters -> URLs exemples. Nœuds colorés."""
     import networkx as nx
     from pyvis.network import Network
 
@@ -502,12 +510,13 @@ def build_jsonld_graph_html(domain: str, cluster_labels: list, cluster_urls: lis
         urls = cluster_urls[i] if i < len(cluster_urls) else []
         cluster_id = f"cluster_{i}"
         cluster_size = 15 + min(len(urls), 25)
+        cluster_color = CLUSTER_NODE_COLORS[i % len(CLUSTER_NODE_COLORS)]
         G.add_node(
             cluster_id,
             label=name[:25] + ("..." if len(name) > 25 else ""),
             size=cluster_size,
-            color="#cbd5e1",
-            font={"color": "#0f172a", "face": "Inter"},
+            color=cluster_color,
+            font={"color": "#ffffff", "face": "Inter"},
             title=f"{name} — {len(urls)} page(s)",
         )
         G.add_edge(domain_node, cluster_id)
@@ -565,6 +574,61 @@ def render_jsonld_analyzer_tab():
         "Détection des types de pages par structure DOM et pattern d'URL. Clustering intelligent (seuil 85 %).</p>",
         unsafe_allow_html=True,
     )
+
+    with st.expander("Charger des données sauvegardées depuis Google Sheets"):
+        from core.database import AuditDatabase
+        from core.session_keys import get_current_user_email
+
+        user_email = get_current_user_email() or ""
+        db = AuditDatabase()
+        sites = db.list_jsonld_sites(user_email) if user_email and db.client else []
+
+        if not sites:
+            st.caption("Aucune donnée sauvegardée pour votre compte. Lancez une analyse puis sauvegardez dans Google Sheets.")
+        else:
+            opt_labels = [f"{s['site_url']} — {s['workspace']}" for s in sites]
+            sel_idx = st.selectbox("Sélectionner un site sauvegardé", range(len(opt_labels)), format_func=lambda i: opt_labels[i], key="jsonld_load_site")
+            if st.button("CHARGER DEPUIS GOOGLE SHEETS", type="secondary", use_container_width=True, key="jsonld_load_btn"):
+                s = sites[sel_idx]
+                models = db.load_jsonld_models(user_email, site_url=s["site_url"])
+                models = [m for m in models if (m.get("workspace") or "").strip() == (s.get("workspace") or "").strip()]
+                if not models:
+                    st.warning("Aucun modèle trouvé pour ce site et espace de travail.")
+                else:
+                    domain = urlparse(s["site_url"]).netloc or "site"
+                    cluster_labels = []
+                    cluster_urls = []
+                    cluster_dom = []
+                    cluster_jsonld = []
+                    total_pages = 0
+                    for m in models:
+                        cluster_labels.append({"model_name": m.get("model_name") or "Cluster", "schema_type": m.get("recommended_schema") or "WebPage"})
+                        urls_str = m.get("sample_urls") or "[]"
+                        try:
+                            urls = json.loads(urls_str) if isinstance(urls_str, str) else urls_str
+                        except json.JSONDecodeError:
+                            try:
+                                raw = __import__("base64").b64decode(urls_str)
+                                urls = json.loads(__import__("zlib").decompress(raw).decode())
+                            except Exception:
+                                urls = []
+                        cluster_urls.append(urls if isinstance(urls, list) else [])
+                        cluster_dom.append(db._decompress_from_sheet(m.get("dom_structure") or "") or {})
+                        cluster_jsonld.append(db._decompress_from_sheet(m.get("existing_jsonld") or ""))
+                        total_pages += m.get("page_count", 0)
+                    st.session_state["jsonld_analyzer_results"] = {
+                        "site_url": s["site_url"],
+                        "domain": domain,
+                        "total_pages": total_pages,
+                        "cluster_labels": cluster_labels,
+                        "cluster_urls": cluster_urls,
+                        "cluster_dom_structures": cluster_dom,
+                        "cluster_jsonld": cluster_jsonld,
+                        "logs": [],
+                        "loaded_from_sheet": True,
+                    }
+                    st.success("Données chargées.")
+                    st.rerun()
 
     url_input = st.text_input(
         "URL du site à analyser",
@@ -789,6 +853,49 @@ def render_jsonld_analyzer_tab():
                 from core.database import AuditDatabase
                 from core.session_keys import get_current_user_email
 
+                st.markdown("##### Charger depuis Google Sheets")
+                _user_email = get_current_user_email() or ""
+                _db = AuditDatabase()
+                _sites = _db.list_jsonld_sites(_user_email) if _user_email and _db.client else []
+                if _sites:
+                    _opt_labels = [f"{s['site_url']} — {s['workspace']}" for s in _sites]
+                    _sel_idx = st.selectbox("Site sauvegardé", range(len(_opt_labels)), format_func=lambda i: _opt_labels[i], key="jsonld_load_export")
+                    if st.button("CHARGER DEPUIS GOOGLE SHEETS", use_container_width=True, key="jsonld_load_export_btn"):
+                        _s = _sites[_sel_idx]
+                        _models = _db.load_jsonld_models(_user_email, site_url=_s["site_url"])
+                        _models = [m for m in _models if (m.get("workspace") or "").strip() == (_s.get("workspace") or "").strip()]
+                        if _models:
+                            _domain = urlparse(_s["site_url"]).netloc or "site"
+                            _labels = []
+                            _urls = []
+                            _doms = []
+                            _jlds = []
+                            for m in _models:
+                                _labels.append({"model_name": m.get("model_name") or "Cluster", "schema_type": m.get("recommended_schema") or "WebPage"})
+                                _us = m.get("sample_urls") or "[]"
+                                try:
+                                    _u = json.loads(_us) if isinstance(_us, str) else _us
+                                except json.JSONDecodeError:
+                                    try:
+                                        _u = json.loads(__import__("zlib").decompress(__import__("base64").b64decode(_us)).decode())
+                                    except Exception:
+                                        _u = []
+                                _urls.append(_u if isinstance(_u, list) else [])
+                                _doms.append(_db._decompress_from_sheet(m.get("dom_structure") or "") or {})
+                                _jlds.append(_db._decompress_from_sheet(m.get("existing_jsonld") or ""))
+                            st.session_state["jsonld_analyzer_results"] = {
+                                "site_url": _s["site_url"], "domain": _domain,
+                                "total_pages": sum(m.get("page_count", 0) for m in _models),
+                                "cluster_labels": _labels, "cluster_urls": _urls,
+                                "cluster_dom_structures": _doms, "cluster_jsonld": _jlds,
+                                "logs": [], "loaded_from_sheet": True,
+                            }
+                            st.success("Données chargées.")
+                            st.rerun()
+                        else:
+                            st.warning("Aucun modèle pour ce site et espace.")
+                else:
+                    st.caption("Aucune donnée sauvegardée.")
                 st.markdown("##### Sauvegarde Google Sheets")
                 site_url = data.get("site_url") or f"https://{domain}"
                 workspace = st.session_state.get("audit_workspace_select", "Non classé") or "Non classé"
