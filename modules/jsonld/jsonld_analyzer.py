@@ -6,6 +6,7 @@
 
 import re
 import json
+import os
 import requests
 from typing import Optional
 from urllib.parse import urlparse
@@ -468,6 +469,77 @@ Réponds UNIQUEMENT avec un JSON valide, sans texte avant ou après :
 
 
 # =============================================================================
+# Étape 4 : Graphe interactif (pyvis + networkx)
+# =============================================================================
+
+def build_jsonld_graph_html(domain: str, cluster_labels: list, cluster_urls: list) -> str:
+    """Construit le graphe pyvis : domaine -> clusters -> URLs exemples."""
+    import networkx as nx
+    from pyvis.network import Network
+
+    G = nx.DiGraph()
+    domain_node = f"domain_{domain}"
+    G.add_node(
+        domain_node,
+        label=domain[:30] + ("..." if len(domain) > 30 else ""),
+        size=35,
+        color="#0f172a",
+        font={"color": "#ffffff", "face": "Inter"},
+        title=domain,
+    )
+
+    for i in range(len(cluster_labels)):
+        label = cluster_labels[i] if i < len(cluster_labels) else {}
+        name = (label.get("model_name") or "").strip() or f"Cluster {i + 1}"
+        urls = cluster_urls[i] if i < len(cluster_urls) else []
+        cluster_id = f"cluster_{i}"
+        cluster_size = 15 + min(len(urls), 25)
+        G.add_node(
+            cluster_id,
+            label=name[:25] + ("..." if len(name) > 25 else ""),
+            size=cluster_size,
+            color="#cbd5e1",
+            font={"color": "#0f172a", "face": "Inter"},
+            title=f"{name} — {len(urls)} page(s)",
+        )
+        G.add_edge(domain_node, cluster_id)
+
+        for u in urls[:5]:
+            short_label = (urlparse(u).path or "/")[-40:] or "URL"
+            G.add_node(
+                u,
+                label=short_label,
+                size=10,
+                color="#e2e8f0",
+                font={"color": "#0f172a", "face": "Inter", "size": 10},
+                title=u,
+            )
+            G.add_edge(cluster_id, u)
+
+    nt = Network(height="600px", width="100%", bgcolor="#ffffff", font_color="#0f172a")
+    nt.from_nx(G)
+    opts = {
+        "nodes": {"font": {"face": "Inter", "size": 12}, "borderWidth": 2},
+        "edges": {"color": "#cbd5e1", "smooth": {"type": "dynamic", "roundness": 0.2}},
+        "physics": {
+            "solver": "forceAtlas2Based",
+            "forceAtlas2Based": {"gravitationalConstant": -80, "springLength": 150, "avoidOverlap": 1},
+            "stabilization": {"enabled": True, "iterations": 150},
+        },
+    }
+    nt.set_options(json.dumps(opts))
+    path = "temp_jsonld_graph.html"
+    nt.save_graph(path)
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read()
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+    return html
+
+
+# =============================================================================
 # Étape 2 : Interface Streamlit basique (input + résultats texte)
 # =============================================================================
 
@@ -570,24 +642,38 @@ def render_jsonld_analyzer_tab():
             st.info("Clé API Mistral absente : nommage automatique désactivé. Configurez `st.secrets['mistral']['api_key']` pour activer.")
 
         domain = urlparse(url).netloc or "site"
-        # Sauvegarde en session (sans HTML) pour affichage persistant après rerun
         cluster_urls = [[res[idx]["url"] for idx in indices] for indices in clusters]
+        # DOM + JSON-LD par cluster (première page) pour le graphe et le panneau
+        cluster_dom_structures = []
+        cluster_jsonld = []
+        for indices in clusters:
+            page = res[indices[0]]
+            dom = page.get("dom_structure") or extract_dom_structure(page.get("html_content") or "")
+            cluster_dom_structures.append(dom)
+            jld = page.get("json_ld") or []
+            cluster_jsonld.append(jld[0] if jld else None)
         st.session_state["jsonld_analyzer_results"] = {
             "domain": domain,
             "total_pages": len(res),
             "cluster_labels": cluster_labels,
             "cluster_urls": cluster_urls,
+            "cluster_dom_structures": cluster_dom_structures,
+            "cluster_jsonld": cluster_jsonld,
             "logs": logs,
         }
         st.rerun()
 
     # Affichage des résultats (depuis session_state, persistant après rerun)
     if "jsonld_analyzer_results" in st.session_state:
+        import streamlit.components.v1 as components
+
         data = st.session_state["jsonld_analyzer_results"]
         domain = data["domain"]
         total_pages = data["total_pages"]
         cluster_labels = data["cluster_labels"]
         cluster_urls = data["cluster_urls"]
+        cluster_dom = data.get("cluster_dom_structures", [])
+        cluster_jsonld = data.get("cluster_jsonld", [])
         logs = data.get("logs", [])
         num_clusters = len(cluster_labels)
 
@@ -598,35 +684,72 @@ def render_jsonld_analyzer_tab():
         st.markdown(f"- **Modèles détectés :** {num_clusters}")
 
         st.markdown("---")
-        st.markdown("##### Détail des clusters")
+        tab_graphe, tab_tableau = st.tabs(["GRAPHE", "TABLEAU"])
 
-        # Onglets plutôt que expanders (noms visibles dans les libellés)
-        tab_labels = []
-        for i in range(num_clusters):
-            label = cluster_labels[i] if i < len(cluster_labels) else {"model_name": f"Cluster {i + 1}", "schema_type": "WebPage"}
-            name = (label.get("model_name") or "").strip() or f"Cluster {i + 1}"
-            n = len(cluster_urls[i]) if i < len(cluster_urls) else 0
-            tab_labels.append(f"{i + 1}. {name} ({n} p.)")
+        with tab_graphe:
+            html_graph = build_jsonld_graph_html(domain, cluster_labels, cluster_urls)
+            components.html(html_graph, height=620)
 
-        cluster_tabs = st.tabs(tab_labels)
-
-        for i, tab in enumerate(cluster_tabs):
-            with tab:
-                label = cluster_labels[i] if i < len(cluster_labels) else {"model_name": f"Cluster {i + 1}", "schema_type": "WebPage"}
-                urls_in_cluster = cluster_urls[i] if i < len(cluster_urls) else []
-                pattern = get_cluster_url_pattern(urls_in_cluster)
-                sample = urls_in_cluster[:5]
-                name = (label.get("model_name") or "").strip() or f"Cluster {i + 1}"
+            st.markdown("##### Détail du cluster sélectionné")
+            options = [
+                f"{i + 1}. {(cluster_labels[i].get('model_name') or '').strip() or f'Cluster {i + 1}'} ({len(cluster_urls[i])} p.)"
+                for i in range(num_clusters)
+            ]
+            sel = st.selectbox("Sélectionner un cluster", options, key="jsonld_cluster_select")
+            if sel:
+                idx = options.index(sel)
+                label = cluster_labels[idx] if idx < len(cluster_labels) else {}
+                name = (label.get("model_name") or "").strip() or f"Cluster {idx + 1}"
                 schema_type = (label.get("schema_type") or "").strip() or "—"
+                urls_in_cluster = cluster_urls[idx] if idx < len(cluster_urls) else []
+                pattern = get_cluster_url_pattern(urls_in_cluster)
 
-                st.markdown(f"**Modèle :** {name}")
-                st.markdown(f"**Type Schema.org :** `{schema_type}`")
-                st.markdown(f"**Pattern URL :** `{pattern}`")
-                st.markdown("**Exemples d'URLs :**")
-                for u in sample:
-                    st.code(u, language=None)
-                if len(urls_in_cluster) > 5:
-                    st.caption(f"... et {len(urls_in_cluster) - 5} autre(s) page(s).")
+                st.markdown(f"**Modèle :** {name} — **Schema.org :** `{schema_type}` — **Pattern :** `{pattern}`")
+
+                col_dom, col_json = st.columns(2)
+                with col_dom:
+                    st.markdown("**Structure DOM type :**")
+                    dom = cluster_dom[idx] if idx < len(cluster_dom) else {}
+                    if dom:
+                        st.json(dom)
+                    else:
+                        st.caption("—")
+
+                with col_json:
+                    st.markdown("**JSON-LD existant :**")
+                    jld = cluster_jsonld[idx] if idx < len(cluster_jsonld) else None
+                    if jld:
+                        st.json(jld)
+                    else:
+                        st.caption("Aucun JSON-LD détecté sur la page type.")
+
+        with tab_tableau:
+            tab_labels = []
+            for i in range(num_clusters):
+                label = cluster_labels[i] if i < len(cluster_labels) else {"model_name": f"Cluster {i + 1}", "schema_type": "WebPage"}
+                name = (label.get("model_name") or "").strip() or f"Cluster {i + 1}"
+                n = len(cluster_urls[i]) if i < len(cluster_urls) else 0
+                tab_labels.append(f"{i + 1}. {name} ({n} p.)")
+
+            cluster_tabs = st.tabs(tab_labels)
+
+            for i, tab in enumerate(cluster_tabs):
+                with tab:
+                    label = cluster_labels[i] if i < len(cluster_labels) else {"model_name": f"Cluster {i + 1}", "schema_type": "WebPage"}
+                    urls_in_cluster = cluster_urls[i] if i < len(cluster_urls) else []
+                    pattern = get_cluster_url_pattern(urls_in_cluster)
+                    sample = urls_in_cluster[:5]
+                    name = (label.get("model_name") or "").strip() or f"Cluster {i + 1}"
+                    schema_type = (label.get("schema_type") or "").strip() or "—"
+
+                    st.markdown(f"**Modèle :** {name}")
+                    st.markdown(f"**Type Schema.org :** `{schema_type}`")
+                    st.markdown(f"**Pattern URL :** `{pattern}`")
+                    st.markdown("**Exemples d'URLs :**")
+                    for u in sample:
+                        st.code(u, language=None)
+                    if len(urls_in_cluster) > 5:
+                        st.caption(f"... et {len(urls_in_cluster) - 5} autre(s) page(s).")
 
         if logs:
             with st.expander("Logs de crawl"):
