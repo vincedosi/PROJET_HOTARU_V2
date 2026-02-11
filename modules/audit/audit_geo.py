@@ -19,7 +19,7 @@ from bs4 import BeautifulSoup
 from core.database import AuditDatabase
 from core.session_keys import get_current_user_email
 from core.scraping import SmartScraper
-from modules.off_page import render_off_page_audit
+from .off_page import render_off_page_audit
 
 # =============================================================================
 # CONSTANTE API MISTRAL
@@ -556,7 +556,7 @@ Reponds UNIQUEMENT avec le contenu du fichier llms.txt, sans aucune explication 
 def calculate_page_score(page):
     """Calcule le score GEO avance d'une page"""
     try:
-        from modules.geo_scoring import GEOScorer
+        from .geo_scoring import GEOScorer
         scorer = GEOScorer()
         result = scorer.calculate_score(page)
         return result['total_score'], result['grade'], result['breakdown'], result['recommendations']

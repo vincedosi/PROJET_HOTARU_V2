@@ -55,31 +55,31 @@ def get_render_home():
     return render_home
 
 def get_render_audit_geo():
-    from modules.audit_geo import render_audit_geo
+    from modules.audit import render_audit_geo
     return render_audit_geo
 
 def get_render_authority_score():
-    from modules.authority_score import render_authority_score
+    from modules.audit import render_authority_score
     return render_authority_score
 
 def get_render_scraping_debug_tab():
-    from modules.audit_scraping import render_scraping_debug_tab
+    from modules.audit import render_scraping_debug_tab
     return render_scraping_debug_tab
 
 def get_render_master_tab():
-    from modules.master import render_master_tab
+    from modules.jsonld import render_master_tab
     return render_master_tab
 
 def get_render_leaf_tab():
-    from modules.leaf import render_leaf_tab
+    from modules.jsonld import render_leaf_tab
     return render_leaf_tab
 
 def get_render_eco_tab():
-    from modules.eco_impact import render_eco_tab
+    from modules.eco import render_eco_tab
     return render_eco_tab
 
 def get_render_ai_transformer_tab():
-    from modules.ai_transformer_page import render_ai_transformer_tab
+    from modules.ai_transformer import render_ai_transformer_tab
     return render_ai_transformer_tab
 
 

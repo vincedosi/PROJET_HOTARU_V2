@@ -379,7 +379,7 @@ def render_master_tab():
 
         _render_master_data_content()
     with tab_methodo:
-        from modules.methodologie_blocks import render_methodologie_for_module
+        from .methodologie_blocks import render_methodologie_for_module
         render_methodologie_for_module("master")
 
 

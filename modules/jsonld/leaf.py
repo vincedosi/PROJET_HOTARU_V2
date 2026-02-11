@@ -32,7 +32,7 @@ def render_leaf_tab():
     with tab_builder:
         _render_leaf_builder_content()
     with tab_methodo:
-        from modules.methodologie_blocks import render_methodologie_for_module
+        from .methodologie_blocks import render_methodologie_for_module
         render_methodologie_for_module("leaf")
 
 

@@ -1,6 +1,6 @@
 # HOTARU — Référence agent
 
-**Documentation principale :** [README.md](README.md)
+**Documentation principale :** [README.md](../README.md)
 
 Ce fichier centralise les instructions pour l'agent (Cursor/Claude). Toute la doc projet (architecture, SaaS, structure, conventions, roadmap) est dans **README.md**. Consulter README.md pour :
 

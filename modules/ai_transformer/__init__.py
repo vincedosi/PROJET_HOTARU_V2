@@ -9,6 +9,7 @@ from .analyzer import HTMLAnalyzer
 from .transformer import AIOptimizedTransformer
 from .scorer import AIScorer, ScoreCard
 from .visualizer import HTMLVisualizer
+from .ai_transformer_page import render_ai_transformer_tab
 
 __all__ = [
     "HTMLAnalyzer",
@@ -16,5 +17,6 @@ __all__ = [
     "AIScorer",
     "ScoreCard",
     "HTMLVisualizer",
+    "render_ai_transformer_tab",
 ]
 

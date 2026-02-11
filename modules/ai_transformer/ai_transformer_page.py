@@ -11,7 +11,7 @@ import streamlit as st
 import requests
 
 from core.scraping import fetch_page
-from modules.ai_transformer import (
+from . import (
     HTMLAnalyzer,
     AIOptimizedTransformer,
     AIScorer,

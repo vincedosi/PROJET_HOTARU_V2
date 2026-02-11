@@ -48,20 +48,32 @@ PROJET_HOTARU_V2/
 │   ├── master_handler.py       # MasterDataHandler, Wikidata + Mistral, heuristiques
 │   ├── dynamic_handler.py     # Prédictions Mistral (LEAF)
 │   └── template_builder.py     # Génération JSON-LD
+├── docs/
+│   └── CLAUDE.md               # Référence agent (voir README)
 ├── modules/
 │   ├── home.py                 # Page d'accueil
-│   ├── audit_geo.py            # Audit GEO (workspace, Audit Site | Audit Externe | Méthodologie, log_callback SmartScraper)
-│   ├── audit_scraping.py       # Scraping debug (URL, logs JSON-LD, techno, Selenium)
-│   ├── authority_score.py      # Authority Score AI-Native (5 piliers, sentence_transformers, sameAs)
-│   ├── master.py               # Master Data (Données | Méthodologie, recherche Wikidata/INSEE, audit gap, hydrate JSON-LD)
-│   ├── leaf.py                 # LEAF Builder (Builder | Méthodologie)
-│   ├── off_page.py             # Audit Externe (réputation, Audit Miroir, Méthodologie toujours visible)
-│   ├── eco_impact.py           # Eco-Score (Calculatrice | Méthodologie)
-│   ├── methodologie_blocks.py  # Contenu Méthodologie (Authority v2, Master, Leaf)
-│   ├── geo_scoring.py          # Scoring GEO
-│   ├── ai_transformer_page.py  # AI Transformer (onglet principal)
-│   └── ai_transformer/         # analyzer, transformer, scorer, visualizer, templates
-├── CLAUDE.md                   # Référence agent (voir README)
+│   ├── audit/                  # Onglet Audit (GEO, Authority, Scraping, Off-Page)
+│   │   ├── __init__.py
+│   │   ├── audit_geo.py        # Audit GEO (workspace, Audit Site | Externe | Méthodologie)
+│   │   ├── audit_scraping.py   # Scraping debug (URL, logs JSON-LD, techno, Selenium)
+│   │   ├── authority_score.py  # Authority Score AI-Native (5 piliers)
+│   │   ├── off_page.py         # Audit Externe (réputation, Audit Miroir)
+│   │   └── geo_scoring.py      # Scoring GEO
+│   ├── jsonld/                 # Onglet JSON-LD (Master, Leaf)
+│   │   ├── __init__.py
+│   │   ├── master.py           # Master Data (Wikidata/INSEE, audit gap, JSON-LD)
+│   │   ├── leaf.py             # LEAF Builder (Builder | Méthodologie)
+│   │   └── methodologie_blocks.py  # Contenu Méthodologie (Authority, Master, Leaf)
+│   ├── eco/                    # Onglet Eco-Score
+│   │   ├── __init__.py
+│   │   └── eco_impact.py       # Calculatrice impact carbone | Méthodologie
+│   └── ai_transformer/         # Onglet AI Transformer
+│       ├── __init__.py
+│       ├── ai_transformer_page.py
+│       ├── analyzer.py
+│       ├── transformer.py
+│       ├── scorer.py
+│       └── visualizer.py
 └── README.md                   # Ce fichier
 ```
 

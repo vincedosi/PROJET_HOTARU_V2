@@ -983,7 +983,7 @@ def render_authority_score():
     with tab_analyse:
         _render_authority_analyse_content()
     with tab_methodo:
-        from modules.methodologie_blocks import render_methodologie_for_module
+        from modules.jsonld.methodologie_blocks import render_methodologie_for_module
         render_methodologie_for_module("authority")
 
 
