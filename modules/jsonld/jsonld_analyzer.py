@@ -610,7 +610,7 @@ def render_jsonld_analyzer_tab():
             schema_type = (label.get("schema_type") or "").strip() or "—"
             expander_label = f"{name} — {schema_type} — {len(urls_in_cluster)} page(s) — {pattern}"
 
-            with st.expander(expander_label, expanded=False, key=f"jsonld_cluster_exp_{i}"):
+            with st.expander(expander_label, expanded=False):
                 st.markdown(f"**Type Schema.org recommandé :** `{schema_type}`")
                 st.markdown("**Exemples d'URLs :**")
                 for u in sample:
@@ -619,5 +619,5 @@ def render_jsonld_analyzer_tab():
                     st.caption(f"... et {len(urls_in_cluster) - 5} autre(s) page(s).")
 
         if logs:
-            with st.expander("Logs de crawl", key="jsonld_analyzer_logs"):
+            with st.expander("Logs de crawl"):
                 st.text("\n".join(logs[-150:]))
