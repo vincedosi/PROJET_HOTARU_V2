@@ -2,6 +2,7 @@
 HOTARU v2 - Audit Database (Google Sheets Backend)
 """
 
+import re
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
@@ -175,3 +176,141 @@ class AuditDatabase:
         except Exception as e:
             st.error(f"Erreur de sauvegarde MASTER GSheet : {e}")
             return False
+
+    def _get_jsonld_worksheet(self):
+        """Retourne l'onglet 'jsonld', le crée si absent avec en-têtes."""
+        if not self.sheet_file:
+            return None
+        try:
+            ws = self.sheet_file.worksheet("jsonld")
+            if ws.row_count == 0 or not ws.get_all_values():
+                headers = [
+                    "site_url", "model_id", "model_name", "page_count", "url_pattern",
+                    "sample_urls", "dom_structure", "existing_jsonld", "recommended_schema",
+                    "optimized_jsonld", "created_at", "workspace", "user_email"
+                ]
+                ws.append_row(headers)
+            return ws
+        except Exception:
+            try:
+                ws = self.sheet_file.add_worksheet(title="jsonld", rows=1000, cols=15)
+                headers = [
+                    "site_url", "model_id", "model_name", "page_count", "url_pattern",
+                    "sample_urls", "dom_structure", "existing_jsonld", "recommended_schema",
+                    "optimized_jsonld", "created_at", "workspace", "user_email"
+                ]
+                ws.append_row(headers)
+                return ws
+            except Exception as e:
+                st.error(f"Impossible de créer l'onglet jsonld : {e}")
+                return None
+
+    def _compress_for_sheet(self, data, max_chars: int):
+        """Compresse JSON avec zlib+base64. Si > max_chars, tronque."""
+        if data is None:
+            return ""
+        raw = json.dumps(data, ensure_ascii=False)
+        if len(raw) <= max_chars:
+            return raw
+        compressed = base64.b64encode(zlib.compress(raw.encode("utf-8"))).decode("ascii")
+        if len(compressed) <= max_chars:
+            return compressed
+        if isinstance(data, dict):
+            data_copy = dict(data)
+            data_copy["_truncated"] = True
+            return json.dumps(data_copy, ensure_ascii=False)[:max_chars]
+        return raw[:max_chars]
+
+    def save_jsonld_models(self, user_email: str, site_url: str, workspace: str, models_data: list) -> bool:
+        """
+        Sauvegarde les modèles JSON-LD dans l'onglet 'jsonld' du Google Sheet.
+        models_data: liste de dicts avec model_name, schema_type, page_count, url_pattern,
+                     sample_urls, dom_structure, existing_jsonld, optimized_jsonld (optionnel).
+        """
+        ws = self._get_jsonld_worksheet()
+        if not ws:
+            return False
+
+        try:
+            date_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+            final_ws = (workspace or "").strip() or "Non classé"
+            site_url_trim = (site_url or "")[:500]
+
+            rows = []
+            for i, m in enumerate(models_data):
+                model_name = (m.get("model_name") or "").strip() or f"Cluster {i + 1}"
+                model_id = re.sub(r"[^a-z0-9_]", "_", model_name.lower())[:100] or f"cluster_{i}"
+                schema_type = (m.get("schema_type") or "").strip()[:100] or "WebPage"
+                page_count = m.get("page_count", 0)
+                url_pattern = (m.get("url_pattern") or "")[:300]
+                sample_urls_str = json.dumps((m.get("sample_urls") or [])[:5], ensure_ascii=False)
+                if len(sample_urls_str) > 2000:
+                    sample_urls_str = base64.b64encode(zlib.compress(sample_urls_str.encode())).decode("ascii")
+                dom_str = self._compress_for_sheet(m.get("dom_structure"), 5000)
+                existing_str = self._compress_for_sheet(m.get("existing_jsonld"), 50000)
+                optimized_str = self._compress_for_sheet(m.get("optimized_jsonld"), 50000)
+
+                rows.append([
+                    site_url_trim,
+                    model_id,
+                    model_name[:200],
+                    page_count,
+                    url_pattern,
+                    sample_urls_str[:2000],
+                    dom_str[:5000],
+                    existing_str[:50000],
+                    schema_type,
+                    optimized_str[:50000],
+                    date_str,
+                    final_ws[:200],
+                    user_email,
+                ])
+            if rows:
+                ws.append_rows(rows, value_input_option="RAW")
+            return True
+        except Exception as e:
+            st.error(f"Erreur sauvegarde JSON-LD GSheet : {e}")
+            return False
+
+    def load_jsonld_models(self, user_email: str, site_url: str = None):
+        """
+        Charge les modèles JSON-LD depuis l'onglet 'jsonld'.
+        Filtre par user_email et optionnellement par site_url.
+        """
+        ws = self._get_jsonld_worksheet()
+        if not ws:
+            return []
+
+        try:
+            all_rows = ws.get_all_values()
+            if len(all_rows) < 2:
+                return []
+            email_norm = (user_email or "").strip().lower()
+            url_norm = (site_url or "").strip() if site_url else None
+            models = []
+            for row in all_rows[1:]:
+                if len(row) < 5:
+                    continue
+                row_email = (row[12] if len(row) > 12 else "").strip().lower()
+                if row_email != email_norm:
+                    continue
+                row_url = (row[0] or "").strip()
+                if url_norm and row_url != url_norm:
+                    continue
+                models.append({
+                    "site_url": row[0],
+                    "model_id": row[1],
+                    "model_name": row[2],
+                    "page_count": int(row[3]) if row[3] else 0,
+                    "url_pattern": row[4] if len(row) > 4 else "",
+                    "sample_urls": row[5] if len(row) > 5 else "",
+                    "dom_structure": row[6] if len(row) > 6 else "",
+                    "existing_jsonld": row[7] if len(row) > 7 else "",
+                    "recommended_schema": row[8] if len(row) > 8 else "",
+                    "created_at": row[9] if len(row) > 9 else "",
+                    "workspace": row[10] if len(row) > 10 else "",
+                })
+            return models
+        except Exception as e:
+            st.error(f"Erreur lecture JSON-LD GSheet : {e}")
+            return []

@@ -642,6 +642,7 @@ def render_jsonld_analyzer_tab():
             st.info("Clé API Mistral absente : nommage automatique désactivé. Configurez `st.secrets['mistral']['api_key']` pour activer.")
 
         domain = urlparse(url).netloc or "site"
+        site_url = url
         cluster_urls = [[res[idx]["url"] for idx in indices] for indices in clusters]
         # DOM + JSON-LD par cluster (première page) pour le graphe et le panneau
         cluster_dom_structures = []
@@ -653,6 +654,7 @@ def render_jsonld_analyzer_tab():
             jld = page.get("json_ld") or []
             cluster_jsonld.append(jld[0] if jld else None)
         st.session_state["jsonld_analyzer_results"] = {
+            "site_url": site_url,
             "domain": domain,
             "total_pages": len(res),
             "cluster_labels": cluster_labels,
@@ -684,7 +686,7 @@ def render_jsonld_analyzer_tab():
         st.markdown(f"- **Modèles détectés :** {num_clusters}")
 
         st.markdown("---")
-        tab_graphe, tab_tableau = st.tabs(["GRAPHE", "TABLEAU"])
+        tab_graphe, tab_tableau, tab_export = st.tabs(["GRAPHE", "TABLEAU", "EXPORT"])
 
         with tab_graphe:
             html_graph = build_jsonld_graph_html(domain, cluster_labels, cluster_urls)
@@ -750,6 +752,57 @@ def render_jsonld_analyzer_tab():
                         st.code(u, language=None)
                     if len(urls_in_cluster) > 5:
                         st.caption(f"... et {len(urls_in_cluster) - 5} autre(s) page(s).")
+
+        with tab_export:
+            from core.database import AuditDatabase
+            from core.session_keys import get_current_user_email
+
+            st.markdown("##### Sauvegarde Google Sheets")
+            site_url = data.get("site_url") or f"https://{domain}"
+            workspace = st.session_state.get("audit_workspace_select", "Non classé") or "Non classé"
+            if workspace == "+ Creer Nouveau":
+                workspace = "Non classé"
+
+            models_data = []
+            for i in range(num_clusters):
+                label = cluster_labels[i] if i < len(cluster_labels) else {}
+                urls_in_cluster = cluster_urls[i] if i < len(cluster_urls) else []
+                pattern = get_cluster_url_pattern(urls_in_cluster)
+                models_data.append({
+                    "model_name": (label.get("model_name") or "").strip() or f"Cluster {i + 1}",
+                    "schema_type": (label.get("schema_type") or "").strip() or "WebPage",
+                    "page_count": len(urls_in_cluster),
+                    "url_pattern": pattern,
+                    "sample_urls": urls_in_cluster[:5],
+                    "dom_structure": cluster_dom[i] if i < len(cluster_dom) else None,
+                    "existing_jsonld": cluster_jsonld[i] if i < len(cluster_jsonld) else None,
+                    "optimized_jsonld": None,
+                })
+
+            if st.button("SAUVEGARDER DANS GOOGLE SHEETS", type="primary", use_container_width=True, key="jsonld_save_btn"):
+                user_email = get_current_user_email() or ""
+                db = AuditDatabase()
+                if db.save_jsonld_models(user_email, site_url, workspace, models_data):
+                    st.success("Modèles JSON-LD enregistrés dans l'onglet 'jsonld' du Google Sheet.")
+                else:
+                    st.error("Échec de la sauvegarde. Vérifiez la configuration GCP et l'URL du Sheet.")
+
+            st.markdown("##### Téléchargement JSON")
+            payload = {
+                "site_url": site_url,
+                "analyzed_at": __import__("datetime").datetime.now().isoformat() + "Z",
+                "total_pages": total_pages,
+                "models": models_data,
+            }
+            json_str = json.dumps(payload, ensure_ascii=False, indent=2)
+            st.download_button(
+                "Télécharger le JSON complet",
+                data=json_str,
+                file_name=f"jsonld_models_{domain.replace('.', '_')}.json",
+                mime="application/json",
+                use_container_width=True,
+                key="jsonld_download_btn",
+            )
 
         if logs:
             with st.expander("Logs de crawl"):
