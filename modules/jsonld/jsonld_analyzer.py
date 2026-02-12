@@ -10,7 +10,7 @@ import os
 import time
 import logging
 import requests
-from typing import Optional
+from typing import Optional, Tuple
 from urllib.parse import urlparse
 from collections import defaultdict
 
@@ -485,7 +485,7 @@ def generate_optimized_jsonld(
     existing_jsonld: Optional[dict],
     url_pattern: str,
     timeout: int = 30,
-) -> Optional[dict]:
+) -> Tuple[Optional[dict], Optional[str]]:
     """
     Génère un JSON-LD Schema.org optimisé complet via Mistral AI.
 
@@ -499,7 +499,7 @@ def generate_optimized_jsonld(
         timeout: Timeout API en secondes
 
     Returns:
-        dict : JSON-LD optimisé complet, ou None si échec
+        tuple (dict|None, str|None) : (JSON-LD optimisé, ou None) et (message d'erreur, ou None)
     """
     system_prompt = f"""Tu es un expert mondial en données structurées Schema.org et en SEO technique.
 
@@ -605,32 +605,52 @@ Réponds UNIQUEMENT avec le JSON-LD valide, sans aucun texte, sans balises markd
             json=payload,
             timeout=timeout,
         )
+        if response.status_code >= 400:
+            try:
+                err_body = response.json()
+                err_detail = err_body.get("message") or err_body.get("error") or str(err_body)[:300]
+            except Exception:
+                err_detail = response.text[:300] if response.text else str(response.status_code)
+            err = f"Mistral API erreur {response.status_code} pour {schema_type}: {err_detail}"
+            logging.error(err)
+            return None, err
         response.raise_for_status()
         data = response.json()
         raw_content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
+
+        if not raw_content or not str(raw_content).strip():
+            err = f"Réponse Mistral vide pour {schema_type}. L'API a renvoyé une structure sans contenu (choices/message/content)."
+            logging.error(err)
+            return None, err
 
         parsed = _parse_mistral_json(raw_content)
         if not parsed or not isinstance(parsed, dict):
             try:
                 parsed = json.loads(raw_content.strip())
             except json.JSONDecodeError:
-                logging.error(f"Mistral JSON-LD parse failed for {schema_type}")
-                return None
+                err = f"Parse JSON impossible (Mistral a renvoyé du texte invalide pour {schema_type}). Réponse brute (200 premiers chars): {repr((raw_content or '')[:200])}"
+                logging.error(f"Mistral JSON-LD parse failed for {schema_type}: {raw_content[:300]}")
+                return None, err
 
         if "@context" not in parsed or "@type" not in parsed:
+            err = f"Réponse Mistral invalide: manque @context ou @type pour {schema_type}. Structure reçue: {list(parsed.keys())[:10] if isinstance(parsed, dict) else type(parsed).__name__}"
             logging.error(f"Mistral JSON-LD invalid (@context/@type) for {schema_type}")
-            return None
+            return None, err
 
-        return parsed
+        return parsed, None
 
     except requests.exceptions.Timeout:
+        err = f"Timeout Mistral ({timeout}s) pour {schema_type}. L'API est peut-être surchargée."
         logging.error(f"Timeout Mistral pour {schema_type}")
-        return None
+        return None, err
     except requests.exceptions.RequestException as e:
+        err = f"Erreur API Mistral pour {schema_type}: {str(e)[:300]}"
         logging.error(f"Erreur API Mistral : {str(e)[:200]}")
-        return None
-    except (json.JSONDecodeError, KeyError, TypeError):
-        return None
+        return None, err
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        err = f"Erreur inattendue lors du parsing: {type(e).__name__}: {str(e)[:200]}"
+        logging.exception(f"Mistral JSON-LD exception for {schema_type}")
+        return None, err
 
 
 # =============================================================================
@@ -1114,7 +1134,7 @@ def render_jsonld_analyzer_tab():
                                 if mistral_key:
                                     dom = cluster_dom[idx] if idx < len(cluster_dom) else {}
                                     jld = cluster_jsonld[idx] if idx < len(cluster_jsonld) else None
-                                    optimized = generate_optimized_jsonld(
+                                    optimized, err_msg = generate_optimized_jsonld(
                                         api_key=mistral_key,
                                         schema_type=schema_type if schema_type != "—" else "WebPage",
                                         dom_structure=dom,
@@ -1127,7 +1147,7 @@ def render_jsonld_analyzer_tab():
                                         st.success("✅ JSON-LD optimisé généré !")
                                         st.rerun()
                                     else:
-                                        st.error("❌ Échec de la génération. Réessayez ou vérifiez les logs Mistral.")
+                                        st.error(f"❌ Échec de la génération. {err_msg or 'Erreur inconnue.'}")
                                 elif not sample_pages:
                                     st.warning("Résultats du crawl non disponibles (analyse chargée depuis Sheets). Lancez une nouvelle analyse.")
 
