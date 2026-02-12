@@ -730,6 +730,73 @@ Réponds UNIQUEMENT avec le JSON-LD valide, sans aucun texte, sans balises markd
         return None, err
 
 
+def validate_jsonld_schema(jsonld_data: dict, timeout: int = 10) -> dict:
+    """
+    Valide un JSON-LD via des vérifications Schema.org locales.
+
+    Args:
+        jsonld_data: Le JSON-LD à valider (dict)
+        timeout: Non utilisé (réservé pour API externe)
+
+    Returns:
+        dict avec valid (bool), errors (list), warnings (list), message (str)
+    """
+    errors = []
+    warnings = []
+
+    if not jsonld_data or not isinstance(jsonld_data, dict):
+        return {"valid": False, "errors": ["JSON-LD vide ou invalide"], "warnings": [], "message": "❌ JSON-LD invalide"}
+
+    if "@context" not in jsonld_data:
+        errors.append("Champ @context manquant")
+    elif jsonld_data["@context"] != "https://schema.org":
+        ctx = jsonld_data["@context"]
+        if isinstance(ctx, str) and "schema.org" not in ctx:
+            warnings.append("@context devrait être 'https://schema.org'")
+
+    if "@type" not in jsonld_data:
+        errors.append("Champ @type manquant")
+
+    schema_type = jsonld_data.get("@type", "")
+    if isinstance(schema_type, list):
+        schema_type = schema_type[0] if schema_type else ""
+
+    REQUIRED_FIELDS = {
+        "JobPosting": ["title", "description", "hiringOrganization"],
+        "Product": ["name", "offers"],
+        "Article": ["headline", "author", "publisher", "datePublished"],
+        "Event": ["name", "startDate", "location"],
+        "Organization": ["name"],
+        "LocalBusiness": ["name", "address"],
+        "Person": ["name"],
+        "Recipe": ["name", "recipeIngredient"],
+    }
+
+    if schema_type and schema_type in REQUIRED_FIELDS:
+        for field in REQUIRED_FIELDS[schema_type]:
+            if field not in jsonld_data:
+                errors.append(f"Champ obligatoire manquant : {field}")
+
+    for key, value in jsonld_data.items():
+        if isinstance(value, str) and value and not value.startswith("{{"):
+            if "url" in key.lower() or key in ("sameAs",):
+                if not value.startswith(("http://", "https://", "/")):
+                    warnings.append(f"URL potentiellement invalide dans {key} : {value[:50]}...")
+            if "date" in key.lower() or key in ("validThrough", "expires", "datePublished", "dateModified"):
+                if not re.match(r"\d{4}-\d{2}-\d{2}", value):
+                    warnings.append(f"Format de date suspect dans {key} : {value[:30]} (attendu YYYY-MM-DD)")
+
+    valid = len(errors) == 0
+    if valid and not warnings:
+        message = "✅ JSON-LD valide sans erreur ni warning"
+    elif valid:
+        message = f"⚠️ JSON-LD valide avec {len(warnings)} warning(s)"
+    else:
+        message = f"❌ JSON-LD invalide : {len(errors)} erreur(s)"
+
+    return {"valid": valid, "errors": errors, "warnings": warnings, "message": message}
+
+
 # =============================================================================
 # Graphe interactif (pyvis + networkx)
 # =============================================================================

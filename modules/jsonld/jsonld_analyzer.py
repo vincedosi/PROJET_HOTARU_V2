@@ -4,8 +4,11 @@
 # Logique métier dans services/jsonld_service.py (réutilisable par API).
 # =============================================================================
 
+import io
 import json
+import re
 import time
+import zipfile
 from urllib.parse import urlparse
 
 from services.jsonld_service import (
@@ -15,12 +18,57 @@ from services.jsonld_service import (
     name_cluster_with_mistral,
     suggest_cluster_merges_with_mistral,
     generate_optimized_jsonld,
+    validate_jsonld_schema,
     build_jsonld_graph_html,
     FLEXIBLE_TAGS,
 )
 
 
 # (Logique extraite dans services/jsonld_service.py)
+
+
+def _create_jsonld_zip(cluster_labels: list, cluster_urls: list, domain: str, get_optimized) -> bytes:
+    """
+    Crée un fichier ZIP contenant tous les JSON-LD optimisés.
+    get_optimized(i) retourne le JSON-LD du cluster i ou None.
+    """
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        readme = f"""JSON-LD EXPORT - {domain}
+========================================
+
+JSON-LD Schema.org optimisés pour chaque type de page détecté sur {domain}.
+
+Structure : XX_nom_cluster.json (XX = numéro)
+Généré le {time.strftime('%Y-%m-%d %H:%M:%S')}
+"""
+        zf.writestr("README.txt", readme)
+        for i in range(len(cluster_labels)):
+            opt = get_optimized(i)
+            if opt:
+                name = (cluster_labels[i].get("model_name") or f"Cluster {i+1}").strip()
+                safe_name = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+                filename = f"{i+1:02d}_{safe_name}.json"
+                zf.writestr(filename, json.dumps(opt, ensure_ascii=False, indent=2))
+        manifest = {
+            "export_date": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "domain": domain,
+            "total_clusters": len(cluster_labels),
+            "exported_count": sum(1 for i in range(len(cluster_labels)) if get_optimized(i)),
+            "clusters": [
+                {
+                    "id": i + 1,
+                    "name": (cluster_labels[i].get("model_name") or f"Cluster {i+1}").strip(),
+                    "schema_type": cluster_labels[i].get("schema_type", "WebPage"),
+                    "page_count": len(cluster_urls[i]) if i < len(cluster_urls) else 0,
+                    "has_jsonld": bool(get_optimized(i)),
+                }
+                for i in range(len(cluster_labels))
+            ],
+        }
+        zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+    zip_buffer.seek(0)
+    return zip_buffer.read()
 
 
 def render_jsonld_analyzer_tab():
@@ -248,10 +296,26 @@ def render_jsonld_analyzer_tab():
         num_clusters = len(cluster_labels)
 
         st.markdown("---")
-        st.markdown("<p style='color:#0f172a; font-weight:700; font-size:1rem; margin:0 0 0.5rem 0;'>Vue d'ensemble</p>", unsafe_allow_html=True)
-        st.markdown(f"- **Site :** {domain}")
-        st.markdown(f"- **Pages analysées :** {total_pages}")
-        st.markdown(f"- **Modèles détectés :** {num_clusters}")
+        st.markdown("<p class='section-title' style='margin-bottom:1rem;'>Vue d'ensemble</p>", unsafe_allow_html=True)
+        col_site, col_pages, col_clusters = st.columns(3)
+        with col_site:
+            st.markdown(
+                f'<div class="zen-metric" style="padding:1rem;"><div class="zen-metric-value" style="font-size:1.1rem; word-break:break-all;">{domain[:40]}{"…" if len(domain) > 40 else ""}</div>'
+                '<div class="zen-metric-label">Site analysé</div></div>',
+                unsafe_allow_html=True,
+            )
+        with col_pages:
+            st.markdown(
+                f'<div class="zen-metric"><div class="zen-metric-value">{total_pages}</div>'
+                '<div class="zen-metric-label">Pages analysées</div></div>',
+                unsafe_allow_html=True,
+            )
+        with col_clusters:
+            st.markdown(
+                f'<div class="zen-metric"><div class="zen-metric-value">{num_clusters}</div>'
+                '<div class="zen-metric-label">Modèles détectés</div></div>',
+                unsafe_allow_html=True,
+            )
         if num_clusters == 0:
             st.warning("Aucun cluster détecté. Le site peut avoir une structure très homogène.")
         elif num_clusters > 25:
@@ -261,11 +325,16 @@ def render_jsonld_analyzer_tab():
 
         # Fusion suggérée par Mistral
         if num_clusters >= 2:
-            st.markdown("##### Fusion intelligente par Mistral")
-            st.caption(
-                "Mistral analyse les noms des clusters et propose des fusions (même type de page). "
-                "Vous validez une à une. La fusion manuelle reste disponible dans le détail de chaque cluster."
-            )
+            with st.container():
+                st.markdown(
+                    '<div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:0; padding:1rem 1.25rem; margin-bottom:1rem;">'
+                    "<p style='font-weight:700; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em; color:#0f172a; margin:0 0 0.5rem 0;'>"
+                    "Fusion intelligente par Mistral</p>"
+                    "<p style='font-size:0.85rem; color:#64748b; margin:0;'>"
+                    "Mistral analyse les noms des clusters et propose des fusions (même type de page). "
+                    "Validez une à une. La fusion manuelle reste dans l'onglet FUSION.</p></div>",
+                    unsafe_allow_html=True,
+                )
             merge_suggestions = st.session_state.get("jsonld_merge_suggestions") or []
             suggestion_idx = st.session_state.get("jsonld_merge_suggestion_idx", 0)
 
@@ -297,10 +366,14 @@ def render_jsonld_analyzer_tab():
                 count_a = len(cluster_urls[idx_a]) if idx_a < len(cluster_urls) else 0
                 count_b = len(cluster_urls[idx_b]) if idx_b < len(cluster_urls) else 0
 
-                st.markdown(f"**Suggestion {suggestion_idx + 1}/{len(merge_suggestions)}** : Fusionner « {name_a} » avec « {name_b} » ?")
-                st.caption(f"Raison : {reason}")
-                st.markdown(f"*{name_a}* ({count_a} p.) + *{name_b}* ({count_b} p.) → {count_a + count_b} pages fusionnées")
-
+                st.markdown(
+                    f'<div style="background:#fffbeb; border:1px solid #fcd34d; padding:1rem 1.25rem; margin:0.5rem 0;">'
+                    f'<p style="font-weight:700; font-size:0.9rem; margin:0 0 0.5rem 0;">Suggestion {suggestion_idx + 1}/{len(merge_suggestions)}</p>'
+                    f'<p style="margin:0.25rem 0; font-size:0.95rem;">Fusionner « <strong>{name_a}</strong> » avec « <strong>{name_b}</strong> » ?</p>'
+                    f'<p style="font-size:0.8rem; color:#64748b; margin:0.25rem 0;">Raison : {reason}</p>'
+                    f'<p style="font-size:0.85rem; margin:0.5rem 0 0 0;">{name_a} ({count_a} p.) + {name_b} ({count_b} p.) → {count_a + count_b} pages</p></div>',
+                    unsafe_allow_html=True,
+                )
                 col_accept, col_refuse, _ = st.columns([1, 1, 2])
                 with col_accept:
                     if st.button("Accepter", type="primary", key="jsonld_merge_accept"):
@@ -436,7 +509,7 @@ def render_jsonld_analyzer_tab():
 
                 with col_panel:
                     st.markdown(
-                        "<div style='background:#0f172a; color:#fff; padding:8px 12px; font-weight:700; font-size:0.85rem; text-transform:uppercase; letter-spacing:0.05em;'>Détails du cluster</div>",
+                        "<div style='background:#0f172a; color:#fff; padding:10px 14px; font-weight:700; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.08em;'>Détails du cluster</div>",
                         unsafe_allow_html=True,
                     )
                     sel = st.selectbox(
@@ -451,11 +524,13 @@ def render_jsonld_analyzer_tab():
                         urls_in_cluster = cluster_urls[idx] if idx < len(cluster_urls) else []
                         pattern = get_cluster_url_pattern(urls_in_cluster)
 
-                        st.markdown(f"**Modèle :** {name}")
-                        st.markdown(f"**Schema.org :** `{schema_type}`")
-                        st.markdown(f"**Pattern :** `{pattern}`")
-                        st.markdown(f"**Pages :** {len(urls_in_cluster)}")
-
+                        st.markdown(
+                            f'<p style="margin:0.25rem 0; font-size:0.9rem;"><strong>Modèle</strong> {name}</p>'
+                            f'<p style="margin:0.25rem 0; font-size:0.85rem; color:#64748b;"><strong>Schema.org</strong> <code>{schema_type}</code></p>'
+                            f'<p style="margin:0.25rem 0; font-size:0.85rem; color:#64748b;"><strong>Pattern</strong> <code>{pattern}</code></p>'
+                            f'<p style="margin:0.25rem 0; font-size:0.85rem;"><strong>Pages</strong> {len(urls_in_cluster)}</p>',
+                            unsafe_allow_html=True,
+                        )
                         st.markdown("---")
                         col_btn1, col_btn2 = st.columns([3, 1])
                         with col_btn1:
@@ -533,6 +608,20 @@ def render_jsonld_analyzer_tab():
                             optimized_data = st.session_state.get(f"optimized_jsonld_{idx}")
                             if optimized_data:
                                 st.json(optimized_data)
+                                validation_result = validate_jsonld_schema(optimized_data)
+                                if validation_result["valid"]:
+                                    if validation_result["warnings"]:
+                                        st.warning(validation_result["message"])
+                                        with st.expander("⚠️ Voir les warnings"):
+                                            for w in validation_result["warnings"]:
+                                                st.markdown(f"- {w}")
+                                    else:
+                                        st.success(validation_result["message"])
+                                else:
+                                    st.error(validation_result["message"])
+                                    with st.expander("❌ Voir les erreurs"):
+                                        for e in validation_result["errors"]:
+                                            st.markdown(f"- {e}")
                                 st.download_button(
                                     "📋 Télécharger JSON-LD",
                                     data=json.dumps(optimized_data, ensure_ascii=False, indent=2),
@@ -588,10 +677,14 @@ def render_jsonld_analyzer_tab():
                                 st.caption(f"... et {len(urls_in_cluster) - 5} de plus.")
 
             with tab_fusion:
-                st.markdown("<p style='color:#0f172a; font-weight:700; font-size:1rem; margin:0 0 0.5rem 0;'>Fusion manuelle des clusters</p>", unsafe_allow_html=True)
-                st.caption(
-                    "Si deux clusters représentent le même type de page (ex: 'Fiches métiers' et 'Pages emploi'), "
-                    "fusionnez-les ici. Les pages seront regroupées et Mistral générera un nouveau nom."
+                st.markdown(
+                    '<div style="background:#f8fafc; border:1px solid #e2e8f0; padding:1rem 1.25rem; margin-bottom:1rem;">'
+                    "<p style='font-weight:700; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em; color:#0f172a; margin:0 0 0.5rem 0;'>"
+                    "Fusion manuelle des clusters</p>"
+                    "<p style='font-size:0.85rem; color:#64748b; margin:0;'>"
+                    "Si deux clusters représentent le même type de page (ex: « Fiches métiers » et « Pages emploi »), "
+                    "fusionnez-les ici. Les pages seront regroupées et Mistral générera un nouveau nom.</p></div>",
+                    unsafe_allow_html=True,
                 )
                 if num_clusters < 2:
                     st.info("Au moins 2 clusters requis pour fusionner.")
@@ -682,7 +775,8 @@ def render_jsonld_analyzer_tab():
                     label = cluster_labels[i] if i < len(cluster_labels) else {"model_name": f"Cluster {i + 1}", "schema_type": "WebPage"}
                     name = (label.get("model_name") or "").strip() or f"Cluster {i + 1}"
                     n = len(cluster_urls[i]) if i < len(cluster_urls) else 0
-                    tab_labels.append(f"{i + 1}. {name} ({n} p.)")
+                    has_jld = "✓" if st.session_state.get(f"optimized_jsonld_{i}") else "○"
+                    tab_labels.append(f"{i + 1}. {name} ({n} p.) {has_jld}")
 
                 cluster_tabs = st.tabs(tab_labels)
 
@@ -694,13 +788,21 @@ def render_jsonld_analyzer_tab():
                         sample = urls_in_cluster[:5]
                         name = (label.get("model_name") or "").strip() or f"Cluster {i + 1}"
                         schema_type = (label.get("schema_type") or "").strip() or "—"
+                        has_opt = st.session_state.get(f"optimized_jsonld_{i}")
 
-                        if st.session_state.get(f"optimized_jsonld_{i}"):
-                            st.markdown("✨ **JSON-LD optimisé généré**")
+                        if has_opt:
+                            st.markdown(
+                                '<span style="display:inline-block; background:#dcfce7; color:#166534; padding:4px 10px; font-size:0.75rem; font-weight:700; text-transform:uppercase;">✓ JSON-LD généré</span>',
+                                unsafe_allow_html=True,
+                            )
                         else:
-                            st.markdown("⚠️ *JSON-LD optimisé non généré*")
+                            st.markdown(
+                                '<span style="display:inline-block; background:#fef3c7; color:#92400e; padding:4px 10px; font-size:0.75rem; font-weight:700; text-transform:uppercase;">○ En attente</span>',
+                                unsafe_allow_html=True,
+                            )
+                        st.markdown("")
                         st.markdown(f"**Modèle :** {name}")
-                        st.markdown(f"**Schema.org type :** `{schema_type}`")
+                        st.markdown(f"**Schema.org :** `{schema_type}`")
                         st.markdown(f"**Pattern d'URL :** `{pattern}`")
                         st.markdown("**URLs exemples :**")
                         for u in sample:
@@ -712,7 +814,153 @@ def render_jsonld_analyzer_tab():
                 from core.database import AuditDatabase
                 from core.session_keys import get_current_user_email
 
-                st.markdown("<p style='color:#0f172a; font-weight:700; font-size:1rem; margin:0 0 0.5rem 0;'>Charger depuis Google Sheets</p>", unsafe_allow_html=True)
+                # Bandeau de stats
+                generated_count = sum(1 for i in range(num_clusters) if st.session_state.get(f"optimized_jsonld_{i}"))
+                valid_count = sum(
+                    1 for i in range(num_clusters)
+                    if st.session_state.get(f"optimized_jsonld_{i}")
+                    and validate_jsonld_schema(st.session_state[f"optimized_jsonld_{i}"])["valid"]
+                )
+                total_pages_export = sum(len(cluster_urls[i]) for i in range(len(cluster_urls)))
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.markdown(
+                        f'<div class="zen-metric"><div class="zen-metric-value">{num_clusters}</div>'
+                        '<div class="zen-metric-label">Clusters</div></div>',
+                        unsafe_allow_html=True,
+                    )
+                with col2:
+                    st.markdown(
+                        f'<div class="zen-metric"><div class="zen-metric-value">{generated_count}<span style="font-size:0.75rem; font-weight:500; color:rgba(0,0,0,0.4);">/{num_clusters}</span></div>'
+                        '<div class="zen-metric-label">JSON-LD générés</div></div>',
+                        unsafe_allow_html=True,
+                    )
+                with col3:
+                    st.markdown(
+                        f'<div class="zen-metric"><div class="zen-metric-value">{valid_count}<span style="font-size:0.75rem; font-weight:500; color:rgba(0,0,0,0.4);">/{generated_count}</span></div>'
+                        '<div class="zen-metric-label">JSON-LD valides</div></div>',
+                        unsafe_allow_html=True,
+                    )
+                with col4:
+                    st.markdown(
+                        f'<div class="zen-metric"><div class="zen-metric-value">{total_pages_export}</div>'
+                        '<div class="zen-metric-label">Pages analysées</div></div>',
+                        unsafe_allow_html=True,
+                    )
+                st.markdown("---")
+
+                # Génération en masse
+                st.markdown(
+                    '<p style="font-weight:700; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em; margin:0 0 0.5rem 0;">01 — Génération en masse</p>'
+                    '<p style="font-size:0.85rem; color:#64748b; margin:0 0 1rem 0;">Générez automatiquement les JSON-LD optimisés pour tous les clusters.</p>',
+                    unsafe_allow_html=True,
+                )
+                pending_count = sum(1 for i in range(num_clusters) if not st.session_state.get(f"optimized_jsonld_{i}"))
+                col_batch_info, col_batch_btn = st.columns([3, 1])
+                with col_batch_info:
+                    if pending_count == 0:
+                        st.success(f"✅ Tous les {num_clusters} clusters ont déjà un JSON-LD optimisé généré.")
+                    else:
+                        st.info(f"📊 {pending_count} cluster(s) sur {num_clusters} en attente de génération.")
+                with col_batch_btn:
+                    batch_btn = st.button(
+                        "GÉNÉRER TOUS",
+                        type="primary",
+                        disabled=(pending_count == 0),
+                        use_container_width=True,
+                        key="batch_generate_all",
+                    )
+                if batch_btn and pending_count > 0:
+                    try:
+                        mistral_key = st.secrets["mistral"]["api_key"]
+                    except Exception:
+                        mistral_key = None
+                    if not mistral_key:
+                        st.error("Clé API Mistral manquante. Configurez st.secrets['mistral']['api_key'].")
+                    else:
+                        progress_bar = st.progress(0.0, "Initialisation...")
+                        success_count = 0
+                        fail_count = 0
+                        done = 0
+                        for i in range(num_clusters):
+                            if st.session_state.get(f"optimized_jsonld_{i}"):
+                                continue
+                            done += 1
+                            progress = done / pending_count
+                            cluster_name = (cluster_labels[i].get("model_name") or f"Cluster {i+1}").strip()
+                            progress_bar.progress(progress, f"Génération {done}/{pending_count} : {cluster_name}...")
+                            label = cluster_labels[i]
+                            schema_type = label.get("schema_type", "WebPage")
+                            dom = cluster_dom[i] if i < len(cluster_dom) else {}
+                            jld = cluster_jsonld[i] if i < len(cluster_jsonld) else None
+                            urls_in_cluster = cluster_urls[i] if i < len(cluster_urls) else []
+                            pattern = get_cluster_url_pattern(urls_in_cluster)
+                            sample_pages = []
+                            if "jsonld_analyzer_crawl_results" in st.session_state:
+                                for url in urls_in_cluster[:3]:
+                                    for p in st.session_state["jsonld_analyzer_crawl_results"]:
+                                        if p.get("url") == url:
+                                            sample_pages.append({
+                                                "url": url,
+                                                "title": p.get("title", ""),
+                                                "h1": p.get("h1", ""),
+                                                "description": p.get("description", ""),
+                                                "html_snippet": (p.get("html_content") or "")[:5000],
+                                            })
+                                            break
+                            optimized, _ = generate_optimized_jsonld(
+                                api_key=mistral_key,
+                                schema_type=schema_type,
+                                dom_structure=dom,
+                                sample_pages=sample_pages,
+                                existing_jsonld=jld,
+                                url_pattern=pattern,
+                                timeout=30,
+                            )
+                            if optimized:
+                                st.session_state[f"optimized_jsonld_{i}"] = optimized
+                                success_count += 1
+                            else:
+                                fail_count += 1
+                            time.sleep(0.5)
+                        progress_bar.empty()
+                        if fail_count == 0:
+                            st.success(f"🎉 {success_count} JSON-LD générés avec succès !")
+                            st.balloons()
+                        else:
+                            st.warning(f"⚠️ {success_count} réussis, {fail_count} échecs. Réessayez les échecs individuellement.")
+                        st.rerun()
+
+                st.markdown("---")
+                st.markdown(
+                    '<p style="font-weight:700; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em; margin:0 0 0.5rem 0;">02 — Export complet</p>'
+                    '<p style="font-size:0.85rem; color:#64748b; margin:0 0 1rem 0;">Téléchargez un ZIP contenant tous les JSON-LD générés, organisés par cluster avec README et manifest.</p>',
+                    unsafe_allow_html=True,
+                )
+                available_count = sum(1 for i in range(num_clusters) if st.session_state.get(f"optimized_jsonld_{i}"))
+                if available_count == 0:
+                    st.info("Aucun JSON-LD généré. Utilisez « GÉNÉRER TOUS » ou générez-les individuellement dans l'onglet Graphe.")
+                else:
+                    col_zip_info, col_zip_btn = st.columns([3, 1])
+                    with col_zip_info:
+                        st.markdown(f"**{available_count} JSON-LD** disponible(s) pour export.")
+                    with col_zip_btn:
+                        get_opt = lambda i: st.session_state.get(f"optimized_jsonld_{i}")
+                        zip_data = _create_jsonld_zip(cluster_labels, cluster_urls, domain, get_opt)
+                        st.download_button(
+                            "📦 TÉLÉCHARGER ZIP",
+                            data=zip_data,
+                            file_name=f"jsonld_export_{domain.replace('.', '_')}.zip",
+                            mime="application/zip",
+                            use_container_width=True,
+                            key="export_zip_all",
+                        )
+
+                st.markdown("---")
+                st.markdown(
+                    '<p style="font-weight:700; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em; margin:0 0 0.5rem 0;">03 — Charger depuis Google Sheets</p>',
+                    unsafe_allow_html=True,
+                )
                 _user_email = get_current_user_email() or ""
                 _db = AuditDatabase()
                 _sites = _db.list_jsonld_sites(_user_email) if _user_email and _db.client else []
@@ -757,7 +1005,11 @@ def render_jsonld_analyzer_tab():
                             st.warning("Aucun modèle trouvé pour ce site et workspace.")
                 else:
                     st.caption("Aucune donnée enregistrée.")
-                st.markdown("<p style='color:#0f172a; font-weight:700; font-size:1rem; margin:0 0 0.5rem 0;'>Enregistrer dans Google Sheets</p>", unsafe_allow_html=True)
+                st.markdown("---")
+                st.markdown(
+                    '<p style="font-weight:700; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em; margin:0 0 0.5rem 0;">04 — Enregistrer dans Google Sheets</p>',
+                    unsafe_allow_html=True,
+                )
                 site_url = data.get("site_url") or f"https://{domain}"
                 workspace = st.session_state.get("audit_workspace_select", "Non classé") or "Non classé"
                 if workspace in ("+ Creer Nouveau", "+ Créer Nouveau", "+ Create New"):
@@ -792,7 +1044,10 @@ def render_jsonld_analyzer_tab():
                     else:
                         st.error("Échec de l'enregistrement. Vérifiez la config GCP (secrets) et l'URL du Sheet.")
 
-                st.markdown("<p style='color:#0f172a; font-weight:700; font-size:1rem; margin:0 0 0.5rem 0;'>Télécharger JSON</p>", unsafe_allow_html=True)
+                st.markdown(
+                    '<p style="font-weight:700; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em; margin:0 0 0.5rem 0;">05 — Télécharger JSON</p>',
+                    unsafe_allow_html=True,
+                )
                 payload = {
                     "site_url": site_url,
                     "analyzed_at": __import__("datetime").datetime.now().isoformat() + "Z",
