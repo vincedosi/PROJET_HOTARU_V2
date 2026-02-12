@@ -261,15 +261,19 @@ def render_scraping_debug_tab():
             st.markdown("<br>", unsafe_allow_html=True)
             st.success(f"✅ {len(jsonld_blocks)} bloc(s) JSON-LD extrait(s) !")
             
+            block_tab_labels = []
             for i, block in enumerate(jsonld_blocks, 1):
                 block_type = "N/A"
                 if isinstance(block, dict):
                     block_type = block.get("@type", "Unknown")
                 elif isinstance(block, list):
                     block_type = f"Array[{len(block)}]"
-                
-                with st.expander(f"📦 Bloc {i} — Type: `{block_type}`", expanded=(i == 1)):
-                    st.json(block)
+                block_tab_labels.append(f"Bloc {i} — {block_type}")
+            block_tabs = st.tabs(block_tab_labels) if block_tab_labels else []
+            for i, block in enumerate(jsonld_blocks):
+                if i < len(block_tabs):
+                    with block_tabs[i]:
+                        st.json(block)
         else:
             st.warning("⚠️ Aucun JSON-LD trouvé")
 
@@ -319,14 +323,17 @@ def render_scraping_debug_tab():
             st.markdown("<br>", unsafe_allow_html=True)
             st.info(f"ℹ️ {len(ld_scripts_in_html)} script(s) JSON-LD dans HTML")
             
-            for i, script_data in enumerate(ld_scripts_in_html, 1):
-                with st.expander(f"Script #{i} — {script_data['length']} chars", expanded=False):
-                    try:
-                        parsed = json.loads(script_data["content"])
-                        st.json(parsed)
-                    except json.JSONDecodeError as e:
-                        st.error(f"❌ Erreur JSON : {e}")
-                        st.code(script_data["content"][:500])
+            script_tab_labels = [f"Script #{i} — {s['length']} chars" for i, s in enumerate(ld_scripts_in_html, 1)]
+            script_tabs = st.tabs(script_tab_labels) if script_tab_labels else []
+            for i, script_data in enumerate(ld_scripts_in_html):
+                if i < len(script_tabs):
+                    with script_tabs[i]:
+                        try:
+                            parsed = json.loads(script_data["content"])
+                            st.json(parsed)
+                        except json.JSONDecodeError as e:
+                            st.error(f"❌ Erreur JSON : {e}")
+                            st.code(script_data["content"][:500])
 
         # ===== DIAGNOSTIC =====
         st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)

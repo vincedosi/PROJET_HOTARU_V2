@@ -1199,8 +1199,16 @@ def _render_authority_analyse_content():
         unsafe_allow_html=True,
     )
 
-    # Pilier 1 : Ancrage Knowledge Graph
-    with st.expander(f"ANCRAGE KNOWLEDGE GRAPH  ({bd['knowledge_graph']['score']}/100)", expanded=False):
+    tab_labels = [
+        f"ANCRAGE KNOWLEDGE GRAPH ({bd['knowledge_graph']['score']}/100)",
+        f"INTEROPÉRABILITÉ DES DONNÉES ({bd['structured_data']['score']}/100)",
+        f"AUTORITÉ DE CITATION ({bd['citation_authority']['score']}/100)",
+        f"DENSITÉ VECTORIELLE ({bd['semantic_completeness']['score']}/100)",
+        f"FRAÎCHEUR DE CONTENU ({bd['content_freshness']['score']}/100)",
+    ]
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(tab_labels)
+
+    with tab1:
         kg_d = bd["knowledge_graph"].get("details", {})
         if kg_d.get("qid"):
             st.markdown(
@@ -1229,8 +1237,7 @@ def _render_authority_analyse_content():
                 unsafe_allow_html=True,
             )
 
-    # Pilier 2 : Interopérabilité des Données
-    with st.expander(f"INTEROPÉRABILITÉ DES DONNÉES  ({bd['structured_data']['score']}/100)", expanded=False):
+    with tab2:
         sd_d = bd["structured_data"].get("details", {})
         col1, col2, col3, col4 = st.columns(4)
         with col1:
@@ -1270,8 +1277,7 @@ def _render_authority_analyse_content():
                 unsafe_allow_html=True,
             )
 
-    # Pilier 3 : Autorité de Citation
-    with st.expander(f"AUTORITÉ DE CITATION  ({bd['citation_authority']['score']}/100)", expanded=False):
+    with tab3:
         ca_d = bd["citation_authority"].get("details", {})
         col1, col2 = st.columns(2)
         with col1:
@@ -1297,8 +1303,7 @@ def _render_authority_analyse_content():
                 )
             st.markdown(social_html, unsafe_allow_html=True)
 
-    # Pilier 4 : Densité Vectorielle (Semantic Density)
-    with st.expander(f"DENSITÉ VECTORIELLE (SEMANTIC DENSITY)  ({bd['semantic_completeness']['score']}/100)", expanded=False):
+    with tab4:
         sc_d = bd["semantic_completeness"].get("details", {})
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -1314,8 +1319,7 @@ def _render_authority_analyse_content():
                 f"🧠 {warning}"
             )
 
-    # Pilier 5 : Fraîcheur de Contenu
-    with st.expander(f"FRAÎCHEUR DE CONTENU  ({bd['content_freshness']['score']}/100)", expanded=False):
+    with tab5:
         cf_d = bd["content_freshness"].get("details", {})
         col1, col2, col3 = st.columns(3)
         with col1:

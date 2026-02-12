@@ -112,11 +112,10 @@ def _render_leaf_builder_content():
     # Existing JSON-LD display
     if st.session_state.existing_jsonld:
         st.markdown("### JSON-LD Actuel de la Page")
-        with st.expander("Voir le JSON-LD existant"):
-            st.code(
-                json.dumps(st.session_state.existing_jsonld, indent=2, ensure_ascii=False),
-                language="json",
-            )
+        st.code(
+            json.dumps(st.session_state.existing_jsonld, indent=2, ensure_ascii=False),
+            language="json",
+        )
 
     # =========================================================================
     # ÉTAPE 2 : PRÉDICTIONS IA

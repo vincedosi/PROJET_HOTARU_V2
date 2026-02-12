@@ -750,21 +750,25 @@ def render_journal_filtered(filtered_log):
     for url, pattern in filtered_log:
         by_pattern[pattern].append(url)
 
-    for pattern, urls in sorted(by_pattern.items(), key=lambda x: -len(x[1])):
-        with st.expander(f"{pattern}  ({len(urls)} liens)", expanded=False):
-            for url in urls[:100]:
-                st.markdown(
-                    f'<div style="padding:5px 0;border-bottom:1px solid #f8fafc;">'
-                    f'<span style="font-size:0.75rem;font-family:\'Courier New\',monospace;color:#64748b;">{url}</span>'
-                    f'</div>',
-                    unsafe_allow_html=True
-                )
-            if len(urls) > 100:
-                st.markdown(
-                    f'<p style="font-size:0.75rem;font-style:italic;color:#94a3b8;margin-top:8px;">'
-                    f'... et {len(urls) - 100} autres</p>',
-                    unsafe_allow_html=True
-                )
+    patterns_sorted = sorted(by_pattern.items(), key=lambda x: -len(x[1]))
+    tab_labels = [f"{p} ({len(u)} liens)" for p, u in patterns_sorted]
+    tab_list = st.tabs(tab_labels) if tab_labels else []
+    for i, (pattern, urls) in enumerate(patterns_sorted):
+        if i < len(tab_list):
+            with tab_list[i]:
+                for url in urls[:100]:
+                    st.markdown(
+                        f'<div style="padding:5px 0;border-bottom:1px solid #f8fafc;">'
+                        f'<span style="font-size:0.75rem;font-family:\'Courier New\',monospace;color:#64748b;">{url}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
+                if len(urls) > 100:
+                    st.markdown(
+                        f'<p style="font-size:0.75rem;font-style:italic;color:#94a3b8;margin-top:8px;">'
+                        f'... et {len(urls) - 100} autres</p>',
+                        unsafe_allow_html=True
+                    )
 
 
 def render_journal_duplicates(duplicate_log):
@@ -1473,12 +1477,12 @@ def render_audit_geo():
                 if has_jsonld:
                     st.success("✅ **JSON-LD détecté sur la page d'accueil**")
                     st.info(f"📊 {len(jsonld_scripts)} bloc(s) JSON-LD trouvé(s)")
-                    with st.expander("📄 Aperçu du JSON-LD détecté", expanded=False):
-                        try:
-                            jsonld_data = json.loads(jsonld_scripts[0].string)
-                            st.json(jsonld_data)
-                        except Exception:
-                            st.code((jsonld_scripts[0].string or "")[:500])
+                    st.markdown("**Aperçu du JSON-LD détecté**")
+                    try:
+                        jsonld_data = json.loads(jsonld_scripts[0].string)
+                        st.json(jsonld_data)
+                    except Exception:
+                        st.code((jsonld_scripts[0].string or "")[:500])
                     st.markdown("**Stratégie recommandée** : Mode Flash (rapide, 1-2s/page)")
                     force_selenium = st.checkbox(
                         "🔄 Forcer Selenium quand même (utile si pages internes sont SPA)",
@@ -1542,8 +1546,8 @@ def render_audit_geo():
                     return
 
                 if crawl_logs:
-                    with st.expander("📋 Logs du crawl", expanded=False):
-                        st.code("\n".join(crawl_logs[-50:]))
+                    st.markdown("**Logs du crawl**")
+                    st.code("\n".join(crawl_logs[-50:]))
 
                 bar.progress(0.90, "Analyse infrastructure...")
                 infra, score = check_geo_infrastructure(base_url, crawl_results=res)
@@ -1678,13 +1682,13 @@ def render_audit_geo():
 
                 # Points d'entree multiples
                 if "start_urls" in st.session_state and len(st.session_state.start_urls) > 1:
-                    with st.expander(f"Points d'entree : {len(st.session_state.start_urls)}", expanded=False):
-                        for i, url in enumerate(st.session_state.start_urls, 1):
-                            st.markdown(
-                                f'<div style="padding:4px 0;font-size:0.8rem;font-family:\'Courier New\',monospace;'
-                                f'color:#64748b;">{i}. {url}</div>',
-                                unsafe_allow_html=True
-                            )
+                    st.markdown(f"**Points d'entrée :** {len(st.session_state.start_urls)}")
+                    for i, url in enumerate(st.session_state.start_urls, 1):
+                        st.markdown(
+                            f'<div style="padding:4px 0;font-size:0.8rem;font-family:\'Courier New\',monospace;'
+                            f'color:#64748b;">{i}. {url}</div>',
+                            unsafe_allow_html=True
+                        )
 
                 # Metriques principales - style massif
                 col1, col2, col3, col4 = st.columns(4)

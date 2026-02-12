@@ -1098,21 +1098,21 @@ def render_off_page_audit():
                 """)
     
     # Options avancées
-    with st.expander("🔧 Options avancées"):
-        col_a, col_b = st.columns(2)
+    st.markdown("**Options avancées**")
+    col_a, col_b = st.columns(2)
         
-        if col_a.button("🗑️ Vider le cache", use_container_width=True):
-            _cached_scan.clear()
-            get_internal_dna.clear()
-            analyze_mirror_gap.clear()
-            st.session_state['offpage_results'] = []
-            st.session_state['mirror_data'] = None
-            st.success("✓ Cache vidé.")
-        
-        if col_b.button("📊 Statistiques API", use_container_width=True):
-            st.info(
-                "**APIs utilisées :**\n\n"
-                "• SerpAPI : 100 req/mois gratuit\n"
-                "• Mistral AI : Selon votre plan\n"
-                "• Scraping : Illimité"
-            )
+    if col_a.button("🗑️ Vider le cache", use_container_width=True):
+        _cached_scan.clear()
+        get_internal_dna.clear()
+        analyze_mirror_gap.clear()
+        st.session_state['offpage_results'] = []
+        st.session_state['mirror_data'] = None
+        st.success("✓ Cache vidé.")
+    
+    if col_b.button("📊 Statistiques API", use_container_width=True):
+        st.info(
+            "**APIs utilisées :**\n\n"
+            "• SerpAPI : 100 req/mois gratuit\n"
+            "• Mistral AI : Selon votre plan\n"
+            "• Scraping : Illimité"
+        )

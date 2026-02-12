@@ -702,7 +702,8 @@ def _render_master_data_content():
     st.markdown('</div></div>', unsafe_allow_html=True)
 
     # CORPORATE
-    with st.expander("OPTIONAL CORPORATE DATA"):
+    tab_corp, tab_addr = st.tabs(["OPTIONAL CORPORATE DATA", "ADDRESS & CONTACT"])
+    with tab_corp:
         col1, col2, col3 = st.columns(3)
         with col1:
             master.founding_date = st.text_input(
@@ -727,50 +728,51 @@ def _render_master_data_content():
                 "BOURSE", value=master.stock_exchange, key="edit_exchange"
             )
 
-    # ADRESSE & CONTACT
-    col1, col2 = st.columns(2)
+    with tab_addr:
+        # ADRESSE & CONTACT
+        col1, col2 = st.columns(2)
 
-    with col1:
-        st.markdown(
-            '<div class="section-container" style="padding:0;margin-bottom:24px;">'
-            '<div class="section-header">ADDRESS</div>'
-            '<div style="padding:24px;">',
-            unsafe_allow_html=True,
-        )
-        master.street = st.text_input("RUE", value=master.street, key="edit_street")
-        col_city, col_zip = st.columns([2, 1])
-        master.city = col_city.text_input("VILLE", value=master.city, key="edit_city")
-        master.zip_code = col_zip.text_input(
-            "CODE POSTAL", value=master.zip_code, key="edit_zip"
-        )
-        master.region = st.text_input(
-            "REGION", value=master.region, key="edit_region"
-        )
-        master.country = st.text_input(
-            "PAYS", value=master.country, key="edit_country"
-        )
-        st.markdown('</div></div>', unsafe_allow_html=True)
+        with col1:
+            st.markdown(
+                '<div class="section-container" style="padding:0;margin-bottom:24px;">'
+                '<div class="section-header">ADDRESS</div>'
+                '<div style="padding:24px;">',
+                unsafe_allow_html=True,
+            )
+            master.street = st.text_input("RUE", value=master.street, key="edit_street")
+            col_city, col_zip = st.columns([2, 1])
+            master.city = col_city.text_input("VILLE", value=master.city, key="edit_city")
+            master.zip_code = col_zip.text_input(
+                "CODE POSTAL", value=master.zip_code, key="edit_zip"
+            )
+            master.region = st.text_input(
+                "REGION", value=master.region, key="edit_region"
+            )
+            master.country = st.text_input(
+                "PAYS", value=master.country, key="edit_country"
+            )
+            st.markdown('</div></div>', unsafe_allow_html=True)
 
-    with col2:
-        st.markdown(
-            '<div class="section-container" style="padding:0;margin-bottom:24px;">'
-            '<div class="section-header">CONTACT</div>'
-            '<div style="padding:24px;">',
-            unsafe_allow_html=True,
-        )
-        master.phone = st.text_input(
-            "TELEPHONE", value=master.phone,
-            placeholder="+33 1 23 45 67 89", key="edit_phone"
-        )
-        master.email = st.text_input(
-            "EMAIL", value=master.email,
-            placeholder="contact@exemple.fr", key="edit_email"
-        )
-        master.fax = st.text_input("FAX", value=master.fax, key="edit_fax")
-        master.wikipedia_url = st.text_input(
-            "WIKIPEDIA", value=master.wikipedia_url, key="edit_wiki"
-        )
-        st.markdown('</div></div>', unsafe_allow_html=True)
+        with col2:
+            st.markdown(
+                '<div class="section-container" style="padding:0;margin-bottom:24px;">'
+                '<div class="section-header">CONTACT</div>'
+                '<div style="padding:24px;">',
+                unsafe_allow_html=True,
+            )
+            master.phone = st.text_input(
+                "TELEPHONE", value=master.phone,
+                placeholder="+33 1 23 45 67 89", key="edit_phone"
+            )
+            master.email = st.text_input(
+                "EMAIL", value=master.email,
+                placeholder="contact@exemple.fr", key="edit_email"
+            )
+            master.fax = st.text_input("FAX", value=master.fax, key="edit_fax")
+            master.wikipedia_url = st.text_input(
+                "WIKIPEDIA", value=master.wikipedia_url, key="edit_wiki"
+            )
+            st.markdown('</div></div>', unsafe_allow_html=True)
 
     st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
 

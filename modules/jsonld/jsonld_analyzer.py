@@ -555,9 +555,34 @@ def build_jsonld_graph_html(domain: str, cluster_labels: list, cluster_urls: lis
         pass
 
     # Event listener pour clics : cluster → URL param pour panneau ; URL → nouvel onglet
+    # Note: en iframe sandbox Streamlit, window.top/parent peut être bloqué. Le dropdown reste le fallback.
     click_handler = """
     <script>
         (function() {
+            function tryNavigate(clusterIndex) {
+                try {
+                    var target = window.top || window.parent || window;
+                    var href = target.location.href;
+                    var url = new URL(href);
+                    url.searchParams.set('jsonld_cluster', clusterIndex);
+                    target.location.href = url.toString();
+                    return true;
+                } catch (e) {
+                    try {
+                        var ref = document.referrer;
+                        if (!ref) return false;
+                        var url = new URL(ref);
+                        url.searchParams.set('jsonld_cluster', clusterIndex);
+                        var a = document.createElement('a');
+                        a.href = url.toString();
+                        a.target = '_top';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        return true;
+                    } catch (e2) { return false; }
+                }
+            }
             function attachClickHandler() {
                 if (typeof network !== 'undefined') {
                     network.on("click", function(params) {
@@ -565,22 +590,27 @@ def build_jsonld_graph_html(domain: str, cluster_labels: list, cluster_urls: lis
                             var nodeId = params.nodes[0];
                             if (String(nodeId).startsWith('cluster_')) {
                                 var clusterIndex = parseInt(String(nodeId).replace('cluster_', ''), 10);
-                                try {
-                                    var url = new URL(window.parent.location.href);
-                                    url.searchParams.set('jsonld_cluster', clusterIndex);
-                                    window.parent.location.href = url.toString();
-                                } catch (e) { console.log('Update URL:', e); }
+                                if (!tryNavigate(clusterIndex)) {
+                                    window.alert("Use the dropdown on the right to select cluster " + (clusterIndex + 1));
+                                }
                             } else if (String(nodeId).startsWith('http')) {
                                 window.open(nodeId, '_blank');
                             }
                         }
                     });
+                    return true;
+                }
+                return false;
+            }
+            function init() {
+                if (!attachClickHandler()) {
+                    setTimeout(init, 200);
                 }
             }
             if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', function() { setTimeout(attachClickHandler, 300); });
+                document.addEventListener('DOMContentLoaded', function() { setTimeout(init, 400); });
             } else {
-                setTimeout(attachClickHandler, 300);
+                setTimeout(init, 400);
             }
         })();
     </script>
@@ -608,7 +638,8 @@ def render_jsonld_analyzer_tab():
         unsafe_allow_html=True,
     )
 
-    with st.expander("Load saved data from Google Sheets"):
+    tab_new, tab_load = st.tabs(["New analysis", "Load from Sheets"])
+    with tab_load:
         from core.database import AuditDatabase
         from core.session_keys import get_current_user_email
 
@@ -660,131 +691,132 @@ def render_jsonld_analyzer_tab():
                         "logs": [],
                         "loaded_from_sheet": True,
                     }
-                    st.success("Données chargées.")
+                    st.success("Data loaded.")
                     st.rerun()
 
-    url_input = st.text_input(
-        "Site URL to analyze",
-        placeholder="https://www.example.com",
-        key="jsonld_analyzer_url",
-        help="Homepage or entry point URL of the site.",
-    )
-    max_pages = st.slider(
-        "Number of pages to crawl",
-        min_value=50,
-        max_value=500,
-        value=150,
-        step=10,
-        key="jsonld_analyzer_max_pages",
-        help="Est. ~1-2 s/page (requests mode). Clustering < 30 s for 500 pages.",
-    )
+    with tab_new:
+        url_input = st.text_input(
+            "Site URL to analyze",
+            placeholder="https://www.example.com",
+            key="jsonld_analyzer_url",
+            help="Homepage or entry point URL of the site.",
+        )
+        max_pages = st.slider(
+            "Number of pages to crawl",
+            min_value=50,
+            max_value=500,
+            value=150,
+            step=10,
+            key="jsonld_analyzer_max_pages",
+            help="Est. ~1-2 s/page (requests mode). Clustering < 30 s for 500 pages.",
+        )
 
-    col_btn1, col_btn2 = st.columns(2)
-    with col_btn1:
-        launch = st.button("LAUNCH ANALYSIS", type="primary", use_container_width=True, key="jsonld_analyzer_btn")
-    with col_btn2:
-        if "jsonld_analyzer_results" in st.session_state and st.button("CLEAR RESULTS", use_container_width=True, key="jsonld_clear_btn"):
-            del st.session_state["jsonld_analyzer_results"]
-            st.rerun()
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            launch = st.button("LAUNCH ANALYSIS", type="primary", use_container_width=True, key="jsonld_analyzer_btn")
+        with col_btn2:
+            if "jsonld_analyzer_results" in st.session_state and st.button("CLEAR RESULTS", use_container_width=True, key="jsonld_clear_btn"):
+                del st.session_state["jsonld_analyzer_results"]
+                st.rerun()
 
-    if launch:
-        if not url_input or not url_input.strip():
-            st.warning("Please enter a URL.")
-            return
+        if launch:
+            if not url_input or not url_input.strip():
+                st.warning("Please enter a URL.")
+                return
 
-        url = url_input.strip()
-        if not url.startswith(("http://", "https://")):
-            url = "https://" + url
+            url = url_input.strip()
+            if not url.startswith(("http://", "https://")):
+                url = "https://" + url
 
-        logs = []
-        def add_log(msg):
-            logs.append(msg)
+            logs = []
+            def add_log(msg):
+                logs.append(msg)
 
-        progress_placeholder = st.empty()
-        log_placeholder = st.container()
+            progress_placeholder = st.empty()
+            log_placeholder = st.container()
 
-        with progress_placeholder:
-            bar = st.progress(0.0, "Initialisation...")
+            with progress_placeholder:
+                bar = st.progress(0.0, "Initialisation...")
 
-        try:
-            scr = SmartScraper(
-                [url],
-                max_urls=max_pages,
-                use_selenium=False,
-                log_callback=add_log,
-            )
-            res, crawl_meta = scr.run_analysis(
-                progress_callback=lambda msg, val: bar.progress(min(val, 1.0), msg),
-            )
-        except Exception as e:
+            try:
+                scr = SmartScraper(
+                    [url],
+                    max_urls=max_pages,
+                    use_selenium=False,
+                    log_callback=add_log,
+                )
+                res, crawl_meta = scr.run_analysis(
+                    progress_callback=lambda msg, val: bar.progress(min(val, 1.0), msg),
+                )
+            except Exception as e:
+                progress_placeholder.empty()
+                err_msg = str(e)[:300] if e else "Erreur inconnue"
+                st.error(f"Crawl error: {err_msg}")
+                st.caption("Check URL, network connection and site accessibility.")
+                return
+
             progress_placeholder.empty()
-            err_msg = str(e)[:300] if e else "Erreur inconnue"
-            st.error(f"Crawl error: {err_msg}")
-            st.caption("Check URL, network connection and site accessibility.")
-            return
 
-        progress_placeholder.empty()
-
-        if not res:
-            st.warning("No pages retrieved. Check URL and try again.")
-            if logs:
-                with st.expander("Crawl logs"):
+            if not res:
+                st.warning("No pages retrieved. Check URL and try again.")
+                if logs:
+                    st.markdown("**Crawl logs**")
                     st.text("\n".join(logs[-100:]))
-            return
+                return
 
-        # Clustering
-        with st.spinner("Clustering des pages..."):
-            clusters = cluster_pages(res)
+            # Clustering
+            with st.spinner("Clustering des pages..."):
+                clusters = cluster_pages(res)
 
-        # Nommage Mistral (étape 3)
-        cluster_labels = []
-        try:
-            mistral_key = st.secrets["mistral"]["api_key"]
-        except Exception:
-            mistral_key = None
+            # Nommage Mistral (étape 3)
+            cluster_labels = []
+            try:
+                mistral_key = st.secrets["mistral"]["api_key"]
+            except Exception:
+                mistral_key = None
 
-        if mistral_key:
-            mistral_fail_count = 0
-            for i, cluster_indices in enumerate(clusters):
-                with st.spinner(f"Nommage Mistral — cluster {i + 1}/{len(clusters)}..."):
-                    out = name_cluster_with_mistral(mistral_key, res, cluster_indices)
-                if out:
-                    cluster_labels.append(out)
-                else:
-                    cluster_labels.append({"model_name": f"Cluster {i + 1}", "schema_type": "WebPage"})
-                    mistral_fail_count += 1
-            if mistral_fail_count > 0:
-                st.warning(f"Mistral: {mistral_fail_count} cluster(s) without name (timeout or API busy). Retry.")
-        else:
-            cluster_labels = [
-                {"model_name": f"Cluster {i + 1}", "schema_type": "—"}
-                for i in range(len(clusters))
-            ]
-            st.info("Mistral API key missing: auto-naming disabled. Configure st.secrets['mistral']['api_key'] to enable.")
+            if mistral_key:
+                mistral_fail_count = 0
+                for i, cluster_indices in enumerate(clusters):
+                    with st.spinner(f"Nommage Mistral — cluster {i + 1}/{len(clusters)}..."):
+                        out = name_cluster_with_mistral(mistral_key, res, cluster_indices)
+                    if out:
+                        cluster_labels.append(out)
+                    else:
+                        cluster_labels.append({"model_name": f"Cluster {i + 1}", "schema_type": "WebPage"})
+                        mistral_fail_count += 1
+                if mistral_fail_count > 0:
+                    st.warning(f"Mistral: {mistral_fail_count} cluster(s) without name (timeout or API busy). Retry.")
+            else:
+                cluster_labels = [
+                    {"model_name": f"Cluster {i + 1}", "schema_type": "—"}
+                    for i in range(len(clusters))
+                ]
+                st.info("Mistral API key missing: auto-naming disabled. Configure st.secrets['mistral']['api_key'] to enable.")
 
-        domain = urlparse(url).netloc or "site"
-        site_url = url
-        cluster_urls = [[res[idx]["url"] for idx in indices] for indices in clusters]
-        # DOM + JSON-LD par cluster (première page) pour le graphe et le panneau
-        cluster_dom_structures = []
-        cluster_jsonld = []
-        for indices in clusters:
-            page = res[indices[0]]
-            dom = page.get("dom_structure") or extract_dom_structure(page.get("html_content") or "")
-            cluster_dom_structures.append(dom)
-            jld = page.get("json_ld") or []
-            cluster_jsonld.append(jld[0] if jld else None)
-        st.session_state["jsonld_analyzer_results"] = {
-            "site_url": site_url,
-            "domain": domain,
-            "total_pages": len(res),
-            "cluster_labels": cluster_labels,
-            "cluster_urls": cluster_urls,
-            "cluster_dom_structures": cluster_dom_structures,
-            "cluster_jsonld": cluster_jsonld,
-            "logs": logs,
-        }
-        st.rerun()
+            domain = urlparse(url).netloc or "site"
+            site_url = url
+            cluster_urls = [[res[idx]["url"] for idx in indices] for indices in clusters]
+            # DOM + JSON-LD par cluster (première page) pour le graphe et le panneau
+            cluster_dom_structures = []
+            cluster_jsonld = []
+            for indices in clusters:
+                page = res[indices[0]]
+                dom = page.get("dom_structure") or extract_dom_structure(page.get("html_content") or "")
+                cluster_dom_structures.append(dom)
+                jld = page.get("json_ld") or []
+                cluster_jsonld.append(jld[0] if jld else None)
+            st.session_state["jsonld_analyzer_results"] = {
+                "site_url": site_url,
+                "domain": domain,
+                "total_pages": len(res),
+                "cluster_labels": cluster_labels,
+                "cluster_urls": cluster_urls,
+                "cluster_dom_structures": cluster_dom_structures,
+                "cluster_jsonld": cluster_jsonld,
+                "logs": logs,
+            }
+            st.rerun()
 
     # Affichage des résultats (depuis session_state, persistant après rerun)
     if "jsonld_analyzer_results" in st.session_state:
@@ -814,12 +846,15 @@ def render_jsonld_analyzer_tab():
         if num_clusters == 0:
             st.info("Run a new analysis with a different URL or more pages.")
         else:
-            tab_graphe, tab_tableau, tab_export = st.tabs(["GRAPH", "TABLE", "EXPORT"])
+            tab_names = ["GRAPH", "TABLE", "EXPORT"] + (["Logs"] if logs else [])
+            tabs = st.tabs(tab_names)
+            tab_graphe, tab_tableau, tab_export = tabs[0], tabs[1], tabs[2]
+            tab_logs = tabs[3] if logs else None
 
         if num_clusters > 0:
             with tab_graphe:
                 st.markdown("<p style='color:#0f172a; font-weight:700; font-size:1rem; margin:0 0 0.5rem 0;'>Interactive cluster graph</p>", unsafe_allow_html=True)
-                st.caption("Click a cluster (colored node) to show details in the panel on the right. Click a URL to open in a new tab.")
+                st.caption("Click a cluster (colored node) to show details in the panel on the right. Click a URL to open in a new tab. If the graph click doesn't work, use the dropdown in the panel.")
 
                 # Déterminer le cluster à afficher : query param (clic graphe) > session_state > 0
                 selected_cluster_idx = None
@@ -1023,6 +1058,6 @@ def render_jsonld_analyzer_tab():
                     key="jsonld_download_btn",
                 )
 
-        if logs:
-            with st.expander("Crawl logs"):
+        if logs and tab_logs is not None:
+            with tab_logs:
                 st.text("\n".join(logs[-150:]))
