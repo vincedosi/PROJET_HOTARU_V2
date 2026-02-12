@@ -33,8 +33,8 @@ def render_jsonld_analyzer_tab():
         unsafe_allow_html=True,
     )
     st.markdown(
-        "<p class='home-tagline' style='margin-bottom:1.5rem; color:#0f172a;'>"
-        "Détection des types de pages par structure DOM et pattern d'URL. Clustering intelligent (seuil 85%).</p>",
+        "<p class='home-tagline' style='margin-bottom:1rem; color:#0f172a;'>"
+        "Détection des types de pages par structure DOM et pattern d'URL. Clustering intelligent (seuil ajustable).</p>",
         unsafe_allow_html=True,
     )
 
@@ -110,6 +110,15 @@ def render_jsonld_analyzer_tab():
             key="jsonld_analyzer_max_pages",
             help="~1-2 s/page (mode requests). Clustering < 30 s pour 500 pages.",
         )
+        cluster_threshold = st.slider(
+            "Seuil de similarité pour le clustering (%)",
+            min_value=70,
+            max_value=98,
+            value=85,
+            step=1,
+            key="jsonld_analyzer_threshold",
+            help="Plus le seuil est élevé, plus les pages doivent être similaires pour être regroupées. 85 % = par défaut. 70 % = plus de regroupement (moins de clusters). 95 % = plus strict (plus de clusters).",
+        ) / 100.0
 
         col_btn1, col_btn2 = st.columns(2)
         with col_btn1:
@@ -171,7 +180,7 @@ def render_jsonld_analyzer_tab():
 
             # Clustering
             with st.spinner("Clustering des pages..."):
-                clusters = cluster_pages(res)
+                clusters = cluster_pages(res, threshold=cluster_threshold)
 
             # Nommage Mistral (étape 3)
             cluster_labels = []
@@ -385,10 +394,10 @@ def render_jsonld_analyzer_tab():
         if num_clusters == 0:
             st.info("Lancez une nouvelle analyse avec une URL différente ou plus de pages.")
         else:
-            tab_names = ["GRAPHE", "TABLEAU", "EXPORT"] + (["Logs"] if logs else [])
+            tab_names = ["GRAPHE", "TABLEAU", "EXPORT", "FUSION"] + (["Logs"] if logs else [])
             tabs = st.tabs(tab_names)
-            tab_graphe, tab_tableau, tab_export = tabs[0], tabs[1], tabs[2]
-            tab_logs = tabs[3] if logs else None
+            tab_graphe, tab_tableau, tab_export, tab_fusion = tabs[0], tabs[1], tabs[2], tabs[3]
+            tab_logs = tabs[4] if logs else None
 
         if num_clusters > 0:
             with tab_graphe:
@@ -535,7 +544,7 @@ def render_jsonld_analyzer_tab():
                             else:
                                 st.info("Cliquez sur 'GÉNÉRER' pour créer le JSON-LD optimisé.")
 
-                        tab_dom, tab_jsonld, tab_urls, tab_actions = st.tabs(["DOM", "JSON-LD", "URLs", "Actions avancées"])
+                        tab_dom, tab_jsonld, tab_urls = st.tabs(["DOM", "JSON-LD", "URLs"])
                         with tab_dom:
                             st.markdown("**Structure DOM**")
                             dom = cluster_dom[idx] if idx < len(cluster_dom) else {}
@@ -578,117 +587,94 @@ def render_jsonld_analyzer_tab():
                             if len(urls_in_cluster) > 5:
                                 st.caption(f"... et {len(urls_in_cluster) - 5} de plus.")
 
-                        with tab_actions:
-                            st.markdown("##### Fusionner avec un autre cluster")
-                            st.caption(
-                                "Si deux clusters représentent le même type de page (ex: 'Fiches métiers' et 'Pages emploi'), "
-                                "vous pouvez les fusionner manuellement. Les pages seront regroupées et un nouveau nom pourra être généré."
-                            )
+            with tab_fusion:
+                st.markdown("<p style='color:#0f172a; font-weight:700; font-size:1rem; margin:0 0 0.5rem 0;'>Fusion manuelle des clusters</p>", unsafe_allow_html=True)
+                st.caption(
+                    "Si deux clusters représentent le même type de page (ex: 'Fiches métiers' et 'Pages emploi'), "
+                    "fusionnez-les ici. Les pages seront regroupées et Mistral générera un nouveau nom."
+                )
+                if num_clusters < 2:
+                    st.info("Au moins 2 clusters requis pour fusionner.")
+                else:
+                    merge_options = [
+                        f"{i + 1}. {(cluster_labels[i].get('model_name') or f'Cluster {i + 1}').strip()} ({len(cluster_urls[i])} p.)"
+                        for i in range(num_clusters)
+                    ]
+                    col_src, col_tgt = st.columns(2)
+                    with col_src:
+                        idx = st.selectbox(
+                            "Cluster source (à fusionner)",
+                            range(num_clusters),
+                            format_func=lambda i: merge_options[i],
+                            key="fusion_source",
+                        )
+                    with col_tgt:
+                        other_options = [(i, merge_options[i]) for i in range(num_clusters) if i != idx]
+                        target_sel = st.selectbox(
+                            "Fusionner avec",
+                            [name for _, name in other_options],
+                            key="fusion_target",
+                        )
+                        target_idx = next(i for i, name in other_options if name == target_sel)
 
-                            other_clusters = [
-                                (i, (cluster_labels[i].get("model_name") or f"Cluster {i + 1}").strip())
-                                for i in range(num_clusters)
-                                if i != idx
-                            ]
+                    urls_in_cluster = cluster_urls[idx] if idx < len(cluster_urls) else []
+                    current_name = (cluster_labels[idx].get("model_name") or f"Cluster {idx + 1}").strip()
+                    target_name = (cluster_labels[target_idx].get("model_name") or f"Cluster {target_idx + 1}").strip()
 
-                            if not other_clusters:
-                                st.info("Aucun autre cluster disponible pour fusion.")
-                            else:
-                                merge_options = ["--- Sélectionner un cluster ---"] + [
-                                    f"{i + 1}. {name} ({len(cluster_urls[i])} p.)"
-                                    for i, name in other_clusters
-                                ]
+                    st.markdown("**Aperçu :**")
+                    st.markdown(f"- **{current_name}** ({len(urls_in_cluster)} p.) + **{target_name}** ({len(cluster_urls[target_idx])} p.) → {len(urls_in_cluster) + len(cluster_urls[target_idx])} pages fusionnées")
 
-                                selected_merge = st.selectbox(
-                                    "Fusionner le cluster actuel avec :",
-                                    merge_options,
-                                    key=f"merge_select_{idx}",
-                                )
-
-                                if selected_merge != merge_options[0]:
-                                    target_idx = int(selected_merge.split(".")[0]) - 1
-
-                                    col_preview, col_action = st.columns([3, 1])
-
-                                    with col_preview:
-                                        st.markdown("**Aperçu de la fusion :**")
-                                        current_name = (cluster_labels[idx].get("model_name") or f"Cluster {idx + 1}").strip()
-                                        target_name = (cluster_labels[target_idx].get("model_name") or f"Cluster {target_idx + 1}").strip()
-                                        st.markdown(f"- **Cluster source** : {current_name} ({len(urls_in_cluster)} p.)")
-                                        st.markdown(f"- **Cluster cible** : {target_name} ({len(cluster_urls[target_idx])} p.)")
-                                        st.markdown(f"- **Résultat** : {len(urls_in_cluster) + len(cluster_urls[target_idx])} p. fusionnées")
-
-                                    with col_action:
-                                        if st.button(
-                                            "FUSIONNER",
-                                            type="primary",
-                                            use_container_width=True,
-                                            key=f"merge_btn_{idx}_{target_idx}",
-                                        ):
-                                            # ========== LOGIQUE DE FUSION ==========
-                                            merged_urls = list(set(cluster_urls[idx] + cluster_urls[target_idx]))
-
-                                            if len(cluster_urls[idx]) >= len(cluster_urls[target_idx]):
-                                                merged_dom = cluster_dom[idx]
-                                                merged_jsonld = cluster_jsonld[idx]
-                                                base_label = cluster_labels[idx]
-                                            else:
-                                                merged_dom = cluster_dom[target_idx]
-                                                merged_jsonld = cluster_jsonld[target_idx]
-                                                base_label = cluster_labels[target_idx]
-
-                                            new_label = base_label
-                                            try:
-                                                mistral_key = st.secrets["mistral"]["api_key"]
-                                            except Exception:
-                                                mistral_key = None
-
-                                            if mistral_key:
-                                                merged_sample_pages = []
-                                                crawl_results = st.session_state.get("jsonld_analyzer_crawl_results", [])
-                                                for url in merged_urls[:5]:
-                                                    for page in crawl_results:
-                                                        if page.get("url") == url:
-                                                            merged_sample_pages.append(page)
-                                                            break
-
-                                                if merged_sample_pages:
-                                                    with st.spinner("Mistral génère un nouveau nom pour le cluster fusionné..."):
-                                                        renamed = name_cluster_with_mistral(
-                                                            mistral_key,
-                                                            merged_sample_pages,
-                                                            list(range(len(merged_sample_pages))),
-                                                        )
-                                                        if renamed:
-                                                            new_label = renamed
-
-                                            cluster_urls[target_idx] = merged_urls
-                                            cluster_dom[target_idx] = merged_dom
-                                            cluster_jsonld[target_idx] = merged_jsonld
-                                            cluster_labels[target_idx] = new_label
-
-                                            del cluster_urls[idx]
-                                            del cluster_dom[idx]
-                                            del cluster_jsonld[idx]
-                                            del cluster_labels[idx]
-
-                                            results_data = st.session_state.get("jsonld_analyzer_results", {})
-                                            results_data["cluster_urls"] = cluster_urls
-                                            results_data["cluster_dom_structures"] = cluster_dom
-                                            results_data["cluster_jsonld"] = cluster_jsonld
-                                            results_data["cluster_labels"] = cluster_labels
-                                            st.session_state["jsonld_analyzer_results"] = results_data
-
-                                            for k in list(st.session_state.keys()):
-                                                if k.startswith("optimized_jsonld_"):
-                                                    del st.session_state[k]
-                                            new_merged_idx = target_idx - 1 if idx < target_idx else target_idx
-                                            st.session_state["jsonld_selected_cluster"] = new_merged_idx
-
-                                            st.success(f"✅ Clusters fusionnés ! Nouveau nom : {new_label.get('model_name', 'Cluster fusionné')}")
-                                            st.balloons()
-                                            time.sleep(1)
-                                            st.rerun()
+                    if st.button("FUSIONNER", type="primary", key="fusion_manual_btn"):
+                        merged_urls = list(set(cluster_urls[idx] + cluster_urls[target_idx]))
+                        if len(cluster_urls[idx]) >= len(cluster_urls[target_idx]):
+                            merged_dom = cluster_dom[idx]
+                            merged_jsonld = cluster_jsonld[idx]
+                            base_label = cluster_labels[idx]
+                        else:
+                            merged_dom = cluster_dom[target_idx]
+                            merged_jsonld = cluster_jsonld[target_idx]
+                            base_label = cluster_labels[target_idx]
+                        new_label = base_label
+                        try:
+                            mistral_key = st.secrets["mistral"]["api_key"]
+                        except Exception:
+                            mistral_key = None
+                        if mistral_key:
+                            merged_sample_pages = []
+                            crawl_results = st.session_state.get("jsonld_analyzer_crawl_results", [])
+                            for url in merged_urls[:5]:
+                                for page in crawl_results:
+                                    if page.get("url") == url:
+                                        merged_sample_pages.append(page)
+                                        break
+                            if merged_sample_pages:
+                                with st.spinner("Mistral génère un nouveau nom..."):
+                                    renamed = name_cluster_with_mistral(
+                                        mistral_key, merged_sample_pages, list(range(len(merged_sample_pages)))
+                                    )
+                                    if renamed:
+                                        new_label = renamed
+                        cluster_urls[target_idx] = merged_urls
+                        cluster_dom[target_idx] = merged_dom
+                        cluster_jsonld[target_idx] = merged_jsonld
+                        cluster_labels[target_idx] = new_label
+                        del cluster_urls[idx]
+                        del cluster_dom[idx]
+                        del cluster_jsonld[idx]
+                        del cluster_labels[idx]
+                        results_data = st.session_state.get("jsonld_analyzer_results", {})
+                        results_data["cluster_urls"] = cluster_urls
+                        results_data["cluster_dom_structures"] = cluster_dom
+                        results_data["cluster_jsonld"] = cluster_jsonld
+                        results_data["cluster_labels"] = cluster_labels
+                        st.session_state["jsonld_analyzer_results"] = results_data
+                        for k in list(st.session_state.keys()):
+                            if k.startswith("optimized_jsonld_"):
+                                del st.session_state[k]
+                        st.session_state["jsonld_selected_cluster"] = target_idx - 1 if idx < target_idx else target_idx
+                        st.success(f"✅ Fusionné ! Nouveau nom : {new_label.get('model_name', 'Cluster fusionné')}")
+                        st.balloons()
+                        st.rerun()
 
             with tab_tableau:
                 tab_labels = []

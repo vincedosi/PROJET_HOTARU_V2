@@ -459,20 +459,23 @@ def suggest_cluster_merges_with_mistral(
 Clusters actuels :
 {chr(10).join(summary)}
 
-Ta mission : identifier les paires de clusters qui représentent LE MÊME TYPE DE PAGE et devraient être fusionnés.
-Exemples de fusions pertinentes :
+Ta mission : identifier TOUTES les paires de clusters qui devraient être fusionnés car ils représentent le même type de page.
+
+**RÈGLE PRIORITAIRE** : Si plusieurs clusters ont le MÊME NOM ou un nom quasi-identique (ex: "Fiches métiers" apparaît 3 fois en indices 0, 1, 2), tu DOIS proposer leur fusion. C'est le cas le plus évident possible.
+
+**Autres fusions pertinentes** (noms sémantiquement proches) :
 - "Fiches métiers" + "Pages emploi" → même type (JobPosting)
 - "Articles blog" + "Actualités" → même type (Article)
 - "Page produit" + "Fiches produits" → même type (Product)
 
-Ne propose que des fusions évidentes (noms sémantiquement proches). Si aucun cluster ne semble fusionnable, renvoie une liste vide.
+Pour chaque paire à fusionner, fournis source (index du premier) et target (index du second). Tu peux proposer plusieurs fusions (ex: 0+1, 0+2, 1+2 pour trois clusters "Fiches métiers").
 
 Réponds UNIQUEMENT avec un JSON valide :
-{{"merges": [{{"source": 0, "target": 2, "reason": "Courte justification"}}, ...]}}
+{{"merges": [{{"source": 0, "target": 1, "reason": "Même nom : Fiches métiers"}}, {{"source": 0, "target": 2, "reason": "..."}}, ...]}}
 
 - source et target : indices (0-based) des clusters à fusionner
-- reason : une phrase courte en français
-- max 5 suggestions, ordonnées par pertinence
+- reason : phrase courte en français
+- max 10 suggestions, ordonnées par évidence (même nom d'abord, puis noms proches)
 """
 
     headers = {
@@ -489,9 +492,30 @@ Réponds UNIQUEMENT avec un JSON valide :
             },
             {"role": "user", "content": user_prompt},
         ],
-        "temperature": 0.2,
-        "max_tokens": 500,
+        "temperature": 0.1,
+        "max_tokens": 800,
     }
+
+    # Fallback : clusters avec le même nom (normalisé) → fusion évidente
+    def _same_name_merges():
+        names = {}
+        for i, label in enumerate(cluster_labels):
+            name = (label.get("model_name") or "").strip().lower() or f"cluster_{i}"
+            if name not in names:
+                names[name] = []
+            names[name].append(i)
+        out = []
+        for indices in names.values():
+            if len(indices) < 2:
+                continue
+            for a in range(len(indices)):
+                for b in range(a + 1, len(indices)):
+                    out.append({
+                        "source": indices[a],
+                        "target": indices[b],
+                        "reason": "Même nom de cluster détecté",
+                    })
+        return out
 
     try:
         response = requests.post(MISTRAL_API_URL, headers=headers, json=payload, timeout=timeout or MISTRAL_TIMEOUT)
@@ -499,16 +523,24 @@ Réponds UNIQUEMENT avec un JSON valide :
         data = response.json()
         raw = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
         parsed = _parse_mistral_json(raw)
-        if not parsed or not isinstance(parsed, dict):
-            return []
-        merges = parsed.get("merges") or []
+        merges = []
+        if parsed and isinstance(parsed, dict):
+            merges = parsed.get("merges") or []
         if not isinstance(merges, list):
-            return []
+            merges = []
+
+        # Fallback : clusters avec le même nom → ajouter si Mistral ne les a pas proposés
+        fallback = _same_name_merges()
+        mistral_pairs = {tuple(sorted([m.get("source"), m.get("target")])) for m in merges if isinstance(m, dict)}
+        for f in fallback:
+            pair = tuple(sorted([f["source"], f["target"]]))
+            if pair not in mistral_pairs:
+                merges.append(f)
 
         result = []
         n = len(cluster_labels)
         seen_pairs = set()
-        for m in merges[:5]:
+        for m in merges[:10]:
             if not isinstance(m, dict):
                 continue
             src = m.get("source")
