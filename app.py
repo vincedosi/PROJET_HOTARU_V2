@@ -82,10 +82,6 @@ def get_render_eco_tab():
     from modules.eco import render_eco_tab
     return render_eco_tab
 
-def get_render_ai_transformer_tab():
-    from modules.ai_transformer import render_ai_transformer_tab
-    return render_ai_transformer_tab
-
 
 # =============================================================================
 # CACHED DATABASE ACCESS
@@ -182,13 +178,12 @@ def main():
             st.session_state.clear()
             st.rerun()
 
-    # NAVIGATION — 5 onglets uniquement (Master et Leaf sont DANS JSON-LD)
-    tab_home, tab_audit, tab_jsonld, tab_eco, tab_ai = st.tabs([
+    # NAVIGATION — 4 onglets (Master et Leaf sont DANS JSON-LD)
+    tab_home, tab_audit, tab_jsonld, tab_eco = st.tabs([
         "Home",
         "Audit",
-        "JSON-LD",   # contient Master + Leaf en sous-onglets
+        "JSON-LD",   # contient Master + Leaf + Analyse JSON-LD en sous-onglets
         "Eco-Score",
-        "AI Transformer",
     ])
 
     with tab_home:
@@ -225,10 +220,6 @@ def main():
     with tab_eco:
         render_eco_tab = get_render_eco_tab()
         render_eco_tab()
-
-    with tab_ai:
-        render_ai_transformer_tab = get_render_ai_transformer_tab()
-        render_ai_transformer_tab()
 
     # FOOTER
     st.markdown(

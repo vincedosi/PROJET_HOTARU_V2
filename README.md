@@ -2,7 +2,7 @@
 
 **SaaS d'audit et d'optimisation pour le web lisible par l'IA**
 
-HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority Index (AI-Native), Master Data (JSON-LD entité), LEAF (JSON-LD par page), **Analyse JSON-LD** (clustering DOM, graphe interactif, export Google Sheets), **Eco-Score** (AIO Impact Calculator), AI Transformer. Multi-utilisateurs avec isolation stricte des données par utilisateur.
+HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority Index (AI-Native), Master Data (JSON-LD entité), LEAF (JSON-LD par page), **Analyse JSON-LD** (clustering DOM, graphe interactif, export Google Sheets), **Eco-Score** (AIO Impact Calculator). Multi-utilisateurs avec isolation stricte des données par utilisateur.
 
 ---
 
@@ -11,8 +11,6 @@ HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority I
 - **Audit** : 3 sous-onglets — **Audit GEO** (structure du site, graphe interactif, patterns d’URL, renommage IA Mistral ; 3 tabs : Audit Site | Audit Externe | Méthodologie), **Authority Score** (AI Authority Index v2 — 5 piliers : Ancrage Knowledge Graph, Interopérabilité des Données, Autorité de Citation, Densité Vectorielle, Fraîcheur ; embeddings + sameAs), **Scraping** (diagnostic URL + logs JSON-LD / techno / Selenium).
 - **JSON-LD** : 3 sous-onglets — **Master** (données d’entité Wikidata + Mistral, JSON-LD Organization, audit & gap, sauvegarde audits), **Leaf** (JSON-LD par page, prédictions IA), **Analyse JSON-LD** (clustering DOM, nommage Mistral, graphe interactif, sauvegarde/chargement Google Sheets).
 - **Eco-Score** : **AIO Efficiency** — calculatrice d’impact carbone (tokens, kWh, gCO₂), paramètres site (pages catalogue, vues/jour), Big Numbers annuels, graphique Plotly 12 mois, méthodologie scientifique.
-- **AI Transformer** : analyse, transformation et scoring de contenu (templates, comparaison).
-
 **Design :** Fond blanc, noir + rouge `rgb(168, 27, 35)`. Titres de section au format `XX / TITRE`, rouge souligné.
 
 ---
@@ -22,8 +20,9 @@ HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority I
 À **chaque push ou merge sur `main`** (pull request), mettre à jour **`version.py`** :
 - `BUILD_DATE = "YYYY-MM-DD HH:MM"` (date et heure courantes)
 - `VERSION` : incrémenter si besoin (ex. 3.0.17 → 3.0.18)
+- `RELEASE_NOTE` : mini description des changements (affichée dans le cartouche Home)
 
-L'app affiche **V {VERSION} // {BUILD_DATE}** dans le header et le footer. Ne jamais pusher sans mettre à jour `version.py`.
+L'app affiche **V {VERSION} // {BUILD_DATE}** dans le header et le footer. Un cartouche sur la Home affiche version, date/heure et description.
 
 ---
 
@@ -31,7 +30,7 @@ L'app affiche **V {VERSION} // {BUILD_DATE}** dans le header et le footer. Ne ja
 
 ```
 PROJET_HOTARU_V2/
-├── app.py                      # Point d'entrée : auth, header, 5 tabs, footer
+├── app.py                      # Point d'entrée : auth, header, 4 tabs, footer
 ├── version.py                  # VERSION + BUILD_DATE (à mettre à jour à chaque push/PR)
 ├── packages.txt                # Streamlit Cloud : chromium, chromium-driver
 ├── requirements.txt            # Python deps (selenium, tiktoken, trafilatura, pyvis, networkx, etc.)
@@ -65,16 +64,9 @@ PROJET_HOTARU_V2/
 │   │   ├── leaf.py             # LEAF Builder (Builder | Méthodologie)
 │   │   ├── jsonld_analyzer.py  # Analyse JSON-LD (clustering DOM, Mistral, graphe, export)
 │   │   └── methodologie_blocks.py  # Contenu Méthodologie (Authority, Master, Leaf)
-│   ├── eco/                    # Onglet Eco-Score
-│   │   ├── __init__.py
-│   │   └── eco_impact.py       # AIO Impact Calculator (tokens, kWh, gCO₂, Plotly)
-│   └── ai_transformer/         # Onglet AI Transformer
+│   └── eco/                    # Onglet Eco-Score
 │       ├── __init__.py
-│       ├── ai_transformer_page.py
-│       ├── analyzer.py
-│       ├── transformer.py
-│       ├── scorer.py
-│       └── visualizer.py
+│       └── eco_impact.py       # AIO Impact Calculator (tokens, kWh, gCO₂, Plotly)
 └── README.md                   # Ce fichier
 ```
 
@@ -91,7 +83,7 @@ PROJET_HOTARU_V2/
 
 ## Navigation
 
-**Onglets principaux (app.py) :** Home | Audit | JSON-LD | Eco-Score | AI Transformer
+**Onglets principaux (app.py) :** Home | Audit | JSON-LD | Eco-Score
 
 - **Audit** : sous-onglets **Audit GEO**, **Authority Score**, **Scraping**.
 - **JSON-LD** : sous-onglets **Master**, **Leaf**, **Analyse JSON-LD**.
@@ -182,7 +174,7 @@ streamlit run app.py
 - [x] Onglet JSON-LD (Master + Leaf + **Analyse JSON-LD**), Master audit gap, sauvegarde audits
 - [x] **Analyse JSON-LD** : clustering DOM, Mistral, graphe pyvis, sauvegarde/chargement Google Sheets, nœuds colorés
 - [x] **Eco-Score** : AIO Impact Calculator, paramètres site, Big Numbers, graphique Plotly
-- [x] Scraping debug (module Audit), AI Transformer
+- [x] Scraping debug (module Audit)
 - [x] Méthodologie Audit Externe toujours visible
 - [ ] Onglet Paramètres (profil, préférences)
 - [ ] Vault : clés API chiffrées par utilisateur
