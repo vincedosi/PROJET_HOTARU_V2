@@ -206,7 +206,7 @@ def main():
 
     with tab_jsonld:
         # Sous-onglets Master, Leaf, Analyse JSON-LD
-        sub_master, sub_leaf, sub_analyzer = st.tabs(["Master", "Leaf", "Analyse JSON-LD"])
+        sub_master, sub_leaf, sub_analyzer = st.tabs(["Master", "Leaf", "JSON-LD Analysis"])
         with sub_master:
             render_master_tab = get_render_master_tab()
             render_master_tab()

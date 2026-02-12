@@ -599,16 +599,16 @@ def render_jsonld_analyzer_tab():
     from core.scraping import SmartScraper
 
     st.markdown(
-        "<p class='section-title'>ANALYSE JSON-LD</p>",
+        "<p class='section-title'>JSON-LD ANALYSIS</p>",
         unsafe_allow_html=True,
     )
     st.markdown(
-        "<p class='home-tagline' style='margin-bottom:1.5rem;'>"
-        "Détection des types de pages par structure DOM et pattern d'URL. Clustering intelligent (seuil 85 %).</p>",
+        "<p class='home-tagline' style='margin-bottom:1.5rem; color:#0f172a;'>"
+        "Page type detection by DOM structure and URL pattern. Intelligent clustering (85% threshold).</p>",
         unsafe_allow_html=True,
     )
 
-    with st.expander("Charger des données sauvegardées depuis Google Sheets"):
+    with st.expander("Load saved data from Google Sheets"):
         from core.database import AuditDatabase
         from core.session_keys import get_current_user_email
 
@@ -617,16 +617,16 @@ def render_jsonld_analyzer_tab():
         sites = db.list_jsonld_sites(user_email) if user_email and db.client else []
 
         if not sites:
-            st.caption("Aucune donnée sauvegardée pour votre compte. Lancez une analyse puis sauvegardez dans Google Sheets.")
+            st.caption("No saved data for your account. Run an analysis then save to Google Sheets.")
         else:
             opt_labels = [f"{s['site_url']} — {s['workspace']}" for s in sites]
-            sel_idx = st.selectbox("Sélectionner un site sauvegardé", range(len(opt_labels)), format_func=lambda i: opt_labels[i], key="jsonld_load_site")
-            if st.button("CHARGER DEPUIS GOOGLE SHEETS", type="secondary", use_container_width=True, key="jsonld_load_btn"):
+            sel_idx = st.selectbox("Select a saved site", range(len(opt_labels)), format_func=lambda i: opt_labels[i], key="jsonld_load_site")
+            if st.button("LOAD FROM GOOGLE SHEETS", type="secondary", use_container_width=True, key="jsonld_load_btn"):
                 s = sites[sel_idx]
                 models = db.load_jsonld_models(user_email, site_url=s["site_url"])
                 models = [m for m in models if (m.get("workspace") or "").strip() == (s.get("workspace") or "").strip()]
                 if not models:
-                    st.warning("Aucun modèle trouvé pour ce site et espace de travail.")
+                    st.warning("No models found for this site and workspace.")
                 else:
                     domain = urlparse(s["site_url"]).netloc or "site"
                     cluster_labels = []
@@ -664,32 +664,32 @@ def render_jsonld_analyzer_tab():
                     st.rerun()
 
     url_input = st.text_input(
-        "URL du site à analyser",
+        "Site URL to analyze",
         placeholder="https://www.example.com",
         key="jsonld_analyzer_url",
-        help="URL de la page d'accueil ou d'un point d'entrée du site.",
+        help="Homepage or entry point URL of the site.",
     )
     max_pages = st.slider(
-        "Nombre de pages à crawler",
+        "Number of pages to crawl",
         min_value=50,
         max_value=500,
         value=150,
         step=10,
         key="jsonld_analyzer_max_pages",
-        help="Temps estimé : ~1-2 s/page (mode requests). Clustering < 30 s pour 500 pages.",
+        help="Est. ~1-2 s/page (requests mode). Clustering < 30 s for 500 pages.",
     )
 
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        launch = st.button("LANCER L'ANALYSE", type="primary", use_container_width=True, key="jsonld_analyzer_btn")
+        launch = st.button("LAUNCH ANALYSIS", type="primary", use_container_width=True, key="jsonld_analyzer_btn")
     with col_btn2:
-        if "jsonld_analyzer_results" in st.session_state and st.button("EFFACER LES RÉSULTATS", use_container_width=True, key="jsonld_clear_btn"):
+        if "jsonld_analyzer_results" in st.session_state and st.button("CLEAR RESULTS", use_container_width=True, key="jsonld_clear_btn"):
             del st.session_state["jsonld_analyzer_results"]
             st.rerun()
 
     if launch:
         if not url_input or not url_input.strip():
-            st.warning("Veuillez saisir une URL.")
+            st.warning("Please enter a URL.")
             return
 
         url = url_input.strip()
@@ -719,16 +719,16 @@ def render_jsonld_analyzer_tab():
         except Exception as e:
             progress_placeholder.empty()
             err_msg = str(e)[:300] if e else "Erreur inconnue"
-            st.error(f"Erreur lors du crawl : {err_msg}")
-            st.caption("Vérifiez l'URL, la connexion réseau et que le site est accessible.")
+            st.error(f"Crawl error: {err_msg}")
+            st.caption("Check URL, network connection and site accessibility.")
             return
 
         progress_placeholder.empty()
 
         if not res:
-            st.warning("Aucune page récupérée. Vérifiez l'URL et réessayez.")
+            st.warning("No pages retrieved. Check URL and try again.")
             if logs:
-                with st.expander("Logs de crawl"):
+                with st.expander("Crawl logs"):
                     st.text("\n".join(logs[-100:]))
             return
 
@@ -754,13 +754,13 @@ def render_jsonld_analyzer_tab():
                     cluster_labels.append({"model_name": f"Cluster {i + 1}", "schema_type": "WebPage"})
                     mistral_fail_count += 1
             if mistral_fail_count > 0:
-                st.warning(f"Nommage Mistral : {mistral_fail_count} cluster(s) sans nom (timeout ou API occupée). Réessayez.")
+                st.warning(f"Mistral: {mistral_fail_count} cluster(s) without name (timeout or API busy). Retry.")
         else:
             cluster_labels = [
                 {"model_name": f"Cluster {i + 1}", "schema_type": "—"}
                 for i in range(len(clusters))
             ]
-            st.info("Clé API Mistral absente : nommage automatique désactivé. Configurez `st.secrets['mistral']['api_key']` pour activer.")
+            st.info("Mistral API key missing: auto-naming disabled. Configure st.secrets['mistral']['api_key'] to enable.")
 
         domain = urlparse(url).netloc or "site"
         site_url = url
@@ -801,25 +801,25 @@ def render_jsonld_analyzer_tab():
         num_clusters = len(cluster_labels)
 
         st.markdown("---")
-        st.markdown("##### Vue d'ensemble")
-        st.markdown(f"- **Site :** {domain}")
-        st.markdown(f"- **Pages analysées :** {total_pages}")
-        st.markdown(f"- **Modèles détectés :** {num_clusters}")
+        st.markdown("<p style='color:#0f172a; font-weight:700; font-size:1rem; margin:0 0 0.5rem 0;'>Overview</p>", unsafe_allow_html=True)
+        st.markdown(f"- **Site:** {domain}")
+        st.markdown(f"- **Pages analyzed:** {total_pages}")
+        st.markdown(f"- **Models detected:** {num_clusters}")
         if num_clusters == 0:
-            st.warning("Aucun cluster détecté. Le site pourrait avoir une structure très homogène.")
+            st.warning("No clusters detected. Site may have very homogeneous structure.")
         elif num_clusters > 25:
-            st.caption("Conseil : un grand nombre de clusters peut indiquer une structure de site très variée ou un seuil de similarité à ajuster.")
+            st.caption("Tip: many clusters may indicate varied site structure or adjustable similarity threshold.")
 
         st.markdown("---")
         if num_clusters == 0:
-            st.info("Lancez une nouvelle analyse avec une URL différente ou un nombre de pages plus élevé.")
+            st.info("Run a new analysis with a different URL or more pages.")
         else:
-            tab_graphe, tab_tableau, tab_export = st.tabs(["GRAPHE", "TABLEAU", "EXPORT"])
+            tab_graphe, tab_tableau, tab_export = st.tabs(["GRAPH", "TABLE", "EXPORT"])
 
         if num_clusters > 0:
             with tab_graphe:
-                st.markdown("##### Graphe interactif des clusters")
-                st.caption("Cliquez sur un cluster (nœud coloré) pour afficher les détails dans le panneau à droite. Cliquez sur une URL pour l'ouvrir dans un nouvel onglet.")
+                st.markdown("<p style='color:#0f172a; font-weight:700; font-size:1rem; margin:0 0 0.5rem 0;'>Interactive cluster graph</p>", unsafe_allow_html=True)
+                st.caption("Click a cluster (colored node) to show details in the panel on the right. Click a URL to open in a new tab.")
 
                 # Déterminer le cluster à afficher : query param (clic graphe) > session_state > 0
                 selected_cluster_idx = None
@@ -852,9 +852,9 @@ def render_jsonld_analyzer_tab():
                     components.html(html_graph, height=620)
 
                 with col_panel:
-                    st.markdown("##### Détails du cluster")
+                    st.markdown("<p style='color:#0f172a; font-weight:700; font-size:1rem; margin:0 0 0.5rem 0;'>Cluster details</p>", unsafe_allow_html=True)
                     sel = st.selectbox(
-                        "Sélectionner un cluster", options, index=default_idx, key="jsonld_cluster_select"
+                        "Select a cluster", options, index=default_idx, key="jsonld_cluster_select"
                     )
                     if sel:
                         idx = options.index(sel)
@@ -865,30 +865,30 @@ def render_jsonld_analyzer_tab():
                         urls_in_cluster = cluster_urls[idx] if idx < len(cluster_urls) else []
                         pattern = get_cluster_url_pattern(urls_in_cluster)
 
-                        st.markdown(f"**Modèle :** {name}")
-                        st.markdown(f"**Schema.org :** `{schema_type}`")
-                        st.markdown(f"**Pattern :** `{pattern}`")
-                        st.markdown(f"**Pages :** {len(urls_in_cluster)}")
+                        st.markdown(f"**Model:** {name}")
+                        st.markdown(f"**Schema.org:** `{schema_type}`")
+                        st.markdown(f"**Pattern:** `{pattern}`")
+                        st.markdown(f"**Pages:** {len(urls_in_cluster)}")
 
-                        with st.expander("Structure DOM"):
+                        with st.expander("DOM structure"):
                             dom = cluster_dom[idx] if idx < len(cluster_dom) else {}
                             if dom:
                                 st.json(dom)
                             else:
-                                st.caption("Non disponible.")
+                                st.caption("Not available.")
 
-                        with st.expander("JSON-LD existant"):
+                        with st.expander("Existing JSON-LD"):
                             jld = cluster_jsonld[idx] if idx < len(cluster_jsonld) else None
                             if jld:
                                 st.json(jld)
                             else:
-                                st.caption("Aucun JSON-LD détecté.")
+                                st.caption("No JSON-LD detected.")
 
-                        with st.expander("Exemples d'URLs"):
+                        with st.expander("Sample URLs"):
                             for u in urls_in_cluster[:5]:
                                 st.markdown(f"- [{u}]({u})")
                             if len(urls_in_cluster) > 5:
-                                st.caption(f"... et {len(urls_in_cluster) - 5} autre(s).")
+                                st.caption(f"... and {len(urls_in_cluster) - 5} more.")
 
             with tab_tableau:
                 tab_labels = []
@@ -909,27 +909,27 @@ def render_jsonld_analyzer_tab():
                         name = (label.get("model_name") or "").strip() or f"Cluster {i + 1}"
                         schema_type = (label.get("schema_type") or "").strip() or "—"
 
-                        st.markdown(f"**Modèle :** {name}")
-                        st.markdown(f"**Type Schema.org :** `{schema_type}`")
-                        st.markdown(f"**Pattern URL :** `{pattern}`")
-                        st.markdown("**Exemples d'URLs :**")
+                        st.markdown(f"**Model:** {name}")
+                        st.markdown(f"**Schema.org type:** `{schema_type}`")
+                        st.markdown(f"**URL pattern:** `{pattern}`")
+                        st.markdown("**Sample URLs:**")
                         for u in sample:
                             st.code(u, language=None)
                         if len(urls_in_cluster) > 5:
-                            st.caption(f"... et {len(urls_in_cluster) - 5} autre(s) page(s).")
+                            st.caption(f"... and {len(urls_in_cluster) - 5} more page(s).")
 
             with tab_export:
                 from core.database import AuditDatabase
                 from core.session_keys import get_current_user_email
 
-                st.markdown("##### Charger depuis Google Sheets")
+                st.markdown("<p style='color:#0f172a; font-weight:700; font-size:1rem; margin:0 0 0.5rem 0;'>Load from Google Sheets</p>", unsafe_allow_html=True)
                 _user_email = get_current_user_email() or ""
                 _db = AuditDatabase()
                 _sites = _db.list_jsonld_sites(_user_email) if _user_email and _db.client else []
                 if _sites:
                     _opt_labels = [f"{s['site_url']} — {s['workspace']}" for s in _sites]
-                    _sel_idx = st.selectbox("Site sauvegardé", range(len(_opt_labels)), format_func=lambda i: _opt_labels[i], key="jsonld_load_export")
-                    if st.button("CHARGER DEPUIS GOOGLE SHEETS", use_container_width=True, key="jsonld_load_export_btn"):
+                    _sel_idx = st.selectbox("Saved site", range(len(_opt_labels)), format_func=lambda i: _opt_labels[i], key="jsonld_load_export")
+                    if st.button("LOAD FROM GOOGLE SHEETS", use_container_width=True, key="jsonld_load_export_btn"):
                         _s = _sites[_sel_idx]
                         _models = _db.load_jsonld_models(_user_email, site_url=_s["site_url"])
                         _models = [m for m in _models if (m.get("workspace") or "").strip() == (_s.get("workspace") or "").strip()]
@@ -962,10 +962,10 @@ def render_jsonld_analyzer_tab():
                             st.success("Données chargées.")
                             st.rerun()
                         else:
-                            st.warning("Aucun modèle pour ce site et espace.")
+                            st.warning("No models for this site and workspace.")
                 else:
-                    st.caption("Aucune donnée sauvegardée.")
-                st.markdown("##### Sauvegarde Google Sheets")
+                    st.caption("No saved data.")
+                st.markdown("<p style='color:#0f172a; font-weight:700; font-size:1rem; margin:0 0 0.5rem 0;'>Save to Google Sheets</p>", unsafe_allow_html=True)
                 site_url = data.get("site_url") or f"https://{domain}"
                 workspace = st.session_state.get("audit_workspace_select", "Non classé") or "Non classé"
                 if workspace == "+ Creer Nouveau":
@@ -987,19 +987,19 @@ def render_jsonld_analyzer_tab():
                         "optimized_jsonld": None,
                     })
 
-                if st.button("SAUVEGARDER DANS GOOGLE SHEETS", type="primary", use_container_width=True, key="jsonld_save_btn"):
+                if st.button("SAVE TO GOOGLE SHEETS", type="primary", use_container_width=True, key="jsonld_save_btn"):
                     user_email = get_current_user_email() or ""
                     db = AuditDatabase()
                     if db.save_jsonld_models(user_email, site_url, workspace, models_data):
-                        st.success("Modèles JSON-LD enregistrés dans l'onglet 'jsonld' du Google Sheet.")
+                        st.success("JSON-LD models saved to 'jsonld' tab in Google Sheet.")
                         try:
-                            st.toast("Sauvegarde réussie", icon="✅")
+                            st.toast("Save successful", icon="✅")
                         except Exception:
                             pass
                     else:
-                        st.error("Échec de la sauvegarde. Vérifiez la configuration GCP (secrets) et l'URL du Sheet.")
+                        st.error("Save failed. Check GCP config (secrets) and Sheet URL.")
 
-                st.markdown("##### Téléchargement JSON")
+                st.markdown("<p style='color:#0f172a; font-weight:700; font-size:1rem; margin:0 0 0.5rem 0;'>Download JSON</p>", unsafe_allow_html=True)
                 payload = {
                     "site_url": site_url,
                     "analyzed_at": __import__("datetime").datetime.now().isoformat() + "Z",
@@ -1008,7 +1008,7 @@ def render_jsonld_analyzer_tab():
                 }
                 json_str = json.dumps(payload, ensure_ascii=False, indent=2)
                 st.download_button(
-                    "Télécharger le JSON complet",
+                    "Download full JSON",
                     data=json_str,
                     file_name=f"jsonld_models_{domain.replace('.', '_')}.json",
                     mime="application/json",
@@ -1017,5 +1017,5 @@ def render_jsonld_analyzer_tab():
                 )
 
         if logs:
-            with st.expander("Logs de crawl"):
+            with st.expander("Crawl logs"):
                 st.text("\n".join(logs[-150:]))
