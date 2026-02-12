@@ -852,7 +852,10 @@ def render_jsonld_analyzer_tab():
                     components.html(html_graph, height=620)
 
                 with col_panel:
-                    st.markdown("<p style='color:#0f172a; font-weight:700; font-size:1rem; margin:0 0 0.5rem 0;'>Cluster details</p>", unsafe_allow_html=True)
+                    st.markdown(
+                        "<div style='background:#0f172a; color:#fff; padding:8px 12px; font-weight:700; font-size:0.85rem; text-transform:uppercase; letter-spacing:0.05em;'>Cluster details</div>",
+                        unsafe_allow_html=True,
+                    )
                     sel = st.selectbox(
                         "Select a cluster", options, index=default_idx, key="jsonld_cluster_select"
                     )
@@ -870,21 +873,25 @@ def render_jsonld_analyzer_tab():
                         st.markdown(f"**Pattern:** `{pattern}`")
                         st.markdown(f"**Pages:** {len(urls_in_cluster)}")
 
-                        with st.expander("DOM structure"):
+                        tab_dom, tab_jsonld, tab_urls = st.tabs(["DOM", "JSON-LD", "URLs"])
+                        with tab_dom:
+                            st.markdown("**DOM structure**")
                             dom = cluster_dom[idx] if idx < len(cluster_dom) else {}
                             if dom:
                                 st.json(dom)
                             else:
                                 st.caption("Not available.")
 
-                        with st.expander("Existing JSON-LD"):
+                        with tab_jsonld:
+                            st.markdown("**Existing JSON-LD**")
                             jld = cluster_jsonld[idx] if idx < len(cluster_jsonld) else None
                             if jld:
                                 st.json(jld)
                             else:
                                 st.caption("No JSON-LD detected.")
 
-                        with st.expander("Sample URLs"):
+                        with tab_urls:
+                            st.markdown("**Sample URLs**")
                             for u in urls_in_cluster[:5]:
                                 st.markdown(f"- [{u}]({u})")
                             if len(urls_in_cluster) > 5:
