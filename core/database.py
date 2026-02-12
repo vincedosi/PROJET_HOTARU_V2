@@ -52,6 +52,9 @@ def _cached_load_user_audits_from_sheet(all_rows_list, user_email):
 
 class AuditDatabase:
     def __init__(self):
+        self.client = None
+        self.sheet_file = None
+        self.sheet = None
         self.scope = [
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive",
@@ -64,16 +67,12 @@ class AuditDatabase:
             self.client = gspread.authorize(self.creds)
         except Exception as e:
             st.error(f"Erreur de configuration Secrets (GCP): {e}")
-            self.client = None
-            self.sheet_file = None
-            self.sheet = None
             return
 
         try:
             sheet_url = st.secrets.get("sheet_url", "")
             if not sheet_url:
                 st.error("URL du Google Sheet manquante dans les secrets Streamlit")
-                self.sheet = None
                 return
 
             self.sheet_file = self.client.open_by_url(sheet_url)
@@ -85,6 +84,7 @@ class AuditDatabase:
 
         except Exception as e:
             st.error(f"Impossible d'ouvrir le GSheet. Erreur: {e}")
+            self.sheet_file = None
             self.sheet = None
 
     def load_user_audits(self, user_email):
