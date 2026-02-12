@@ -28,8 +28,22 @@ CLUSTER_SIMILARITY_THRESHOLD = 0.85
 # Balises de structure prises en compte (comptage)
 STRUCTURE_TAGS = ["h1", "h2", "h3", "article", "section", "form", "table"]
 
-# Tolérance pour la comparaison des comptes (±20%)
-STRUCTURE_TOLERANCE = 0.20
+# =============================================================================
+# TOLÉRANCES DE CLUSTERING
+# =============================================================================
+
+# Balises structurelles : doivent être très similaires (±20%)
+# Ce sont les balises qui définissent l'architecture de la page
+STRICT_TAGS = ["h1", "article", "section", "form", "table"]
+STRICT_TOLERANCE = 0.20  # ±20%
+
+# Balises de contenu : peuvent varier selon le contenu (±60%)
+# Le nombre de H2/H3 dépend de la richesse du contenu, pas de la structure
+FLEXIBLE_TAGS = ["h2", "h3"]
+FLEXIBLE_TOLERANCE = 0.60  # ±60%
+
+# Rétrocompatibilité (utilisé par semantic_similarity)
+STRUCTURE_TOLERANCE = STRICT_TOLERANCE
 
 
 def extract_dom_structure(html_content: str) -> dict:
@@ -168,30 +182,57 @@ def url_pattern_similarity(url_a: str, url_b: str) -> float:
 
 def structure_similarity(struct_a: dict, struct_b: dict) -> float:
     """
-    Similarité structure DOM avec tolérance ±20% par balise (40 points max).
-    Chaque balise contribue proportionnellement ; si count_a dans [count_b*(1-tol), count_b*(1+tol)], score 1 pour cette balise.
+    Similarité structure DOM avec tolérance VARIABLE selon le type de balise.
+
+    LOGIQUE :
+    - Balises structurelles (h1, form, table, article, section) : tolérance ±20%
+      → Ces balises définissent le SQUELETTE de la page
+    - Balises de contenu (h2, h3) : tolérance ±60%
+      → Ces balises dépendent du CONTENU (variable entre pages du même type)
+
+    Exemple :
+    - Fiche métier A : 9 H2 (9 compétences listées)
+    - Fiche métier B : 15 H2 (15 compétences listées)
+    → Ratio h2 = 9/15 = 0.6 → OK avec tolérance 60% → MÊME CLUSTER ✅
+
+    Returns:
+        float entre 0 et 1 (1 = structures identiques)
     """
     total = 0.0
     count = 0
+
     for tag in STRUCTURE_TAGS:
         ca = struct_a.get(tag, 0)
         cb = struct_b.get(tag, 0)
         count += 1
+
+        # Déterminer la tolérance selon le type de balise
+        if tag in FLEXIBLE_TAGS:
+            tolerance = FLEXIBLE_TOLERANCE
+        else:
+            tolerance = STRICT_TOLERANCE
+
+        # Les deux à 0 → parfait match
         if ca == 0 and cb == 0:
             total += 1.0
+        # Un seul à 0 → pas de similarité
         elif ca == 0 or cb == 0:
-            # Un seul à 0 → pas de similarité pour cette balise
             total += 0.0
         else:
             ratio = ca / cb if cb else 0
-            if 1 - STRUCTURE_TOLERANCE <= ratio <= 1 + STRUCTURE_TOLERANCE:
+
+            # Si dans la tolérance → score parfait
+            if 1 - tolerance <= ratio <= 1 + tolerance:
                 total += 1.0
             else:
                 # Dégradation linéaire en dehors de la tolérance
                 if ratio < 1:
-                    total += max(0, 1 - (1 - ratio) / (1 - (1 - STRUCTURE_TOLERANCE)))
+                    deviation = (1 - ratio) / (1 - (1 - tolerance))
+                    total += max(0, 1 - deviation)
                 else:
-                    total += max(0, 1 - (ratio - 1) / STRUCTURE_TOLERANCE)
+                    deviation = (ratio - 1) / tolerance
+                    total += max(0, 1 - deviation)
+
     return total / count if count else 1.0
 
 
@@ -1183,6 +1224,25 @@ def render_jsonld_analyzer_tab():
                             dom = cluster_dom[idx] if idx < len(cluster_dom) else {}
                             if dom:
                                 st.json(dom)
+                                # Indicateur de variabilité des balises flexibles (h2, h3)
+                                if len(urls_in_cluster) > 1:
+                                    cluster_doms = []
+                                    if "jsonld_analyzer_crawl_results" in st.session_state:
+                                        for url in urls_in_cluster:
+                                            for page in st.session_state["jsonld_analyzer_crawl_results"]:
+                                                if page.get("url") == url:
+                                                    page_dom = page.get("dom_structure") or extract_dom_structure(page.get("html_content") or "")
+                                                    cluster_doms.append(page_dom)
+                                                    break
+                                    if cluster_doms:
+                                        variability_info = []
+                                        for tag in FLEXIBLE_TAGS:
+                                            counts = [d.get(tag, 0) for d in cluster_doms]
+                                            if counts and max(counts) != min(counts):
+                                                variability_info.append(f"{tag.upper()}: {min(counts)}-{max(counts)}")
+                                        if variability_info:
+                                            st.caption(f"ℹ️ **Variabilité détectée** : {' • '.join(variability_info)}")
+                                            st.caption("(Normal : le contenu varie entre pages du même type)")
                             else:
                                 st.caption("Non disponible.")
 
@@ -1200,6 +1260,121 @@ def render_jsonld_analyzer_tab():
                                 st.markdown(f"- [{u}]({u})")
                             if len(urls_in_cluster) > 5:
                                 st.caption(f"... et {len(urls_in_cluster) - 5} de plus.")
+
+                        st.markdown("---")
+
+                        # ========== SECTION ACTIONS AVANCÉES ==========
+                        with st.expander("⚙️ Actions avancées", expanded=False):
+                            st.markdown("##### Fusionner avec un autre cluster")
+                            st.caption(
+                                "Si deux clusters représentent le même type de page (ex: 'Fiches métiers' et 'Pages emploi'), "
+                                "vous pouvez les fusionner manuellement. Les pages seront regroupées et un nouveau nom pourra être généré."
+                            )
+
+                            other_clusters = [
+                                (i, (cluster_labels[i].get("model_name") or f"Cluster {i + 1}").strip())
+                                for i in range(num_clusters)
+                                if i != idx
+                            ]
+
+                            if not other_clusters:
+                                st.info("Aucun autre cluster disponible pour fusion.")
+                            else:
+                                merge_options = ["--- Sélectionner un cluster ---"] + [
+                                    f"{i + 1}. {name} ({len(cluster_urls[i])} p.)"
+                                    for i, name in other_clusters
+                                ]
+
+                                selected_merge = st.selectbox(
+                                    "Fusionner le cluster actuel avec :",
+                                    merge_options,
+                                    key=f"merge_select_{idx}",
+                                )
+
+                                if selected_merge != merge_options[0]:
+                                    target_idx = int(selected_merge.split(".")[0]) - 1
+
+                                    col_preview, col_action = st.columns([3, 1])
+
+                                    with col_preview:
+                                        st.markdown("**Aperçu de la fusion :**")
+                                        current_name = (cluster_labels[idx].get("model_name") or f"Cluster {idx + 1}").strip()
+                                        target_name = (cluster_labels[target_idx].get("model_name") or f"Cluster {target_idx + 1}").strip()
+                                        st.markdown(f"- **Cluster source** : {current_name} ({len(urls_in_cluster)} p.)")
+                                        st.markdown(f"- **Cluster cible** : {target_name} ({len(cluster_urls[target_idx])} p.)")
+                                        st.markdown(f"- **Résultat** : {len(urls_in_cluster) + len(cluster_urls[target_idx])} p. fusionnées")
+
+                                    with col_action:
+                                        if st.button(
+                                            "FUSIONNER",
+                                            type="primary",
+                                            use_container_width=True,
+                                            key=f"merge_btn_{idx}_{target_idx}",
+                                        ):
+                                            # ========== LOGIQUE DE FUSION ==========
+                                            merged_urls = list(set(cluster_urls[idx] + cluster_urls[target_idx]))
+
+                                            if len(cluster_urls[idx]) >= len(cluster_urls[target_idx]):
+                                                merged_dom = cluster_dom[idx]
+                                                merged_jsonld = cluster_jsonld[idx]
+                                                base_label = cluster_labels[idx]
+                                            else:
+                                                merged_dom = cluster_dom[target_idx]
+                                                merged_jsonld = cluster_jsonld[target_idx]
+                                                base_label = cluster_labels[target_idx]
+
+                                            new_label = base_label
+                                            try:
+                                                mistral_key = st.secrets["mistral"]["api_key"]
+                                            except Exception:
+                                                mistral_key = None
+
+                                            if mistral_key:
+                                                merged_sample_pages = []
+                                                crawl_results = st.session_state.get("jsonld_analyzer_crawl_results", [])
+                                                for url in merged_urls[:5]:
+                                                    for page in crawl_results:
+                                                        if page.get("url") == url:
+                                                            merged_sample_pages.append(page)
+                                                            break
+
+                                                if merged_sample_pages:
+                                                    with st.spinner("Mistral génère un nouveau nom pour le cluster fusionné..."):
+                                                        renamed = name_cluster_with_mistral(
+                                                            mistral_key,
+                                                            merged_sample_pages,
+                                                            list(range(len(merged_sample_pages))),
+                                                        )
+                                                        if renamed:
+                                                            new_label = renamed
+
+                                            cluster_urls[target_idx] = merged_urls
+                                            cluster_dom[target_idx] = merged_dom
+                                            cluster_jsonld[target_idx] = merged_jsonld
+                                            cluster_labels[target_idx] = new_label
+
+                                            del cluster_urls[idx]
+                                            del cluster_dom[idx]
+                                            del cluster_jsonld[idx]
+                                            del cluster_labels[idx]
+
+                                            results_data = st.session_state.get("jsonld_analyzer_results", {})
+                                            results_data["cluster_urls"] = cluster_urls
+                                            results_data["cluster_dom_structures"] = cluster_dom
+                                            results_data["cluster_jsonld"] = cluster_jsonld
+                                            results_data["cluster_labels"] = cluster_labels
+                                            st.session_state["jsonld_analyzer_results"] = results_data
+
+                                            for k in list(st.session_state.keys()):
+                                                if k.startswith("optimized_jsonld_"):
+                                                    del st.session_state[k]
+                                            new_merged_idx = target_idx - 1 if idx < target_idx else target_idx
+                                            st.session_state["jsonld_selected_cluster"] = new_merged_idx
+
+                                            st.success(f"✅ Clusters fusionnés ! Nouveau nom : {new_label.get('model_name', 'Cluster fusionné')}")
+                                            st.balloons()
+                                            time.sleep(1)
+                                            st.rerun()
 
             with tab_tableau:
                 tab_labels = []
