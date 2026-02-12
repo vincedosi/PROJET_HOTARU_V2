@@ -819,13 +819,7 @@ def render_jsonld_analyzer_tab():
         if num_clusters > 0:
             with tab_graphe:
                 st.markdown("##### Graphe interactif des clusters")
-                st.caption("Cliquez sur un cluster (nœud coloré) pour afficher les détails. Cliquez sur une URL pour l'ouvrir dans un nouvel onglet.")
-
-                html_graph = build_jsonld_graph_html(domain, cluster_labels, cluster_urls)
-                components.html(html_graph, height=620)
-
-                st.markdown("---")
-                st.markdown("##### Détails du cluster")
+                st.caption("Cliquez sur un cluster (nœud coloré) pour afficher les détails dans le panneau à droite. Cliquez sur une URL pour l'ouvrir dans un nouvel onglet.")
 
                 # Déterminer le cluster à afficher : query param (clic graphe) > session_state > 0
                 selected_cluster_idx = None
@@ -849,48 +843,52 @@ def render_jsonld_analyzer_tab():
                     for i in range(num_clusters)
                 ]
                 default_idx = selected_cluster_idx if selected_cluster_idx is not None and selected_cluster_idx < len(options) else 0
-                sel = st.selectbox(
-                    "Ou sélectionner manuellement :",
-                    options,
-                    index=default_idx,
-                    key="jsonld_cluster_select",
-                )
-                if sel:
-                    idx = options.index(sel)
-                    st.session_state["jsonld_selected_cluster"] = idx
-                    label = cluster_labels[idx] if idx < len(cluster_labels) else {}
-                    name = (label.get("model_name") or "").strip() or f"Cluster {idx + 1}"
-                    schema_type = (label.get("schema_type") or "").strip() or "—"
-                    urls_in_cluster = cluster_urls[idx] if idx < len(cluster_urls) else []
-                    pattern = get_cluster_url_pattern(urls_in_cluster)
 
-                    st.markdown(f"**Modèle :** {name}")
-                    st.markdown(f"**Schema.org :** `{schema_type}`")
-                    st.markdown(f"**Pattern URL :** `{pattern}`")
-                    st.markdown(f"**Nombre de pages :** {len(urls_in_cluster)}")
+                # Layout : graphe à gauche, panneau latéral à droite
+                col_graph, col_panel = st.columns([2, 1])
 
-                    col_dom, col_json = st.columns(2)
-                    with col_dom:
-                        st.markdown("**Structure DOM type :**")
-                        dom = cluster_dom[idx] if idx < len(cluster_dom) else {}
-                        if dom:
-                            st.json(dom)
-                        else:
-                            st.caption("Structure DOM non disponible.")
+                with col_graph:
+                    html_graph = build_jsonld_graph_html(domain, cluster_labels, cluster_urls)
+                    components.html(html_graph, height=620)
 
-                    with col_json:
-                        st.markdown("**JSON-LD existant :**")
-                        jld = cluster_jsonld[idx] if idx < len(cluster_jsonld) else None
-                        if jld:
-                            st.json(jld)
-                        else:
-                            st.warning("Aucun JSON-LD détecté sur ces pages.")
+                with col_panel:
+                    st.markdown("##### Détails du cluster")
+                    sel = st.selectbox(
+                        "Sélectionner un cluster", options, index=default_idx, key="jsonld_cluster_select"
+                    )
+                    if sel:
+                        idx = options.index(sel)
+                        st.session_state["jsonld_selected_cluster"] = idx
+                        label = cluster_labels[idx] if idx < len(cluster_labels) else {}
+                        name = (label.get("model_name") or "").strip() or f"Cluster {idx + 1}"
+                        schema_type = (label.get("schema_type") or "").strip() or "—"
+                        urls_in_cluster = cluster_urls[idx] if idx < len(cluster_urls) else []
+                        pattern = get_cluster_url_pattern(urls_in_cluster)
 
-                    st.markdown("**Exemples d'URLs :**")
-                    for u in urls_in_cluster[:5]:
-                        st.markdown(f"- [{u}]({u})")
-                    if len(urls_in_cluster) > 5:
-                        st.caption(f"... et {len(urls_in_cluster) - 5} autre(s) URL(s).")
+                        st.markdown(f"**Modèle :** {name}")
+                        st.markdown(f"**Schema.org :** `{schema_type}`")
+                        st.markdown(f"**Pattern :** `{pattern}`")
+                        st.markdown(f"**Pages :** {len(urls_in_cluster)}")
+
+                        with st.expander("Structure DOM"):
+                            dom = cluster_dom[idx] if idx < len(cluster_dom) else {}
+                            if dom:
+                                st.json(dom)
+                            else:
+                                st.caption("Non disponible.")
+
+                        with st.expander("JSON-LD existant"):
+                            jld = cluster_jsonld[idx] if idx < len(cluster_jsonld) else None
+                            if jld:
+                                st.json(jld)
+                            else:
+                                st.caption("Aucun JSON-LD détecté.")
+
+                        with st.expander("Exemples d'URLs"):
+                            for u in urls_in_cluster[:5]:
+                                st.markdown(f"- [{u}]({u})")
+                            if len(urls_in_cluster) > 5:
+                                st.caption(f"... et {len(urls_in_cluster) - 5} autre(s).")
 
             with tab_tableau:
                 tab_labels = []
