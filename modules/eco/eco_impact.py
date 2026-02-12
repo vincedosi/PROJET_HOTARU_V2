@@ -230,8 +230,8 @@ def _render_calculatrice():
     import streamlit as st
     import plotly.graph_objects as go
 
-    with st.sidebar:
-        st.markdown("### Paramètres du Site")
+    st.markdown("#### AIO Efficiency : Levier de Sobriété Numérique")
+    with st.expander("Paramètres du Site", expanded=True):
         total_pages = st.slider(
             "Nombre de pages du catalogue",
             min_value=1,
@@ -248,8 +248,6 @@ def _render_calculatrice():
             step=10,
             key="eco_daily_views",
         )
-
-    st.markdown("#### AIO Efficiency : Levier de Sobriété Numérique")
     url = st.text_input(
         "URL du site web",
         placeholder="https://www.example.com",
