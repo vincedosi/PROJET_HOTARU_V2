@@ -401,7 +401,7 @@ def render_jsonld_analyzer_tab():
                             else:
                                 st.info("Cliquez sur 'GÉNÉRER' pour créer le JSON-LD optimisé.")
 
-                        tab_dom, tab_jsonld, tab_urls = st.tabs(["DOM", "JSON-LD", "URLs"])
+                        tab_dom, tab_jsonld, tab_urls, tab_actions = st.tabs(["DOM", "JSON-LD", "URLs", "Actions avancées"])
                         with tab_dom:
                             st.markdown("**Structure DOM**")
                             dom = cluster_dom[idx] if idx < len(cluster_dom) else {}
@@ -444,10 +444,7 @@ def render_jsonld_analyzer_tab():
                             if len(urls_in_cluster) > 5:
                                 st.caption(f"... et {len(urls_in_cluster) - 5} de plus.")
 
-                        st.markdown("---")
-
-                        # ========== SECTION ACTIONS AVANCÉES ==========
-                        with st.expander("⚙️ Actions avancées", expanded=False):
+                        with tab_actions:
                             st.markdown("##### Fusionner avec un autre cluster")
                             st.caption(
                                 "Si deux clusters représentent le même type de page (ex: 'Fiches métiers' et 'Pages emploi'), "

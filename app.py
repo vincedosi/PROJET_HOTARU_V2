@@ -89,6 +89,16 @@ def get_cached_database():
     return st.session_state.db_instance
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def _cached_load_user_audits(user_email: str, _cache_version: int = 0):
+    """
+    Cache 60s les audits utilisateur pour éviter d'appeler Google Sheets à chaque run.
+    _cache_version : incrémenté après save pour invalider le cache.
+    """
+    db = get_cached_database()
+    return db.load_user_audits(user_email or "")
+
+
 # =============================================================================
 # MAIN
 # =============================================================================
@@ -159,8 +169,8 @@ def main():
     st.markdown('<div class="hotaru-header-divider"></div>', unsafe_allow_html=True)
 
     # Workspace (niveau LOGOUT) + LOGOUT
-    db = get_cached_database()
-    all_audits = db.load_user_audits(get_current_user_email() or "")
+    cache_version = st.session_state.get("audit_cache_version", 0)
+    all_audits = _cached_load_user_audits(get_current_user_email() or "", cache_version)
     def _norm_ws(w):
         s = str(w or "").strip()
         return "Non classé" if not s or s in ("Non classé", "Uncategorized") else s

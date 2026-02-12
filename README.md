@@ -43,8 +43,7 @@ PROJET_HOTARU_V2/
 │   ├── auth.py                 # AuthManager (Google Sheets users)
 │   ├── database.py             # AuditDatabase (audits, Master, jsonld : save/load/list)
 │   ├── session_keys.py         # Clés de session SaaS
-│   ├── scraping.py             # SmartScraper (crawl, Selenium Streamlit Cloud, fetch_page)
-│   └── ai_clustering.py        # Renommage clusters (Mistral)
+│   └── scraping.py             # SmartScraper (crawl, Selenium Streamlit Cloud, fetch_page)
 ├── engine/
 │   ├── master_handler.py        # MasterDataHandler, Wikidata + Mistral, heuristiques
 │   ├── dynamic_handler.py      # Prédictions Mistral (LEAF)

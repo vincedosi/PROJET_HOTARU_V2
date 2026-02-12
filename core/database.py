@@ -130,6 +130,8 @@ class AuditDatabase:
             ]
 
             self.sheet.append_row(new_row)
+            # Invalider le cache des audits (app.py)
+            st.session_state["audit_cache_version"] = st.session_state.get("audit_cache_version", 0) + 1
             return True
 
         except Exception as e:
@@ -169,6 +171,7 @@ class AuditDatabase:
                 ):
                     # Colonne J = index 10 (1-based)
                     self.sheet.update_cell(idx, 10, master_json)
+                    st.session_state["audit_cache_version"] = st.session_state.get("audit_cache_version", 0) + 1
                     return True
 
             st.error("Aucune ligne d'audit correspondante trouvée pour ce MASTER.")
