@@ -11,7 +11,6 @@ import streamlit as st
 from version import BUILD_DATE, VERSION
 from core.auth import AuthManager
 from core.database import AuditDatabase
-from core.i18n import get_current_lang, set_lang, t
 from core.session_keys import (
     SESSION_AUTHENTICATED,
     SESSION_USER_EMAIL,
@@ -123,7 +122,7 @@ def main():
             with st.form("login_form"):
                 email = st.text_input("EMAIL", placeholder="admin@hotaru.com")
                 password = st.text_input("PASSWORD", type="password")
-                submit = st.form_submit_button(t("login"), use_container_width=True)
+                submit = st.form_submit_button("CONNEXION", use_container_width=True)
 
                 if submit:
                     auth = AuthManager()
@@ -132,10 +131,10 @@ def main():
                         st.session_state[SESSION_USER_EMAIL] = email
                         st.rerun()
                     else:
-                        st.error(t("login.error"))
+                        st.error("Identifiants invalides.")
         return
 
-    # HEADER (logo + version + langue FR/EN)
+    # HEADER (logo + version)
     logo_b64 = get_logo_base64()
     if logo_b64:
         header_left = (
@@ -157,47 +156,36 @@ def main():
             f'<div class="hotaru-header-right"><span class="hotaru-header-version">V {VERSION} // {BUILD_DATE}</span></div>',
             unsafe_allow_html=True,
         )
-        lang = get_current_lang()
-        col_fr, col_en = st.columns(2)
-        with col_fr:
-            if st.button("🇫🇷", key="lang_fr", help="Français", type="primary" if lang == "fr" else "secondary"):
-                set_lang("fr")
-                st.rerun()
-        with col_en:
-            if st.button("🇬🇧", key="lang_en", help="English", type="primary" if lang == "en" else "secondary"):
-                set_lang("en")
-                st.rerun()
     st.markdown('<div class="hotaru-header-divider"></div>', unsafe_allow_html=True)
 
     # Workspace (niveau LOGOUT) + LOGOUT
     db = get_cached_database()
     all_audits = db.load_user_audits(get_current_user_email() or "")
-    uncat = t("workspace.uncategorized")
     def _norm_ws(w):
         s = str(w or "").strip()
-        return uncat if not s or s in ("Non classé", "Uncategorized") else s
+        return "Non classé" if not s or s in ("Non classé", "Uncategorized") else s
     ws_set = {_norm_ws(a.get("workspace")) for a in all_audits}
-    ws_list = [t("workspace.new")] if not ws_set else sorted(ws_set) + [t("workspace.create")]
+    ws_list = ["Nouveau"] if not ws_set else sorted(ws_set) + ["+ Créer Nouveau"]
     c_ws, c_user = st.columns([2, 1])
     with c_ws:
         st.selectbox(
-            t("workspace.label"),
+            "Projets (Workspace)",
             ws_list,
             key="audit_workspace_select",
             label_visibility="collapsed",
-            help=t("workspace.help"),
+            help="Choisissez le projet / workspace pour filtrer les audits.",
         )
     with c_user:
-        if st.button(t("logout"), use_container_width=True):
+        if st.button("DÉCONNEXION", use_container_width=True):
             st.session_state.clear()
             st.rerun()
 
     # NAVIGATION — 4 onglets
     tab_home, tab_audit, tab_jsonld, tab_eco = st.tabs([
-        t("nav.home"),
-        t("nav.audit"),
-        t("nav.jsonld"),
-        t("nav.eco"),
+        "Accueil",
+        "Audit",
+        "JSON-LD",
+        "Eco-Score",
     ])
 
     with tab_home:
@@ -206,7 +194,7 @@ def main():
 
     with tab_audit:
         sub_tab_geo, sub_tab_authority, sub_tab_scraping = st.tabs(
-            [t("nav.audit_geo"), t("nav.authority"), t("nav.scraping")]
+            ["Audit GEO", "Authority Score", "Scraping"]
         )
         with sub_tab_geo:
             render_audit_geo = get_render_audit_geo()
@@ -220,8 +208,8 @@ def main():
 
     with tab_jsonld:
         sub_master, sub_analyzer = st.tabs([
-            t("nav.master"),
-            t("nav.jsonld_analysis"),
+            "Master",
+            "Analyse JSON-LD",
         ])
         with sub_master:
             render_master_tab = get_render_master_tab()
