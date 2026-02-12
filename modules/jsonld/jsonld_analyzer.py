@@ -553,6 +553,39 @@ def build_jsonld_graph_html(domain: str, cluster_labels: list, cluster_urls: lis
         os.remove(path)
     except OSError:
         pass
+
+    # Event listener pour clics : cluster → URL param pour panneau ; URL → nouvel onglet
+    click_handler = """
+    <script>
+        (function() {
+            function attachClickHandler() {
+                if (typeof network !== 'undefined') {
+                    network.on("click", function(params) {
+                        if (params.nodes.length > 0) {
+                            var nodeId = params.nodes[0];
+                            if (String(nodeId).startsWith('cluster_')) {
+                                var clusterIndex = parseInt(String(nodeId).replace('cluster_', ''), 10);
+                                try {
+                                    var url = new URL(window.parent.location.href);
+                                    url.searchParams.set('jsonld_cluster', clusterIndex);
+                                    window.parent.location.href = url.toString();
+                                } catch (e) { console.log('Update URL:', e); }
+                            } else if (String(nodeId).startsWith('http')) {
+                                window.open(nodeId, '_blank');
+                            }
+                        }
+                    });
+                }
+            }
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function() { setTimeout(attachClickHandler, 300); });
+            } else {
+                setTimeout(attachClickHandler, 300);
+            }
+        })();
+    </script>
+    """
+    html = html.replace("</body>", click_handler + "</body>")
     return html
 
 
@@ -785,24 +818,55 @@ def render_jsonld_analyzer_tab():
 
         if num_clusters > 0:
             with tab_graphe:
+                st.markdown("##### Graphe interactif des clusters")
+                st.caption("Cliquez sur un cluster (nœud coloré) pour afficher les détails. Cliquez sur une URL pour l'ouvrir dans un nouvel onglet.")
+
                 html_graph = build_jsonld_graph_html(domain, cluster_labels, cluster_urls)
                 components.html(html_graph, height=620)
 
-                st.markdown("##### Détail du cluster sélectionné")
+                st.markdown("---")
+                st.markdown("##### Détails du cluster")
+
+                # Déterminer le cluster à afficher : query param (clic graphe) > session_state > 0
+                selected_cluster_idx = None
+                try:
+                    qp = getattr(st, "query_params", None)
+                    if qp is not None and "jsonld_cluster" in qp:
+                        selected_cluster_idx = int(qp["jsonld_cluster"])
+                        if selected_cluster_idx >= num_clusters:
+                            selected_cluster_idx = 0
+                        st.session_state["jsonld_selected_cluster"] = selected_cluster_idx
+                except (ValueError, TypeError, KeyError):
+                    pass
+                elif "jsonld_selected_cluster" in st.session_state:
+                    selected_cluster_idx = st.session_state["jsonld_selected_cluster"]
+                else:
+                    selected_cluster_idx = 0
+
                 options = [
                     f"{i + 1}. {(cluster_labels[i].get('model_name') or '').strip() or f'Cluster {i + 1}'} ({len(cluster_urls[i])} p.)"
                     for i in range(num_clusters)
                 ]
-                sel = st.selectbox("Sélectionner un cluster", options, key="jsonld_cluster_select")
+                default_idx = selected_cluster_idx if selected_cluster_idx is not None and selected_cluster_idx < len(options) else 0
+                sel = st.selectbox(
+                    "Ou sélectionner manuellement :",
+                    options,
+                    index=default_idx,
+                    key="jsonld_cluster_select",
+                )
                 if sel:
                     idx = options.index(sel)
+                    st.session_state["jsonld_selected_cluster"] = idx
                     label = cluster_labels[idx] if idx < len(cluster_labels) else {}
                     name = (label.get("model_name") or "").strip() or f"Cluster {idx + 1}"
                     schema_type = (label.get("schema_type") or "").strip() or "—"
                     urls_in_cluster = cluster_urls[idx] if idx < len(cluster_urls) else []
                     pattern = get_cluster_url_pattern(urls_in_cluster)
 
-                    st.markdown(f"**Modèle :** {name} — **Schema.org :** `{schema_type}` — **Pattern :** `{pattern}`")
+                    st.markdown(f"**Modèle :** {name}")
+                    st.markdown(f"**Schema.org :** `{schema_type}`")
+                    st.markdown(f"**Pattern URL :** `{pattern}`")
+                    st.markdown(f"**Nombre de pages :** {len(urls_in_cluster)}")
 
                     col_dom, col_json = st.columns(2)
                     with col_dom:
@@ -811,7 +875,7 @@ def render_jsonld_analyzer_tab():
                         if dom:
                             st.json(dom)
                         else:
-                            st.caption("—")
+                            st.caption("Structure DOM non disponible.")
 
                     with col_json:
                         st.markdown("**JSON-LD existant :**")
@@ -819,7 +883,13 @@ def render_jsonld_analyzer_tab():
                         if jld:
                             st.json(jld)
                         else:
-                            st.caption("Aucun JSON-LD détecté sur la page type.")
+                            st.warning("Aucun JSON-LD détecté sur ces pages.")
+
+                    st.markdown("**Exemples d'URLs :**")
+                    for u in urls_in_cluster[:5]:
+                        st.markdown(f"- [{u}]({u})")
+                    if len(urls_in_cluster) > 5:
+                        st.caption(f"... et {len(urls_in_cluster) - 5} autre(s) URL(s).")
 
             with tab_tableau:
                 tab_labels = []
