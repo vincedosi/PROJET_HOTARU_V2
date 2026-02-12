@@ -155,17 +155,10 @@ def main():
             '<div class="hotaru-header-logo">H</div>'
             '<span class="hotaru-header-brand">HOTARU</span>'
         )
-    col_logo, col_right = st.columns([4, 1])
-    with col_logo:
-        st.markdown(
-            f'<div class="hotaru-header-left">{header_left}</div>',
-            unsafe_allow_html=True,
-        )
-    with col_right:
-        st.markdown(
-            f'<div class="hotaru-header-right"><span class="hotaru-header-version">V {VERSION} // {BUILD_DATE}</span></div>',
-            unsafe_allow_html=True,
-        )
+    st.markdown(
+        f'<div class="hotaru-header-left">{header_left}</div>',
+        unsafe_allow_html=True,
+    )
     st.markdown('<div class="hotaru-header-divider"></div>', unsafe_allow_html=True)
 
     # Workspace (niveau LOGOUT) + LOGOUT

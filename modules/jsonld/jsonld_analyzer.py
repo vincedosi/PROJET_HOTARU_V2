@@ -13,6 +13,7 @@ from services.jsonld_service import (
     cluster_pages,
     get_cluster_url_pattern,
     name_cluster_with_mistral,
+    suggest_cluster_merges_with_mistral,
     generate_optimized_jsonld,
     build_jsonld_graph_html,
     FLEXIBLE_TAGS,
@@ -246,6 +247,139 @@ def render_jsonld_analyzer_tab():
             st.warning("Aucun cluster détecté. Le site peut avoir une structure très homogène.")
         elif num_clusters > 25:
             st.caption("Astuce : beaucoup de clusters peuvent indiquer une structure variée ou un seuil ajustable.")
+
+        st.markdown("---")
+
+        # Fusion suggérée par Mistral
+        if num_clusters >= 2:
+            st.markdown("##### Fusion intelligente par Mistral")
+            st.caption(
+                "Mistral analyse les noms des clusters et propose des fusions (même type de page). "
+                "Vous validez une à une. La fusion manuelle reste disponible dans le détail de chaque cluster."
+            )
+            merge_suggestions = st.session_state.get("jsonld_merge_suggestions") or []
+            suggestion_idx = st.session_state.get("jsonld_merge_suggestion_idx", 0)
+
+            col_launch, col_status = st.columns([1, 2])
+            with col_launch:
+                if st.button("Lancer les suggestions Mistral", key="jsonld_merge_suggest_btn"):
+                    try:
+                        mistral_key = st.secrets["mistral"]["api_key"]
+                    except Exception:
+                        mistral_key = None
+                    if not mistral_key:
+                        st.error("Clé API Mistral manquante. Configurez st.secrets['mistral']['api_key'].")
+                    else:
+                        with st.spinner("Mistral analyse les clusters..."):
+                            merge_suggestions = suggest_cluster_merges_with_mistral(
+                                mistral_key, cluster_labels, cluster_urls
+                            )
+                        st.session_state["jsonld_merge_suggestions"] = merge_suggestions
+                        st.session_state["jsonld_merge_suggestion_idx"] = 0
+                        st.session_state["jsonld_merge_suggestions_asked"] = True
+                        st.rerun()
+
+            if merge_suggestions and suggestion_idx < len(merge_suggestions):
+                sugg = merge_suggestions[suggestion_idx]
+                idx_a, idx_b = sugg["source"], sugg["target"]
+                reason = sugg.get("reason", "Noms similaires")
+                name_a = (cluster_labels[idx_a].get("model_name") or f"Cluster {idx_a + 1}").strip()
+                name_b = (cluster_labels[idx_b].get("model_name") or f"Cluster {idx_b + 1}").strip()
+                count_a = len(cluster_urls[idx_a]) if idx_a < len(cluster_urls) else 0
+                count_b = len(cluster_urls[idx_b]) if idx_b < len(cluster_urls) else 0
+
+                st.markdown(f"**Suggestion {suggestion_idx + 1}/{len(merge_suggestions)}** : Fusionner « {name_a} » avec « {name_b} » ?")
+                st.caption(f"Raison : {reason}")
+                st.markdown(f"*{name_a}* ({count_a} p.) + *{name_b}* ({count_b} p.) → {count_a + count_b} pages fusionnées")
+
+                col_accept, col_refuse, _ = st.columns([1, 1, 2])
+                with col_accept:
+                    if st.button("Accepter", type="primary", key="jsonld_merge_accept"):
+                        if idx_a >= len(cluster_labels) or idx_b >= len(cluster_labels):
+                            st.session_state["jsonld_merge_suggestions"] = []
+                            st.session_state["jsonld_merge_suggestion_idx"] = 0
+                            st.rerun()
+                        else:
+                            idx, target_idx = (idx_a, idx_b) if idx_a < idx_b else (idx_b, idx_a)
+                            merged_urls = list(set(cluster_urls[idx] + cluster_urls[target_idx]))
+                            if len(cluster_urls[idx]) >= len(cluster_urls[target_idx]):
+                                merged_dom = cluster_dom[idx]
+                                merged_jsonld = cluster_jsonld[idx]
+                                base_label = cluster_labels[idx]
+                            else:
+                                merged_dom = cluster_dom[target_idx]
+                                merged_jsonld = cluster_jsonld[target_idx]
+                                base_label = cluster_labels[target_idx]
+                            new_label = base_label
+                            try:
+                                mistral_key = st.secrets["mistral"]["api_key"]
+                            except Exception:
+                                mistral_key = None
+                            if mistral_key:
+                                merged_sample_pages = []
+                                crawl_results = st.session_state.get("jsonld_analyzer_crawl_results", [])
+                                for url in merged_urls[:5]:
+                                    for page in crawl_results:
+                                        if page.get("url") == url:
+                                            merged_sample_pages.append(page)
+                                            break
+                                if merged_sample_pages:
+                                    with st.spinner("Mistral génère un nouveau nom..."):
+                                        renamed = name_cluster_with_mistral(
+                                            mistral_key, merged_sample_pages, list(range(len(merged_sample_pages)))
+                                        )
+                                        if renamed:
+                                            new_label = renamed
+                            cluster_urls[target_idx] = merged_urls
+                            cluster_dom[target_idx] = merged_dom
+                            cluster_jsonld[target_idx] = merged_jsonld
+                            cluster_labels[target_idx] = new_label
+                            del cluster_urls[idx]
+                            del cluster_dom[idx]
+                            del cluster_jsonld[idx]
+                            del cluster_labels[idx]
+                            results_data = st.session_state.get("jsonld_analyzer_results", {})
+                            results_data["cluster_urls"] = cluster_urls
+                            results_data["cluster_dom_structures"] = cluster_dom
+                            results_data["cluster_jsonld"] = cluster_jsonld
+                            results_data["cluster_labels"] = cluster_labels
+                            st.session_state["jsonld_analyzer_results"] = results_data
+                            for k in list(st.session_state.keys()):
+                                if k.startswith("optimized_jsonld_"):
+                                    del st.session_state[k]
+                            merged_suggestions = []
+                            for s in merge_suggestions:
+                                if s["source"] == idx or s["target"] == idx or s["source"] == target_idx or s["target"] == target_idx:
+                                    continue
+                                new_s = {"source": s["source"], "target": s["target"], "reason": s.get("reason", "")}
+                                if s["source"] > idx:
+                                    new_s["source"] -= 1
+                                if s["target"] > idx:
+                                    new_s["target"] -= 1
+                                if new_s["source"] > target_idx:
+                                    new_s["source"] -= 1
+                                if new_s["target"] > target_idx:
+                                    new_s["target"] -= 1
+                                merged_suggestions.append(new_s)
+                            st.session_state["jsonld_merge_suggestions"] = merged_suggestions
+                            st.session_state["jsonld_merge_suggestion_idx"] = min(suggestion_idx, len(merged_suggestions) - 1) if merged_suggestions else 0
+                            new_merged_idx = target_idx - 1 if idx < target_idx else target_idx
+                            st.session_state["jsonld_selected_cluster"] = new_merged_idx
+                            st.success(f"✅ Fusionné ! Nouveau nom : {new_label.get('model_name', 'Cluster fusionné')}")
+                            st.rerun()
+                with col_refuse:
+                    if st.button("Refuser", key="jsonld_merge_refuse"):
+                        st.session_state["jsonld_merge_suggestion_idx"] = suggestion_idx + 1
+                        if suggestion_idx + 1 >= len(merge_suggestions):
+                            st.session_state["jsonld_merge_suggestions"] = []
+                            st.session_state["jsonld_merge_suggestion_idx"] = 0
+                        st.rerun()
+            elif merge_suggestions and suggestion_idx >= len(merge_suggestions):
+                st.info("Toutes les suggestions ont été traitées.")
+                st.session_state["jsonld_merge_suggestions"] = []
+                st.session_state["jsonld_merge_suggestion_idx"] = 0
+            elif st.session_state.get("jsonld_merge_suggestions_asked") and (not merge_suggestions or len(merge_suggestions) == 0):
+                st.info("Mistral n'a trouvé aucune fusion pertinente.")
 
         st.markdown("---")
         if num_clusters == 0:

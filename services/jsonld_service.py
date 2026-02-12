@@ -432,6 +432,106 @@ Réponds UNIQUEMENT avec un JSON valide, sans texte avant ou après :
     return None
 
 
+def suggest_cluster_merges_with_mistral(
+    api_key: str,
+    cluster_labels: list,
+    cluster_urls: list,
+    timeout: Optional[int] = 30,
+) -> list:
+    """
+    Demande à Mistral quels clusters fusionner (noms similaires = même type de page).
+    Returns:
+        Liste de {"source": idx, "target": idx, "reason": "..."} ordonnée par pertinence.
+        Indices 0-based. source et target sont des indices de clusters différents.
+    """
+    if not cluster_labels or len(cluster_labels) < 2:
+        return []
+
+    summary = []
+    for i, label in enumerate(cluster_labels):
+        name = (label.get("model_name") or f"Cluster {i + 1}").strip()
+        schema = (label.get("schema_type") or "WebPage").strip()
+        count = len(cluster_urls[i]) if i < len(cluster_urls) else 0
+        summary.append(f"  {i}. {name} (Schema: {schema}, {count} pages)")
+
+    user_prompt = f"""Tu as une liste de clusters (types de pages) détectés sur un site web.
+
+Clusters actuels :
+{chr(10).join(summary)}
+
+Ta mission : identifier les paires de clusters qui représentent LE MÊME TYPE DE PAGE et devraient être fusionnés.
+Exemples de fusions pertinentes :
+- "Fiches métiers" + "Pages emploi" → même type (JobPosting)
+- "Articles blog" + "Actualités" → même type (Article)
+- "Page produit" + "Fiches produits" → même type (Product)
+
+Ne propose que des fusions évidentes (noms sémantiquement proches). Si aucun cluster ne semble fusionnable, renvoie une liste vide.
+
+Réponds UNIQUEMENT avec un JSON valide :
+{{"merges": [{{"source": 0, "target": 2, "reason": "Courte justification"}}, ...]}}
+
+- source et target : indices (0-based) des clusters à fusionner
+- reason : une phrase courte en français
+- max 5 suggestions, ordonnées par pertinence
+"""
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    payload = {
+        "model": MISTRAL_MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": "Tu es un expert en architecture d'information et données structurées. Tu réponds uniquement en JSON valide.",
+            },
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.2,
+        "max_tokens": 500,
+    }
+
+    try:
+        response = requests.post(MISTRAL_API_URL, headers=headers, json=payload, timeout=timeout or MISTRAL_TIMEOUT)
+        response.raise_for_status()
+        data = response.json()
+        raw = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
+        parsed = _parse_mistral_json(raw)
+        if not parsed or not isinstance(parsed, dict):
+            return []
+        merges = parsed.get("merges") or []
+        if not isinstance(merges, list):
+            return []
+
+        result = []
+        n = len(cluster_labels)
+        seen_pairs = set()
+        for m in merges[:5]:
+            if not isinstance(m, dict):
+                continue
+            src = m.get("source")
+            tgt = m.get("target")
+            reason = (m.get("reason") or "").strip() or "Noms similaires"
+            if src is None or tgt is None or src == tgt:
+                continue
+            try:
+                si, ti = int(src), int(tgt)
+            except (ValueError, TypeError):
+                continue
+            if si < 0 or si >= n or ti < 0 or ti >= n:
+                continue
+            pair = tuple(sorted([si, ti]))
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
+            result.append({"source": si, "target": ti, "reason": reason})
+        return result
+    except Exception:
+        return []
+
+
 def generate_optimized_jsonld(
     api_key: str,
     schema_type: str,
