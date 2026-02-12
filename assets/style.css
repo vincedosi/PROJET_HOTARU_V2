@@ -215,38 +215,6 @@ hr, .stDivider {
     border-bottom: 1px solid var(--border-light) !important;
 }
 
-/* Main nav radio — style as tabs (Home, Audit, JSON-LD, Eco-Score) */
-.stRadio[data-testid="stRadio"] > label {
-    display: none !important;
-}
-.stRadio[data-testid="stRadio"] > div[role="radiogroup"] {
-    display: flex !important;
-    gap: 0 !important;
-    border-bottom: 1px solid var(--border) !important;
-    padding: 0 !important;
-}
-.stRadio[data-testid="stRadio"] > div[role="radiogroup"] > label {
-    height: 48px !important;
-    padding: 0 20px !important;
-    border-radius: 0 !important;
-    border-bottom: 2px solid transparent !important;
-    font-size: 0.7rem !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.15em !important;
-    text-transform: uppercase !important;
-    color: var(--text-muted) !important;
-    align-items: center !important;
-}
-.stRadio[data-testid="stRadio"] > div[role="radiogroup"] > label:first-of-type {
-    margin-left: 0 !important;
-}
-.stRadio[data-testid="stRadio"] > div[role="radiogroup"] > label[data-checked="true"],
-.stRadio[data-testid="stRadio"] > div[role="radiogroup"] > label:has(input:checked) {
-    color: var(--text) !important;
-    font-weight: 700 !important;
-    border-bottom-color: var(--primary) !important;
-}
-
 /* =============================================================================
    5. BUTTONS - BRUTALIST SQUARE
    ============================================================================= */

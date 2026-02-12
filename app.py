@@ -192,17 +192,19 @@ def main():
             st.session_state.clear()
             st.rerun()
 
-    # NAVIGATION — 4 onglets (index persisté pour garder l'onglet actif au changement de langue)
-    tab_names = [t("nav.home"), t("nav.audit"), t("nav.jsonld"), t("nav.eco")]
-    main_tab_idx = st.radio(
-        "", range(len(tab_names)), format_func=lambda i: tab_names[i],
-        key="main_tab_idx", horizontal=True, label_visibility="collapsed",
-    )
+    # NAVIGATION — 4 onglets
+    tab_home, tab_audit, tab_jsonld, tab_eco = st.tabs([
+        t("nav.home"),
+        t("nav.audit"),
+        t("nav.jsonld"),
+        t("nav.eco"),
+    ])
 
-    if main_tab_idx == 0:
+    with tab_home:
         render_home = get_render_home()
         render_home()
-    elif main_tab_idx == 1:
+
+    with tab_audit:
         sub_tab_geo, sub_tab_authority, sub_tab_scraping = st.tabs(
             [t("nav.audit_geo"), t("nav.authority"), t("nav.scraping")]
         )
@@ -215,7 +217,8 @@ def main():
         with sub_tab_scraping:
             render_scraping_debug_tab = get_render_scraping_debug_tab()
             render_scraping_debug_tab()
-    elif main_tab_idx == 2:
+
+    with tab_jsonld:
         sub_master, sub_analyzer = st.tabs([
             t("nav.master"),
             t("nav.jsonld_analysis"),
@@ -226,7 +229,8 @@ def main():
         with sub_analyzer:
             render_jsonld_analyzer_tab = get_render_jsonld_analyzer_tab()
             render_jsonld_analyzer_tab()
-    else:
+
+    with tab_eco:
         render_eco_tab = get_render_eco_tab()
         render_eco_tab()
 

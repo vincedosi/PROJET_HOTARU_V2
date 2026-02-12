@@ -20,8 +20,8 @@ HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority I
 ## Versioning
 
 À **chaque push ou merge sur `main`** (pull request), mettre à jour **`version.py`** :
-- `BUILD_DATE = "YYYY-MM-DD HH:MM"` (date et heure courantes)
 - `VERSION` : incrémenter si besoin (ex. 3.0.17 → 3.0.18)
+- `BUILD_DATE` : heure système au chargement de l'app (automatique)
 - `RELEASE_NOTE` : mini description des changements (affichée dans le cartouche Home)
 
 L'app affiche **V {VERSION} // {BUILD_DATE}** dans le header et le footer. Un cartouche sur la Home affiche version, date/heure et description.
@@ -85,7 +85,7 @@ PROJET_HOTARU_V2/
 
 ## Navigation
 
-**Onglets principaux (app.py) :** Home | Audit | JSON-LD | Eco-Score — navigation par radio pour conserver l'onglet actif au changement de langue.
+**Onglets principaux (app.py) :** Home | Audit | JSON-LD | Eco-Score — onglets classiques (st.tabs).
 
 - **Header** : logo, version, boutons **FR** / **EN** (côte à côte) pour basculer l'interface.
 - **Audit** : sous-onglets **Audit GEO**, **Authority Score**, **Scraping**.
@@ -192,7 +192,7 @@ La clé Mistral (`st.secrets["mistral"]["api_key"]`) est utilisée pour le nomma
 - [x] Onglet JSON-LD (Master + **Analyse JSON-LD**), Master audit gap, sauvegarde audits
 - [x] **Analyse JSON-LD** : clustering DOM, Mistral, graphe pyvis, sauvegarde/chargement Google Sheets, nœuds colorés
 - [x] **Analyse JSON-LD Phase 2** : génération JSON-LD optimisé via Mistral AI (Schema.org complet), export optimized_jsonld
-- [x] **Interface bilingue** : FR/EN via boutons drapeaux, navigation persistante au changement de langue
+- [x] **Interface bilingue** : FR/EN via boutons drapeaux
 - [x] **Eco-Score** : AIO Impact Calculator, paramètres site, Big Numbers, graphique Plotly
 - [x] Scraping debug (module Audit)
 - [x] Méthodologie Audit Externe toujours visible
