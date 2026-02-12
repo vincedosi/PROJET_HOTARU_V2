@@ -11,6 +11,7 @@ import streamlit as st
 from version import BUILD_DATE, VERSION
 from core.auth import AuthManager
 from core.database import AuditDatabase
+from core.i18n import get_current_lang, set_lang, t
 from core.session_keys import (
     SESSION_AUTHENTICATED,
     SESSION_USER_EMAIL,
@@ -126,7 +127,7 @@ def main():
             with st.form("login_form"):
                 email = st.text_input("EMAIL", placeholder="admin@hotaru.com")
                 password = st.text_input("PASSWORD", type="password")
-                submit = st.form_submit_button("LOGIN", use_container_width=True)
+                submit = st.form_submit_button(t("login"), use_container_width=True)
 
                 if submit:
                     auth = AuthManager()
@@ -135,10 +136,10 @@ def main():
                         st.session_state[SESSION_USER_EMAIL] = email
                         st.rerun()
                     else:
-                        st.error("Invalid credentials.")
+                        st.error(t("login.error"))
         return
 
-    # HEADER (logo.png au lieu de H sur fond noir)
+    # HEADER (logo + version + langue FR/EN)
     logo_b64 = get_logo_base64()
     if logo_b64:
         header_left = (
@@ -149,41 +150,57 @@ def main():
             '<div class="hotaru-header-logo">H</div>'
             '<span class="hotaru-header-brand">HOTARU</span>'
         )
-    st.markdown(
-        f'<div class="hotaru-header">'
-        f'<div class="hotaru-header-left">{header_left}</div>'
-        f'<div class="hotaru-header-right">'
-        f'<span class="hotaru-header-version">V {VERSION} // {BUILD_DATE}</span>'
-        f'</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
+    col_logo, col_ver, col_fr, col_en = st.columns([4, 2, 1, 1])
+    with col_logo:
+        st.markdown(
+            f'<div class="hotaru-header-left">{header_left}</div>',
+            unsafe_allow_html=True,
+        )
+    with col_ver:
+        st.markdown(
+            f'<div class="hotaru-header-right"><span class="hotaru-header-version">V {VERSION} // {BUILD_DATE}</span></div>',
+            unsafe_allow_html=True,
+        )
+    lang = get_current_lang()
+    with col_fr:
+        if st.button("🇫🇷", key="lang_fr", help="Français", type="primary" if lang == "fr" else "secondary"):
+            set_lang("fr")
+            st.rerun()
+    with col_en:
+        if st.button("🇬🇧", key="lang_en", help="English", type="primary" if lang == "en" else "secondary"):
+            set_lang("en")
+            st.rerun()
+    st.markdown('<div class="hotaru-header-divider"></div>', unsafe_allow_html=True)
 
     # Workspace (niveau LOGOUT) + LOGOUT
     db = get_cached_database()
     all_audits = db.load_user_audits(get_current_user_email() or "")
-    ws_set = {str(a.get("workspace", "")).strip() or "Non classé" for a in all_audits}
-    ws_list = ["Nouveau"] if not ws_set else sorted(ws_set) + ["+ Creer Nouveau"]
+    uncat = t("workspace.uncategorized")
+    def _norm_ws(w):
+        s = str(w or "").strip()
+        return uncat if not s or s in ("Non classé", "Uncategorized") else s
+    ws_set = {_norm_ws(a.get("workspace")) for a in all_audits}
+    ws_list = [t("workspace.new")] if not ws_set else sorted(ws_set) + [t("workspace.create")]
     c_ws, c_user = st.columns([2, 1])
     with c_ws:
         st.selectbox(
-            "Projets (Workspace)",
+            t("workspace.label"),
             ws_list,
             key="audit_workspace_select",
             label_visibility="collapsed",
-            help="Choisissez le projet / workspace pour filtrer les audits.",
+            help=t("workspace.help"),
         )
     with c_user:
-        if st.button("LOGOUT", use_container_width=True):
+        if st.button(t("logout"), use_container_width=True):
             st.session_state.clear()
             st.rerun()
 
     # NAVIGATION — 4 onglets (Master et Leaf sont DANS JSON-LD)
     tab_home, tab_audit, tab_jsonld, tab_eco = st.tabs([
-        "Home",
-        "Audit",
-        "JSON-LD",   # contient Master + Leaf + Analyse JSON-LD en sous-onglets
-        "Eco-Score",
+        t("nav.home"),
+        t("nav.audit"),
+        t("nav.jsonld"),
+        t("nav.eco"),
     ])
 
     with tab_home:
@@ -192,7 +209,7 @@ def main():
 
     with tab_audit:
         sub_tab_geo, sub_tab_authority, sub_tab_scraping = st.tabs(
-            ["Audit GEO", "Authority Score", "Scraping"]
+            [t("nav.audit_geo"), t("nav.authority"), t("nav.scraping")]
         )
         with sub_tab_geo:
             render_audit_geo = get_render_audit_geo()
@@ -205,8 +222,11 @@ def main():
             render_scraping_debug_tab()
 
     with tab_jsonld:
-        # Sous-onglets Master, Leaf, Analyse JSON-LD
-        sub_master, sub_leaf, sub_analyzer = st.tabs(["Master", "Leaf", "JSON-LD Analysis"])
+        sub_master, sub_leaf, sub_analyzer = st.tabs([
+            t("nav.master"),
+            t("nav.leaf"),
+            t("nav.jsonld_analysis"),
+        ])
         with sub_master:
             render_master_tab = get_render_master_tab()
             render_master_tab()

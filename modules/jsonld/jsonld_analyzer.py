@@ -590,9 +590,7 @@ def build_jsonld_graph_html(domain: str, cluster_labels: list, cluster_urls: lis
                             var nodeId = params.nodes[0];
                             if (String(nodeId).startsWith('cluster_')) {
                                 var clusterIndex = parseInt(String(nodeId).replace('cluster_', ''), 10);
-                                if (!tryNavigate(clusterIndex)) {
-                                    window.alert("Use the dropdown on the right to select cluster " + (clusterIndex + 1));
-                                }
+                                tryNavigate(clusterIndex);
                             } else if (String(nodeId).startsWith('http')) {
                                 window.open(nodeId, '_blank');
                             }

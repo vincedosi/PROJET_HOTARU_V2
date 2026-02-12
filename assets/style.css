@@ -1273,6 +1273,11 @@ pre, code {
     gap: 16px;
 }
 
+.hotaru-header-divider {
+    border-bottom: 1px solid var(--border);
+    margin-bottom: var(--space-6);
+}
+
 .hotaru-header-version {
     font-size: 0.6rem;
     font-weight: 600;
