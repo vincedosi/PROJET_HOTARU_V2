@@ -335,6 +335,7 @@ class AuditDatabase:
                     "dom_structure": row[6] if len(row) > 6 else "",
                     "existing_jsonld": row[7] if len(row) > 7 else "",
                     "recommended_schema": row[8] if len(row) > 8 else "",
+                    "optimized_jsonld": row[9] if len(row) > 9 else "",
                     "created_at": row[10] if len(row) > 10 else "",
                     "workspace": row[11] if len(row) > 11 else "",
                 })

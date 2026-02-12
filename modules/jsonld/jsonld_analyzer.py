@@ -8,6 +8,7 @@ import re
 import json
 import os
 import time
+import logging
 import requests
 from typing import Optional
 from urllib.parse import urlparse
@@ -476,6 +477,162 @@ Réponds UNIQUEMENT avec un JSON valide, sans texte avant ou après :
     return None
 
 
+def generate_optimized_jsonld(
+    api_key: str,
+    schema_type: str,
+    dom_structure: dict,
+    sample_pages: list,
+    existing_jsonld: Optional[dict],
+    url_pattern: str,
+    timeout: int = 30,
+) -> Optional[dict]:
+    """
+    Génère un JSON-LD Schema.org optimisé complet via Mistral AI.
+
+    Args:
+        api_key: Clé API Mistral
+        schema_type: Type Schema.org détecté (ex: "JobPosting", "Product", "Article")
+        dom_structure: Structure DOM du cluster (dict avec h1, h2, forms, etc.)
+        sample_pages: Liste de 1-3 pages exemples avec title, h1, description, html_snippet
+        existing_jsonld: JSON-LD actuel (si existe), sinon None
+        url_pattern: Pattern d'URL du cluster (ex: "/offres/{slug}")
+        timeout: Timeout API en secondes
+
+    Returns:
+        dict : JSON-LD optimisé complet, ou None si échec
+    """
+    system_prompt = f"""Tu es un expert mondial en données structurées Schema.org et en SEO technique.
+
+Ta mission : générer un JSON-LD Schema.org PARFAIT et COMPLET pour un type de page web.
+
+**Règles absolues :**
+1. Respecte à 100% la spécification Schema.org pour le type `{schema_type}`
+2. Remplis TOUS les champs obligatoires (required) du type
+3. Remplis TOUS les champs recommandés (recommended) du type
+4. Ajoute les champs optionnels pertinents qui enrichissent la sémantique
+5. Utilise des valeurs réalistes et cohérentes basées sur les exemples fournis
+6. Structure le JSON-LD pour être OPTIMAL pour les LLMs (ChatGPT, Claude, Gemini, Perplexity)
+7. Inclus TOUJOURS @context et @type
+8. Pour les entités liées (Organization, Person, Place), crée des objets complets avec @id
+9. Pour les dates : format ISO 8601 (YYYY-MM-DD ou YYYY-MM-DDTHH:mm:ssZ)
+10. Pour les URLs : URLs complètes et valides
+11. Pour les prix : objets PriceSpecification avec currency="EUR"
+12. Pour les images : objets ImageObject avec url, width, height
+
+**Types de champs à maximiser selon le type :**
+
+JobPosting : title, description, datePosted, validThrough, employmentType, hiringOrganization (complet), jobLocation (complet), baseSalary, responsibilities, skills, qualifications, benefits, jobBenefits, workHours, educationRequirements, experienceRequirements, industry
+
+Product : name, description, brand, offers (avec price, priceCurrency, availability, seller), image, aggregateRating, review, sku, gtin, mpn, category, color, material, size
+
+Article : headline, description, author (Person complet), publisher (Organization complet), datePublished, dateModified, image, articleBody, articleSection, wordCount, keywords
+
+Event : name, description, startDate, endDate, location (Place complet), organizer, performer, offers, image, eventStatus, eventAttendanceMode
+
+LocalBusiness : name, description, address (PostalAddress complet), geo, telephone, openingHours, priceRange, aggregateRating, image, url, sameAs
+
+Organization : name, legalName, description, url, logo, address, contactPoint, sameAs, founder, foundingDate, numberOfEmployees, brand, slogan
+
+**Réponds UNIQUEMENT avec le JSON-LD valide, sans texte avant ou après, sans balises markdown.**
+"""
+
+    user_prompt = f"""Génère un JSON-LD Schema.org de type `{schema_type}` pour les pages suivantes.
+
+**Type détecté :** {schema_type}
+**Pattern d'URL :** {url_pattern}
+
+**Structure DOM type :**
+{json.dumps(dom_structure, indent=2, ensure_ascii=False)}
+
+**Exemples de pages (contenu réel) :**
+"""
+    for i, page in enumerate(sample_pages, 1):
+        user_prompt += f"""
+--- Page {i} ---
+URL : {page.get('url', '')}
+Titre : {page.get('title', '')}
+H1 : {page.get('h1', '')}
+Meta description : {page.get('description', '')}
+Extrait HTML (5000 premiers chars) :
+{(page.get('html_snippet', '') or '')[:5000]}
+
+"""
+    if existing_jsonld:
+        user_prompt += f"""
+**JSON-LD actuel détecté sur ces pages :**
+{json.dumps(existing_jsonld, indent=2, ensure_ascii=False)[:3000]}
+
+⚠️ ATTENTION : Le JSON-LD actuel est incomplet. Ton objectif est de le COMPLÉTER et l'OPTIMISER en ajoutant TOUS les champs manquants recommandés par Schema.org pour le type `{schema_type}`.
+"""
+    else:
+        user_prompt += f"""
+**JSON-LD actuel :** Aucun JSON-LD détecté sur ces pages.
+
+⚠️ Tu dois créer un JSON-LD COMPLET from scratch.
+"""
+    user_prompt += f"""
+
+**Instructions finales :**
+1. Analyse le contenu réel des pages exemples ci-dessus
+2. Génère un JSON-LD `{schema_type}` COMPLET avec TOUS les champs obligatoires + recommandés + optionnels pertinents
+3. Utilise les vraies données extraites des exemples (titres, descriptions, etc.)
+4. Pour les champs manquants dans les exemples, utilise des placeholders réalistes entre {{{{double_accolades}}}} (ex: {{{{job_title}}}}, {{{{price}}}}, {{{{author_name}}}})
+5. Respecte à 100% la spec Schema.org
+6. Optimise pour la citation par les LLMs (ChatGPT, Claude, Gemini)
+
+Réponds UNIQUEMENT avec le JSON-LD valide, sans aucun texte, sans balises markdown, sans commentaires.
+"""
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    payload = {
+        "model": "mistral-large-latest",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.1,
+        "max_tokens": 4000,
+    }
+
+    try:
+        response = requests.post(
+            MISTRAL_API_URL,
+            headers=headers,
+            json=payload,
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        data = response.json()
+        raw_content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
+
+        parsed = _parse_mistral_json(raw_content)
+        if not parsed or not isinstance(parsed, dict):
+            try:
+                parsed = json.loads(raw_content.strip())
+            except json.JSONDecodeError:
+                logging.error(f"Mistral JSON-LD parse failed for {schema_type}")
+                return None
+
+        if "@context" not in parsed or "@type" not in parsed:
+            logging.error(f"Mistral JSON-LD invalid (@context/@type) for {schema_type}")
+            return None
+
+        return parsed
+
+    except requests.exceptions.Timeout:
+        logging.error(f"Timeout Mistral pour {schema_type}")
+        return None
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Erreur API Mistral : {str(e)[:200]}")
+        return None
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return None
+
+
 # =============================================================================
 # Étape 4 : Graphe interactif (pyvis + networkx)
 # =============================================================================
@@ -715,6 +872,11 @@ def render_jsonld_analyzer_tab():
         with col_btn2:
             if "jsonld_analyzer_results" in st.session_state and st.button("CLEAR RESULTS", use_container_width=True, key="jsonld_clear_btn"):
                 del st.session_state["jsonld_analyzer_results"]
+                if "jsonld_analyzer_crawl_results" in st.session_state:
+                    del st.session_state["jsonld_analyzer_crawl_results"]
+                for k in list(st.session_state.keys()):
+                    if k.startswith("optimized_jsonld_"):
+                        del st.session_state[k]
                 st.rerun()
 
         if launch:
@@ -814,6 +976,7 @@ def render_jsonld_analyzer_tab():
                 "cluster_jsonld": cluster_jsonld,
                 "logs": logs,
             }
+            st.session_state["jsonld_analyzer_crawl_results"] = res
             st.rerun()
 
     # Affichage des résultats (depuis session_state, persistant après rerun)
@@ -906,6 +1069,94 @@ def render_jsonld_analyzer_tab():
                         st.markdown(f"**Pattern:** `{pattern}`")
                         st.markdown(f"**Pages:** {len(urls_in_cluster)}")
 
+                        st.markdown("---")
+                        col_btn1, col_btn2 = st.columns([3, 1])
+                        with col_btn1:
+                            st.markdown("**Génération automatique du JSON-LD optimisé :**")
+                            st.caption("Mistral AI analyse la structure et génère un JSON-LD Schema.org complet avec tous les champs recommandés.")
+                        with col_btn2:
+                            generate_btn = st.button(
+                                "GÉNÉRER",
+                                type="primary",
+                                use_container_width=True,
+                                key=f"jsonld_generate_{idx}",
+                                help="Génère le JSON-LD optimisé pour ce cluster via Mistral AI",
+                            )
+
+                        if f"optimized_jsonld_{idx}" not in st.session_state:
+                            st.session_state[f"optimized_jsonld_{idx}"] = None
+
+                        if generate_btn:
+                            sample_pages = []
+                            crawl_res = st.session_state.get("jsonld_analyzer_crawl_results", [])
+                            for url in urls_in_cluster[:3]:
+                                page_data = None
+                                for p in crawl_res:
+                                    if p.get("url") == url:
+                                        page_data = p
+                                        break
+                                if page_data:
+                                    sample_pages.append({
+                                        "url": url,
+                                        "title": page_data.get("title", ""),
+                                        "h1": page_data.get("h1", ""),
+                                        "description": page_data.get("description", ""),
+                                        "html_snippet": (page_data.get("html_content") or "")[:5000],
+                                    })
+
+                            with st.spinner("Mistral génère le JSON-LD optimisé..."):
+                                try:
+                                    mistral_key = st.secrets["mistral"]["api_key"]
+                                except Exception:
+                                    st.error("Clé API Mistral manquante. Configurez `st.secrets['mistral']['api_key']`.")
+                                    mistral_key = None
+
+                                if mistral_key:
+                                    dom = cluster_dom[idx] if idx < len(cluster_dom) else {}
+                                    jld = cluster_jsonld[idx] if idx < len(cluster_jsonld) else None
+                                    optimized = generate_optimized_jsonld(
+                                        api_key=mistral_key,
+                                        schema_type=schema_type if schema_type != "—" else "WebPage",
+                                        dom_structure=dom,
+                                        sample_pages=sample_pages,
+                                        existing_jsonld=jld,
+                                        url_pattern=pattern,
+                                    )
+                                    if optimized:
+                                        st.session_state[f"optimized_jsonld_{idx}"] = optimized
+                                        st.success("✅ JSON-LD optimisé généré !")
+                                        st.rerun()
+                                    else:
+                                        st.error("❌ Échec de la génération. Réessayez ou vérifiez les logs Mistral.")
+                                elif not sample_pages:
+                                    st.warning("Résultats du crawl non disponibles (analyse chargée depuis Sheets). Lancez une nouvelle analyse.")
+
+                        st.markdown("---")
+                        col_current, col_optimized = st.columns(2)
+                        with col_current:
+                            st.markdown("**JSON-LD actuel**")
+                            jld = cluster_jsonld[idx] if idx < len(cluster_jsonld) else None
+                            if jld:
+                                st.json(jld)
+                            else:
+                                st.warning("⚠️ Aucun JSON-LD détecté sur ces pages.")
+
+                        with col_optimized:
+                            st.markdown("**JSON-LD optimisé** ✨")
+                            optimized_data = st.session_state.get(f"optimized_jsonld_{idx}")
+                            if optimized_data:
+                                st.json(optimized_data)
+                                st.download_button(
+                                    "📋 Télécharger JSON-LD",
+                                    data=json.dumps(optimized_data, ensure_ascii=False, indent=2),
+                                    file_name=f"jsonld_optimized_{name.lower().replace(' ', '_')[:30]}.json",
+                                    mime="application/json",
+                                    use_container_width=True,
+                                    key=f"download_jsonld_{idx}",
+                                )
+                            else:
+                                st.info("Cliquez sur 'GÉNÉRER' pour créer le JSON-LD optimisé.")
+
                         tab_dom, tab_jsonld, tab_urls = st.tabs(["DOM", "JSON-LD", "URLs"])
                         with tab_dom:
                             st.markdown("**DOM structure**")
@@ -949,6 +1200,10 @@ def render_jsonld_analyzer_tab():
                         name = (label.get("model_name") or "").strip() or f"Cluster {i + 1}"
                         schema_type = (label.get("schema_type") or "").strip() or "—"
 
+                        if st.session_state.get(f"optimized_jsonld_{i}"):
+                            st.markdown("✨ **JSON-LD optimisé généré**")
+                        else:
+                            st.markdown("⚠️ *JSON-LD optimisé non généré*")
                         st.markdown(f"**Model:** {name}")
                         st.markdown(f"**Schema.org type:** `{schema_type}`")
                         st.markdown(f"**URL pattern:** `{pattern}`")
@@ -979,7 +1234,7 @@ def render_jsonld_analyzer_tab():
                             _urls = []
                             _doms = []
                             _jlds = []
-                            for m in _models:
+                            for i, m in enumerate(_models):
                                 _labels.append({"model_name": m.get("model_name") or "Cluster", "schema_type": m.get("recommended_schema") or "WebPage"})
                                 _us = m.get("sample_urls") or "[]"
                                 try:
@@ -992,6 +1247,8 @@ def render_jsonld_analyzer_tab():
                                 _urls.append(_u if isinstance(_u, list) else [])
                                 _doms.append(_db._decompress_from_sheet(m.get("dom_structure") or "") or {})
                                 _jlds.append(_db._decompress_from_sheet(m.get("existing_jsonld") or ""))
+                                _opt = _db._decompress_from_sheet(m.get("optimized_jsonld") or "")
+                                st.session_state[f"optimized_jsonld_{i}"] = _opt if isinstance(_opt, dict) else None
                             st.session_state["jsonld_analyzer_results"] = {
                                 "site_url": _s["site_url"], "domain": _domain,
                                 "total_pages": sum(m.get("page_count", 0) for m in _models),
@@ -1008,7 +1265,7 @@ def render_jsonld_analyzer_tab():
                 st.markdown("<p style='color:#0f172a; font-weight:700; font-size:1rem; margin:0 0 0.5rem 0;'>Save to Google Sheets</p>", unsafe_allow_html=True)
                 site_url = data.get("site_url") or f"https://{domain}"
                 workspace = st.session_state.get("audit_workspace_select", "Non classé") or "Non classé"
-                if workspace == "+ Creer Nouveau":
+                if workspace in ("+ Creer Nouveau", "+ Créer Nouveau", "+ Create New"):
                     workspace = "Non classé"
 
                 models_data = []
@@ -1016,6 +1273,7 @@ def render_jsonld_analyzer_tab():
                     label = cluster_labels[i] if i < len(cluster_labels) else {}
                     urls_in_cluster = cluster_urls[i] if i < len(cluster_urls) else []
                     pattern = get_cluster_url_pattern(urls_in_cluster)
+                    optimized = st.session_state.get(f"optimized_jsonld_{i}")
                     models_data.append({
                         "model_name": (label.get("model_name") or "").strip() or f"Cluster {i + 1}",
                         "schema_type": (label.get("schema_type") or "").strip() or "WebPage",
@@ -1024,7 +1282,7 @@ def render_jsonld_analyzer_tab():
                         "sample_urls": urls_in_cluster[:5],
                         "dom_structure": cluster_dom[i] if i < len(cluster_dom) else None,
                         "existing_jsonld": cluster_jsonld[i] if i < len(cluster_jsonld) else None,
-                        "optimized_jsonld": None,
+                        "optimized_jsonld": optimized,
                     })
 
                 if st.button("SAVE TO GOOGLE SHEETS", type="primary", use_container_width=True, key="jsonld_save_btn"):

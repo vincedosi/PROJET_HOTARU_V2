@@ -71,10 +71,6 @@ def get_render_master_tab():
     from modules.jsonld import render_master_tab
     return render_master_tab
 
-def get_render_leaf_tab():
-    from modules.jsonld import render_leaf_tab
-    return render_leaf_tab
-
 def get_render_jsonld_analyzer_tab():
     from modules.jsonld import render_jsonld_analyzer_tab
     return render_jsonld_analyzer_tab
@@ -150,26 +146,27 @@ def main():
             '<div class="hotaru-header-logo">H</div>'
             '<span class="hotaru-header-brand">HOTARU</span>'
         )
-    col_logo, col_ver, col_fr, col_en = st.columns([4, 2, 1, 1])
+    col_logo, col_right = st.columns([4, 1])
     with col_logo:
         st.markdown(
             f'<div class="hotaru-header-left">{header_left}</div>',
             unsafe_allow_html=True,
         )
-    with col_ver:
+    with col_right:
         st.markdown(
             f'<div class="hotaru-header-right"><span class="hotaru-header-version">V {VERSION} // {BUILD_DATE}</span></div>',
             unsafe_allow_html=True,
         )
-    lang = get_current_lang()
-    with col_fr:
-        if st.button("🇫🇷", key="lang_fr", help="Français", type="primary" if lang == "fr" else "secondary"):
-            set_lang("fr")
-            st.rerun()
-    with col_en:
-        if st.button("🇬🇧", key="lang_en", help="English", type="primary" if lang == "en" else "secondary"):
-            set_lang("en")
-            st.rerun()
+        lang = get_current_lang()
+        col_fr, col_en = st.columns(2)
+        with col_fr:
+            if st.button("🇫🇷", key="lang_fr", help="Français", type="primary" if lang == "fr" else "secondary"):
+                set_lang("fr")
+                st.rerun()
+        with col_en:
+            if st.button("🇬🇧", key="lang_en", help="English", type="primary" if lang == "en" else "secondary"):
+                set_lang("en")
+                st.rerun()
     st.markdown('<div class="hotaru-header-divider"></div>', unsafe_allow_html=True)
 
     # Workspace (niveau LOGOUT) + LOGOUT
@@ -195,19 +192,17 @@ def main():
             st.session_state.clear()
             st.rerun()
 
-    # NAVIGATION — 4 onglets (Master et Leaf sont DANS JSON-LD)
-    tab_home, tab_audit, tab_jsonld, tab_eco = st.tabs([
-        t("nav.home"),
-        t("nav.audit"),
-        t("nav.jsonld"),
-        t("nav.eco"),
-    ])
+    # NAVIGATION — 4 onglets (index persisté pour garder l'onglet actif au changement de langue)
+    tab_names = [t("nav.home"), t("nav.audit"), t("nav.jsonld"), t("nav.eco")]
+    main_tab_idx = st.radio(
+        "", range(len(tab_names)), format_func=lambda i: tab_names[i],
+        key="main_tab_idx", horizontal=True, label_visibility="collapsed",
+    )
 
-    with tab_home:
+    if main_tab_idx == 0:
         render_home = get_render_home()
         render_home()
-
-    with tab_audit:
+    elif main_tab_idx == 1:
         sub_tab_geo, sub_tab_authority, sub_tab_scraping = st.tabs(
             [t("nav.audit_geo"), t("nav.authority"), t("nav.scraping")]
         )
@@ -220,24 +215,18 @@ def main():
         with sub_tab_scraping:
             render_scraping_debug_tab = get_render_scraping_debug_tab()
             render_scraping_debug_tab()
-
-    with tab_jsonld:
-        sub_master, sub_leaf, sub_analyzer = st.tabs([
+    elif main_tab_idx == 2:
+        sub_master, sub_analyzer = st.tabs([
             t("nav.master"),
-            t("nav.leaf"),
             t("nav.jsonld_analysis"),
         ])
         with sub_master:
             render_master_tab = get_render_master_tab()
             render_master_tab()
-        with sub_leaf:
-            render_leaf_tab = get_render_leaf_tab()
-            render_leaf_tab()
         with sub_analyzer:
             render_jsonld_analyzer_tab = get_render_jsonld_analyzer_tab()
             render_jsonld_analyzer_tab()
-
-    with tab_eco:
+    else:
         render_eco_tab = get_render_eco_tab()
         render_eco_tab()
 
