@@ -838,10 +838,11 @@ def render_jsonld_analyzer_tab():
                         st.session_state["jsonld_selected_cluster"] = selected_cluster_idx
                 except (ValueError, TypeError, KeyError):
                     pass
-                elif "jsonld_selected_cluster" in st.session_state:
-                    selected_cluster_idx = st.session_state["jsonld_selected_cluster"]
-                else:
-                    selected_cluster_idx = 0
+                if selected_cluster_idx is None:
+                    if "jsonld_selected_cluster" in st.session_state:
+                        selected_cluster_idx = st.session_state["jsonld_selected_cluster"]
+                    else:
+                        selected_cluster_idx = 0
 
                 options = [
                     f"{i + 1}. {(cluster_labels[i].get('model_name') or '').strip() or f'Cluster {i + 1}'} ({len(cluster_urls[i])} p.)"
