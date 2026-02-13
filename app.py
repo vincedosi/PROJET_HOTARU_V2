@@ -9,6 +9,7 @@ import os
 import streamlit as st
 
 from version import BUILD_DATE, VERSION
+from core.runtime import init as core_init
 from core.auth import AuthManager
 from core.database import AuditDatabase
 from core.session_keys import (
@@ -102,7 +103,25 @@ def _cached_load_user_audits(user_email: str, _cache_version: int = 0):
 # =============================================================================
 # MAIN
 # =============================================================================
+def _secrets_to_dict(s):
+    """Convertit st.secrets en dict pour core (agnostique Streamlit)."""
+    if s is None:
+        return {}
+    try:
+        d = {}
+        for k in s.keys():
+            try:
+                v = s[k]
+                d[k] = _secrets_to_dict(v) if hasattr(v, "keys") and not isinstance(v, str) else v
+            except Exception:
+                pass
+        return d
+    except Exception:
+        return {}
+
+
 def main():
+    core_init(secrets=_secrets_to_dict(st.secrets), session=st.session_state)
     load_styles()
 
     if SESSION_AUTHENTICATED not in st.session_state:
@@ -135,13 +154,16 @@ def main():
                 submit = st.form_submit_button("CONNEXION", use_container_width=True)
 
                 if submit:
-                    auth = AuthManager()
-                    if auth.login(email, password):
-                        st.session_state[SESSION_AUTHENTICATED] = True
-                        st.session_state[SESSION_USER_EMAIL] = email
-                        st.rerun()
-                    else:
-                        st.error("Identifiants invalides.")
+                    try:
+                        auth = AuthManager()
+                        if auth.login(email, password):
+                            st.session_state[SESSION_AUTHENTICATED] = True
+                            st.session_state[SESSION_USER_EMAIL] = email
+                            st.rerun()
+                        else:
+                            st.error("Identifiants invalides.")
+                    except Exception as e:
+                        st.error(str(e))
         return
 
     # HEADER (logo + version)

@@ -1,5 +1,5 @@
-# Eco-Score : calculatrice d'impact carbone
+# Eco-Score : calculatrice d'impact carbone (UI dans views/)
 
-from .eco_impact import render_eco_tab
+from views.eco_impact import render_eco_tab
 
 __all__ = ["render_eco_tab"]

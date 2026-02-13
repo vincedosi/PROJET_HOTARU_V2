@@ -1,21 +1,30 @@
 """
 HOTARU v2 - Audit Database (Google Sheets Backend)
+Agnostique UI : utilise core.runtime pour secrets et session.
 """
 
+import base64
+import datetime
+import json
+import logging
 import re
-import streamlit as st
+import time
+import zlib
+
 import gspread
 from google.oauth2.service_account import Credentials
-import json
-import time
-import datetime
-import zlib
-import base64
+
+from core.runtime import get_secrets, get_session
+
+logger = logging.getLogger(__name__)
+
+# Cache simple (ttl 300s) pour _process_user_audits
+_audit_cache = {}
+_audit_cache_ttl = 300
 
 
-@st.cache_data(ttl=300)
-def _cached_load_user_audits_from_sheet(all_rows_list, user_email):
-    """Fonction cachée pour traiter les audits (wrapper pour @st.cache_data)."""
+def _process_user_audits(all_rows_list, user_email):
+    """Traite les lignes du sheet pour extraire les audits utilisateur."""
     if not all_rows_list or len(all_rows_list) < 2:
         return []
 
@@ -26,7 +35,6 @@ def _cached_load_user_audits_from_sheet(all_rows_list, user_email):
     for row in data_rows:
         if len(row) < 2:
             continue
-        # Isolation SaaS : ne retourner que les lignes de cet utilisateur
         row_email = (row[1] or "").strip().lower()
         if row_email != email_normalized:
             continue
@@ -51,7 +59,7 @@ def _cached_load_user_audits_from_sheet(all_rows_list, user_email):
 
 
 class AuditDatabase:
-    def __init__(self):
+    def __init__(self, secrets: dict = None):
         self.client = None
         self.sheet_file = None
         self.sheet = None
@@ -59,53 +67,60 @@ class AuditDatabase:
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive",
         ]
+        secrets = secrets or get_secrets()
 
         try:
-            self.creds = Credentials.from_service_account_info(
-                st.secrets["gcp_service_account"], scopes=self.scope
-            )
+            gcp = secrets.get("gcp_service_account")
+            if not gcp:
+                logger.error("gcp_service_account manquant dans les secrets")
+                return
+            self.creds = Credentials.from_service_account_info(gcp, scopes=self.scope)
             self.client = gspread.authorize(self.creds)
         except Exception as e:
-            st.error(f"Erreur de configuration Secrets (GCP): {e}")
+            logger.error("Erreur de configuration Secrets (GCP): %s", e)
             return
 
         try:
-            sheet_url = st.secrets.get("sheet_url", "")
+            sheet_url = secrets.get("sheet_url", "")
             if not sheet_url:
-                st.error("URL du Google Sheet manquante dans les secrets Streamlit")
+                logger.error("URL du Google Sheet manquante dans les secrets")
                 return
 
             self.sheet_file = self.client.open_by_url(sheet_url)
-
             try:
                 self.sheet = self.sheet_file.worksheet("audits")
             except Exception:
                 self.sheet = self.sheet_file.sheet1
-
         except Exception as e:
-            st.error(f"Impossible d'ouvrir le GSheet. Erreur: {e}")
+            logger.error("Impossible d'ouvrir le GSheet: %s", e)
             self.sheet_file = None
             self.sheet = None
+            return
 
     def load_user_audits(self, user_email):
-        """Charge uniquement les audits de l'utilisateur connecté (isolation SaaS).
-        Résultats cachés 5 minutes par email utilisateur."""
+        """Charge uniquement les audits de l'utilisateur connecté (isolation SaaS)."""
         if not self.sheet:
             return []
 
         try:
             all_rows = self.sheet.get_all_values()
-            # Appel à la fonction cachée avec les données (et non self)
-            return _cached_load_user_audits_from_sheet(all_rows, user_email)
-
+            # Cache simple par (user_email, hash des données)
+            cache_key = (user_email or "", str(len(all_rows)), all_rows[0][0] if all_rows else "")
+            now = time.time()
+            if cache_key in _audit_cache:
+                cached_time, cached_val = _audit_cache[cache_key]
+                if now - cached_time < _audit_cache_ttl:
+                    return cached_val
+            result = _process_user_audits(all_rows, user_email)
+            _audit_cache[cache_key] = (now, result)
+            return result
         except Exception as e:
-            st.error(f"Erreur lors de la lecture des audits : {e}")
+            logger.error("Erreur lors de la lecture des audits: %s", e)
             return []
 
     def save_audit(self, user_email, workspace, site_url, nom_site, json_data):
         if not self.sheet:
-            st.error("Impossible de sauvegarder : connexion BDD échouée")
-            return False
+            raise ValueError("Impossible de sauvegarder : connexion BDD échouée")
 
         try:
             date_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -130,28 +145,22 @@ class AuditDatabase:
             ]
 
             self.sheet.append_row(new_row)
-            # Invalider le cache des audits (app.py)
-            st.session_state["audit_cache_version"] = st.session_state.get("audit_cache_version", 0) + 1
+            session = get_session()
+            session["audit_cache_version"] = session.get("audit_cache_version", 0) + 1
             return True
-
         except Exception as e:
-            st.error(f"Erreur de sauvegarde GSheet : {e}")
-            return False
+            logger.error("Erreur de sauvegarde GSheet: %s", e)
+            raise
 
     def save_master_for_audit(self, user_email, workspace, site_url, master_json):
-        """
-        Sauvegarde le JSON-LD Master dans la colonne J ('master') de l'onglet audits
-        pour la ligne correspondant à (user_email, workspace, site_url).
-        """
+        """Sauvegarde le JSON-LD Master dans la colonne J de l'onglet audits."""
         if not self.sheet:
-            st.error("Impossible de sauvegarder le MASTER : connexion BDD échouée")
-            return False
+            raise ValueError("Impossible de sauvegarder le MASTER : connexion BDD échouée")
 
         try:
             all_rows = self.sheet.get_all_values()
             if len(all_rows) < 2:
-                st.error("Aucun audit existant pour enregistrer le MASTER.")
-                return False
+                raise ValueError("Aucun audit existant pour enregistrer le MASTER.")
 
             email_normalized = (user_email or "").strip().lower()
             ws_normalized = (workspace or "").strip()
@@ -169,16 +178,17 @@ class AuditDatabase:
                     and row_ws == ws_normalized
                     and row_url == url_normalized
                 ):
-                    # Colonne J = index 10 (1-based)
                     self.sheet.update_cell(idx, 10, master_json)
-                    st.session_state["audit_cache_version"] = st.session_state.get("audit_cache_version", 0) + 1
+                    session = get_session()
+                    session["audit_cache_version"] = session.get("audit_cache_version", 0) + 1
                     return True
 
-            st.error("Aucune ligne d'audit correspondante trouvée pour ce MASTER.")
-            return False
+            raise ValueError("Aucune ligne d'audit correspondante trouvée pour ce MASTER.")
+        except ValueError:
+            raise
         except Exception as e:
-            st.error(f"Erreur de sauvegarde MASTER GSheet : {e}")
-            return False
+            logger.error("Erreur de sauvegarde MASTER GSheet: %s", e)
+            raise
 
     def _get_jsonld_worksheet(self):
         """Retourne l'onglet 'jsonld', le crée si absent avec en-têtes."""
@@ -205,7 +215,7 @@ class AuditDatabase:
                 ws.append_row(headers)
                 return ws
             except Exception as e:
-                st.error(f"Impossible de créer l'onglet jsonld : {e}")
+                logger.error("Impossible de créer l'onglet jsonld: %s", e)
                 return None
 
     def _compress_for_sheet(self, data, max_chars: int):
@@ -225,11 +235,7 @@ class AuditDatabase:
         return raw[:max_chars]
 
     def save_jsonld_models(self, user_email: str, site_url: str, workspace: str, models_data: list) -> bool:
-        """
-        Sauvegarde les modèles JSON-LD dans l'onglet 'jsonld' du Google Sheet.
-        models_data: liste de dicts avec model_name, schema_type, page_count, url_pattern,
-                     sample_urls, dom_structure, existing_jsonld, optimized_jsonld (optionnel).
-        """
+        """Sauvegarde les modèles JSON-LD dans l'onglet 'jsonld' du Google Sheet."""
         ws = self._get_jsonld_worksheet()
         if not ws:
             return False
@@ -272,8 +278,8 @@ class AuditDatabase:
                 ws.append_rows(rows, value_input_option="RAW")
             return True
         except Exception as e:
-            st.error(f"Erreur sauvegarde JSON-LD GSheet : {e}")
-            return False
+            logger.error("Erreur sauvegarde JSON-LD GSheet: %s", e)
+            raise
 
     def _decompress_from_sheet(self, s: str):
         """Parse une chaîne du Sheet : JSON brut ou base64+zlib."""
@@ -291,10 +297,7 @@ class AuditDatabase:
             return None
 
     def list_jsonld_sites(self, user_email: str):
-        """
-        Retourne la liste des (site_url, workspace) sauvegardés pour l'utilisateur.
-        Format: [{"site_url": str, "workspace": str, "created_at": str}, ...]
-        """
+        """Retourne la liste des (site_url, workspace) sauvegardés pour l'utilisateur."""
         models = self.load_jsonld_models(user_email, site_url=None)
         seen = {}
         for m in models:
@@ -304,10 +307,7 @@ class AuditDatabase:
         return list(seen.values())
 
     def load_jsonld_models(self, user_email: str, site_url: str = None):
-        """
-        Charge les modèles JSON-LD depuis l'onglet 'jsonld'.
-        Filtre par user_email et optionnellement par site_url.
-        """
+        """Charge les modèles JSON-LD depuis l'onglet 'jsonld'."""
         ws = self._get_jsonld_worksheet()
         if not ws:
             return []
@@ -344,5 +344,5 @@ class AuditDatabase:
                 })
             return models
         except Exception as e:
-            st.error(f"Erreur lecture JSON-LD GSheet : {e}")
+            logger.error("Erreur lecture JSON-LD GSheet: %s", e)
             return []

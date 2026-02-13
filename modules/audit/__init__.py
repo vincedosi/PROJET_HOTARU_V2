@@ -2,7 +2,7 @@
 
 from .audit_geo import render_audit_geo
 from .audit_scraping import render_scraping_debug_tab
-from .authority_score import render_authority_score
+from views.authority_score import render_authority_score
 from .off_page import render_off_page_audit
 from .geo_scoring import GEOScorer
 

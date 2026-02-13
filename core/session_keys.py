@@ -1,7 +1,10 @@
 """
 HOTARU - Clés de session (SaaS).
 Centralise les noms de clés pour cohérence et évolution multi-tenant.
+Agnostique UI : utilise core.runtime.get_session().
 """
+
+from core.runtime import get_session
 
 # Authentification
 SESSION_AUTHENTICATED = "authenticated"
@@ -15,17 +18,14 @@ ROLE_USER = "user"
 
 def get_current_user_email():
     """Retourne l'email de l'utilisateur connecté (ou None)."""
-    import streamlit as st
-    return st.session_state.get(SESSION_USER_EMAIL)
+    return get_session().get(SESSION_USER_EMAIL)
 
 
 def is_authenticated():
     """Indique si la session est authentifiée."""
-    import streamlit as st
-    return st.session_state.get(SESSION_AUTHENTICATED, False)
+    return get_session().get(SESSION_AUTHENTICATED, False)
 
 
 def is_admin():
     """Indique si l'utilisateur a le rôle admin."""
-    import streamlit as st
-    return st.session_state.get(SESSION_USER_ROLE, ROLE_USER) == ROLE_ADMIN
+    return get_session().get(SESSION_USER_ROLE, ROLE_USER) == ROLE_ADMIN

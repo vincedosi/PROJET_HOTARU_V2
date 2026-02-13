@@ -1,9 +1,10 @@
 """
 HOTARU - Internationalisation (FR / EN).
 Français par défaut.
+Agnostique UI : utilise core.runtime.get_session() pour la langue.
 """
 
-import streamlit as st
+from core.runtime import get_session
 
 SESSION_LANG = "lang"
 DEFAULT_LANG = "fr"
@@ -156,7 +157,7 @@ TRANSLATIONS = {
         "jsonld.run_new": "Run a new analysis with a different URL or more pages.",
         "jsonld.graph_title": "Interactive cluster graph",
         "jsonld.graph_caption": "Click a cluster (colored node) to show details in the panel. Click a URL to open in a new tab. If the graph click doesn't work, use the dropdown.",
-        "jsonld.select_cluster": "Select a cluster",
+        "jsonld.select_cluster": "Select cluster",
         "jsonld.cluster_details": "Cluster details",
         "jsonld.model": "Model",
         "jsonld.schema": "Schema.org",
@@ -203,13 +204,13 @@ TRANSLATIONS = {
 
 def get_current_lang():
     """Retourne la langue active (fr ou en). Français par défaut."""
-    return st.session_state.get(SESSION_LANG, DEFAULT_LANG)
+    return get_session().get(SESSION_LANG, DEFAULT_LANG)
 
 
 def set_lang(lang: str):
     """Définit la langue (fr ou en)."""
     if lang in ("fr", "en"):
-        st.session_state[SESSION_LANG] = lang
+        get_session()[SESSION_LANG] = lang
 
 
 def t(key: str, **kwargs) -> str:
