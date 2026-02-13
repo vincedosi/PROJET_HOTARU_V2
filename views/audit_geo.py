@@ -1382,6 +1382,13 @@ def render_audit_geo():
             value=100
         )
 
+        use_selenium_geo = st.checkbox(
+            "Utiliser Selenium (sites protégés type BMW)",
+            value=False,
+            key="geo_use_selenium",
+            help="Active Selenium pour le chargement des pages. Recommandé si le site timeout ou est en SPA.",
+        )
+
         st.markdown("<br>", unsafe_allow_html=True)
 
         # ========== CRAWL EN ATTENTE (après choix Flash / Selenium) ==========
@@ -1456,18 +1463,18 @@ def render_audit_geo():
                     base_url = "https://" + base_url
                 base_url = base_url.rstrip("/")
 
-                # ========== ÉTAPE 1 : ANALYSE HOME (SmartScraper universel = cascade si timeout type BMW) ==========
+                # ========== ÉTAPE 1 : ANALYSE HOME (SmartScraper avec option Selenium si cochée) ==========
                 with st.spinner("Analyse de la page d'accueil..."):
                     try:
                         scraper_home = SmartScraper(
                             [base_url],
                             max_urls=1,
-                            use_selenium=False,
+                            use_selenium=use_selenium_geo,
                             log_callback=None,
                         )
                         data_home = scraper_home.get_page_details(base_url)
                         if data_home is None:
-                            st.error("Impossible d'accéder au site (timeout ou erreur). Essayez d'activer Selenium dans l'onglet Diagnostic Scraping pour les sites protégés.")
+                            st.error("Impossible d'accéder au site (timeout ou erreur). Cochez « Utiliser Selenium » pour les sites protégés (ex. BMW).")
                             return
                         json_ld_list = data_home.get("json_ld") or []
                         has_jsonld = len(json_ld_list) > 0
@@ -1478,8 +1485,11 @@ def render_audit_geo():
 
                 st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
 
-                # ========== ÉTAPE 2 : DÉCISION ==========
-                if has_jsonld:
+                # ========== ÉTAPE 2 : DÉCISION (sauf si Selenium déjà choisi) ==========
+                if use_selenium_geo:
+                    selenium_enabled = True
+                    selenium_mode = "light"
+                elif has_jsonld:
                     st.success("**JSON-LD détecté sur la page d'accueil**")
                     st.info(f"{len(json_ld_list)} bloc(s) JSON-LD trouvé(s)")
                     st.markdown("**Aperçu du JSON-LD détecté**")
@@ -1528,6 +1538,12 @@ def render_audit_geo():
                 st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
                 strategy_label = "Selenium Light" if selenium_enabled else "Flash (Requests)"
                 st.info(f"**Mode de crawl** : {strategy_label}")
+
+                if use_selenium_geo and getattr(scraper_home, "driver", None):
+                    try:
+                        scraper_home.driver.quit()
+                    except Exception:
+                        pass
 
                 bar = st.progress(0, "Crawl en cours...")
                 crawl_logs = []

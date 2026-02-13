@@ -70,6 +70,7 @@ class SmartScraper:
             "protected_sites_detected": 0,
             "advanced_solutions_used": 0,
             "requests_html_successes": 0,
+            "selenium_headless_successes": 0,
             "selenium_nonheadless_successes": 0,
             "proxy_used": self.proxy or "Aucun",
         }
@@ -372,10 +373,63 @@ class SmartScraper:
             "response_time": response_time,
         }
 
+    def _create_headless_driver(self):
+        """Crée un driver Chrome headless (même config que _init_selenium, pour cascade / Streamlit Cloud)."""
+        import shutil
+        chrome_options = Options()
+        chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--disable-software-rasterizer")
+        if getattr(self, "proxy", None):
+            chrome_options.add_argument(f"--proxy-server={self.proxy}")
+        chromium_paths = [shutil.which("chromium"), shutil.which("chromium-browser"), "/usr/bin/chromium", "/usr/bin/chromium-browser"]
+        for path in chromium_paths:
+            if path:
+                chrome_options.binary_location = path
+                break
+        chromedriver_paths = [shutil.which("chromedriver"), "/usr/bin/chromedriver"]
+        chromedriver_binary = next((p for p in chromedriver_paths if p), None)
+        if chromedriver_binary:
+            from selenium.webdriver.chrome.service import Service
+            return webdriver.Chrome(service=Service(chromedriver_binary), options=chrome_options)
+        return webdriver.Chrome(options=chrome_options)
+
+    def _get_with_selenium_headless(self, url):
+        """
+        Méthode C : Selenium headless (fonctionne sur Streamlit Cloud / serveurs sans affichage).
+        Utilisé en cascade après timeout requests/requests-html.
+        """
+        start_time = time.time()
+        driver = None
+        try:
+            self._log("   Essai Selenium headless...")
+            driver = self._create_headless_driver()
+            driver.set_page_load_timeout(60)
+            driver.get(url)
+            time.sleep(5)
+            html = driver.page_source
+            response_time = time.time() - start_time
+            soup = BeautifulSoup(html, "html.parser")
+            raw_links = [a.get("href", "") for a in soup.find_all("a", href=True)]
+            return {
+                "html_content": html,
+                "soup": soup,
+                "raw_links": raw_links,
+                "response_time": response_time,
+            }
+        finally:
+            if driver:
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
+
     def _get_with_selenium_nonheadless(self, url):
         """
-        Méthode C : Selenium en mode graphique (pas headless).
-        Dernier recours avant abandon.
+        Méthode D : Selenium en mode graphique (pas headless).
+        Dernier recours, souvent indisponible sur serveur (Streamlit Cloud).
         """
         start_time = time.time()
         chrome_options = Options()
@@ -554,7 +608,23 @@ class SmartScraper:
                     self._log(f"requests-html échoué : {e2}")
                     self._log("Essai suivant...")
 
-                # ESSAI 3 : Selenium non-headless
+                # ESSAI 3 : Selenium headless (fonctionne sur Streamlit Cloud)
+                try:
+                    raw = self._get_with_selenium_headless(url)
+                    self.stats["selenium_headless_successes"] += 1
+                    self._log("Selenium headless fonctionne")
+                    return self._build_page_result(
+                        url,
+                        raw["soup"],
+                        raw["html_content"],
+                        raw["response_time"],
+                        raw_links=raw["raw_links"],
+                    )
+                except Exception as e3:
+                    self._log(f"Selenium headless échoué : {e3}")
+                    self._log("Essai suivant...")
+
+                # ESSAI 4 : Selenium non-headless (dernier recours, souvent KO sur serveur)
                 try:
                     raw = self._get_with_selenium_nonheadless(url)
                     self.stats["selenium_nonheadless_successes"] += 1
@@ -566,10 +636,10 @@ class SmartScraper:
                         raw["response_time"],
                         raw_links=raw["raw_links"],
                     )
-                except Exception as e3:
-                    self._log(f"Selenium non-headless échoué : {e3}")
+                except Exception as e4:
+                    self._log(f"Selenium non-headless échoué : {e4}")
 
-                # ESSAI 4 : Abandon
+                # ESSAI 5 : Abandon
                 self._log(f"Impossible d'accéder à {url}")
                 self.stats["errors"] += 1
                 return None
