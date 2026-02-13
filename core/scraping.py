@@ -1,8 +1,8 @@
 """
-SMART SCRAPER HYBRIDE (V11 - FIX LOG CALLBACK)
-- Log callback passé dès __init__ pour capturer tous les logs
-- Détection SPA agressive avec logs détaillés
-- Extraction JSON-LD via JavaScript pour sites SPA
+SMART SCRAPER HYBRIDE (V12 - FIX BUGS CRITIQUES)
+- force_selenium : force Selenium sans détection SPA (évite logique circulaire)
+- Hiérarchie décisionnelle : force_selenium | use_selenium | détection SPA
+- Headers anti-bot (BMW, etc.), timeouts augmentés, délai aléatoire 1-3s
 """
 import requests
 from bs4 import BeautifulSoup
@@ -10,6 +10,7 @@ from urllib.parse import urlparse, urljoin, urlunparse
 import time
 import re
 import json
+import random
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -19,10 +20,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 class SmartScraper:
-    def __init__(self, start_urls, max_urls=500, use_selenium=False, selenium_mode=None, log_callback=None):
+    def __init__(self, start_urls, max_urls=500, use_selenium=False, selenium_mode=None, log_callback=None, force_selenium=False):
         """
         Args:
             selenium_mode: "light" pour eager loading + wait JSON-LD, None sinon
+            force_selenium: force Selenium directement sans détection SPA
         """
         # Support ancien format (string unique) et nouveau (liste)
         if isinstance(start_urls, str):
@@ -46,10 +48,20 @@ class SmartScraper:
                     f"Toutes les URLs doivent être du même domaine. Trouvé: {urlparse(url).netloc} au lieu de {self.domain}"
                 )
 
-        # Session requests
+        # Session requests (headers anti-bot pour contourner protections type BMW)
         self.session = requests.Session()
         self.session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Cache-Control": "max-age=0",
         })
 
         # Compteurs
@@ -77,36 +89,34 @@ class SmartScraper:
         for i, url in enumerate(self.start_urls, 1):
             self._log(f"   {i}. {url}")
 
-        # ========== DÉTECTION SPA AUTOMATIQUE ==========
-        spa_detected = False
-        
-        if self.use_selenium:
-            self._log("Selenium FORCÉ par l'utilisateur")
+        # ========== HIÉRARCHIE DÉCISIVE (pas de circulaire) ==========
+        if force_selenium or use_selenium:
+            self._log("Selenium FORCÉ par paramètre")
+            self.use_selenium = True
         else:
             self._log("Détection SPA automatique...")
             try:
                 spa_detected = self._is_spa_site()
-                
                 if spa_detected:
                     self._log("Site SPA détecté → Activation Selenium")
                     self.use_selenium = True
                 else:
                     self._log("Site classique → Mode requests")
-                    
+                    self.use_selenium = False
             except Exception as e:
                 self._log(f"Erreur détection SPA : {e}")
-                spa_detected = False
+                self.use_selenium = False  # Fallback safe
 
         # ========== INITIALISATION SELENIUM ==========
         if self.use_selenium:
             self._log("Démarrage Selenium...")
             self._init_selenium()
-            
+
             if self.driver is None:
                 self._log("Selenium ÉCHEC → Fallback requests")
                 self.use_selenium = False
             else:
-                self._log("Selenium OK (Chromium / Streamlit Cloud)")
+                self._log("Selenium OK")
         else:
             self._log("Mode requests activé")
 
@@ -131,7 +141,7 @@ class SmartScraper:
         """Détecte si le site utilise un framework JS."""
         try:
             self._log("   → Téléchargement HTML...")
-            resp = self.session.get(self.start_urls[0], timeout=5)
+            resp = self.session.get(self.start_urls[0], timeout=10)
             html = resp.text
             
             self._log(f"   → HTML reçu ({len(html)} chars)")
@@ -430,7 +440,7 @@ class SmartScraper:
             # ========== MODE REQUESTS ==========
             else:
                 self._log(f" [Requests] {url}")
-                resp = self.session.get(url, timeout=5)
+                resp = self.session.get(url, timeout=15)
                 response_time = time.time() - start_time
                 
                 if resp.status_code != 200:
@@ -557,7 +567,7 @@ class SmartScraper:
                 else:
                     self.stats["pages_skipped"] += 1
 
-                time.sleep(0.005)
+                time.sleep(random.uniform(1, 3))  # Délai anti-bot aléatoire 1-3s
 
         finally:
             if self.driver:
