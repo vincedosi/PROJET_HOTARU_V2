@@ -130,10 +130,13 @@ class SmartScraper:
             chrome_options.add_argument("--disable-dev-shm-usage")
             chrome_options.add_argument("--disable-gpu")
             chrome_options.add_argument("--disable-software-rasterizer")
-
+            # Accélération : ne pas charger les images (HTML/JSON-LD suffisent)
+            prefs = {"profile.managed_default_content_settings.images": 2}
+            chrome_options.add_experimental_option("prefs", prefs)
+            # Eager = page prête dès DOM interactif (pas d'attente images/CSS)
+            chrome_options.page_load_strategy = "eager"
             if getattr(self, "selenium_mode", None) == "light":
-                chrome_options.page_load_strategy = "eager"
-                self._log("    Mode Selenium Light activé (eager loading)")
+                self._log("    Mode Selenium Light activé (eager + sans images)")
 
             if getattr(self, "proxy", None):
                 self._log(f"   Proxy Selenium : {self.proxy}")
@@ -382,6 +385,9 @@ class SmartScraper:
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--disable-software-rasterizer")
+        prefs = {"profile.managed_default_content_settings.images": 2}
+        chrome_options.add_experimental_option("prefs", prefs)
+        chrome_options.page_load_strategy = "eager"
         if getattr(self, "proxy", None):
             chrome_options.add_argument(f"--proxy-server={self.proxy}")
         chromium_paths = [shutil.which("chromium"), shutil.which("chromium-browser"), "/usr/bin/chromium", "/usr/bin/chromium-browser"]
@@ -406,9 +412,9 @@ class SmartScraper:
         try:
             self._log("   Essai Selenium headless...")
             driver = self._create_headless_driver()
-            driver.set_page_load_timeout(60)
+            driver.set_page_load_timeout(45)
             driver.get(url)
-            time.sleep(5)
+            time.sleep(3)
             html = driver.page_source
             response_time = time.time() - start_time
             soup = BeautifulSoup(html, "html.parser")
@@ -471,9 +477,10 @@ class SmartScraper:
                     self._log(f" [Selenium] {url}")
                     self.driver.get(url)
 
+                    wait_time = 5  # Réduit pour accélérer (était 10)
                     if getattr(self, "selenium_mode", None) == "light":
                         try:
-                            WebDriverWait(self.driver, 10).until(
+                            WebDriverWait(self.driver, wait_time).until(
                                 EC.presence_of_element_located((
                                     By.XPATH,
                                     "//script[@type='application/ld+json']",
@@ -485,12 +492,12 @@ class SmartScraper:
                             elapsed = time.time() - start_time
                             self._log(f"    JSON-LD non détecté après {elapsed:.2f}s")
                     else:
-                        WebDriverWait(self.driver, 10).until(
+                        WebDriverWait(self.driver, wait_time).until(
                             EC.presence_of_element_located((By.TAG_NAME, "body"))
                         )
                         self._log("   Attente JSON-LD...")
                         try:
-                            WebDriverWait(self.driver, 10).until(
+                            WebDriverWait(self.driver, wait_time).until(
                                 lambda d: d.execute_script(
                                     'return document.querySelectorAll(\'script[type*="ld+json" i]\').length > 0'
                                 )
@@ -498,9 +505,9 @@ class SmartScraper:
                             self._log("   JSON-LD dans DOM")
                         except Exception:
                             self._log("    Timeout JSON-LD")
-                        time.sleep(2)
+                        time.sleep(0.5)
 
-                    # Cookies
+                    # Cookies (clic Accepter si présent) — court délai
                     try:
                         self.driver.execute_script(
                             """
@@ -513,16 +520,16 @@ class SmartScraper:
                             });
                             """
                         )
-                        time.sleep(1)
+                        time.sleep(0.3)
                     except Exception:
                         pass
 
-                    # Scroll
+                    # Scroll minimal (sites qui injectent contenu au scroll) — réduit pour vitesse
                     try:
                         self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                        time.sleep(1)
+                        time.sleep(0.3)
                         self.driver.execute_script("window.scrollTo(0, 0);")
-                        time.sleep(1)
+                        time.sleep(0.2)
                     except Exception:
                         pass
 

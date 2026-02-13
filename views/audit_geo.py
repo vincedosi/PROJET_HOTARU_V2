@@ -1892,11 +1892,20 @@ def render_audit_geo():
                     if not (label or '').strip():
                         label = (urlparse(p.get('url', '')).path or '/').strip('/').replace('-', ' ').title() or 'Page'
                     if expert_on and isinstance(score_data, tuple):
-                        label = f"{label}\\n[{grade}]"
+                        label = f"{label}\n[{grade}]"
+
+                    def _format_reco(r):
+                        if isinstance(r, dict):
+                            cat = r.get("category", "")
+                            pri = r.get("priority", "")
+                            issue = r.get("issue", "")
+                            action = r.get("action", "")
+                            return f"• {cat} ({pri}): {issue} — {action}" if (issue or action) else f"• {cat} ({pri})"
+                        return f"• {r}"
 
                     tooltip_parts = []
                     if expert_on and isinstance(score_data, tuple):
-                        tooltip_parts.append(f"Score AI-READABLE: {sc}/100 - Grade: {grade}")
+                        tooltip_parts.append(f"Score AI-READABLE: {sc}/100 — Grade: {grade}")
 
                         missing = []
                         if not p.get('description'):
@@ -1909,13 +1918,13 @@ def render_audit_geo():
                             missing.append("Peu de H2")
 
                         if missing:
-                            tooltip_parts.append("\\n\\nElements manquants:\\n" + "\\n".join(f"- {m}" for m in missing))
+                            tooltip_parts.append("\n\nÉléments manquants:\n" + "\n".join(f"• {m}" for m in missing))
 
                         if recommendations:
-                            top_reco = recommendations[:2]
-                            tooltip_parts.append("\\n\\nRecommandations:\\n" + "\\n".join(f"- {r}" for r in top_reco))
+                            top_reco = recommendations[:3]
+                            tooltip_parts.append("\n\nRecommandations:\n" + "\n".join(_format_reco(r) for r in top_reco))
 
-                    tooltip = "\\n".join(tooltip_parts) if tooltip_parts else ""
+                    tooltip = "\n".join(tooltip_parts) if tooltip_parts else ""
 
                     G.add_node(
                         p['url'],
