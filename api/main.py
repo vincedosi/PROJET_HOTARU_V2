@@ -1,6 +1,8 @@
 # =============================================================================
 # HOTARU API - FastAPI
-# Routes pour exposer la logique métier (modules/core) sans Streamlit
+# Routes pour exposer la logique métier (modules/core) sans Streamlit.
+# SaaS : pour multi-tenant, ajouter X-User-Email / X-Workspace ou JWT et
+# filtrer toutes les opérations DB par user_email (et workspace si besoin).
 # =============================================================================
 
 from fastapi import FastAPI, HTTPException

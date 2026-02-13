@@ -86,18 +86,21 @@ def render_jsonld_analyzer_tab():
         unsafe_allow_html=True,
     )
 
-    tab_new, tab_load = st.tabs(["Nouvelle analyse", "Charger depuis Sheets"])
+    tab_load, tab_new = st.tabs(["Charger depuis Google Sheets", "Nouvelle analyse"])
     with tab_load:
         from core.database import AuditDatabase
         from core.session_keys import get_current_user_email
 
         user_email = get_current_user_email() or ""
         db = AuditDatabase()
+        selected_ws = st.session_state.get("audit_workspace_select", "Non classé") or "Non classé"
+        if selected_ws in ("+ Creer Nouveau", "+ Créer Nouveau", "+ Create New"):
+            selected_ws = "Non classé"
 
-        # --- Sauvegardes unifiées (onglet unified_saves) ---
+        # --- Sauvegardes unifiées (onglet unified_saves) — filtré par workspace SaaS ---
         unified_saves = []
         if user_email and getattr(db, "sheet_file", None):
-            unified_saves = [u for u in db.list_unified_saves(user_email, workspace=None) if u.get("has_jsonld")]
+            unified_saves = [u for u in db.list_unified_saves(user_email, workspace=selected_ws) if u.get("has_jsonld")]
 
         if unified_saves:
             st.markdown(
@@ -753,8 +756,8 @@ def render_jsonld_analyzer_tab():
                     "<p style='font-weight:700; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em; color:#0f172a; margin:0 0 0.5rem 0;'>"
                     "Fusion manuelle des clusters</p>"
                     "<p style='font-size:0.85rem; color:#64748b; margin:0;'>"
-                    "Si deux clusters représentent le même type de page (ex: « Fiches métiers » et « Pages emploi »), "
-                    "fusionnez-les ici. Les pages seront regroupées et Mistral générera un nouveau nom.</p></div>",
+                    "Sélectionnez deux clusters ou plus dans la liste (choix multiples), puis cliquez sur FUSIONNER. "
+                    "Les pages seront regroupées et Mistral générera un nouveau nom.</p></div>",
                     unsafe_allow_html=True,
                 )
                 if num_clusters < 2:
@@ -764,81 +767,92 @@ def render_jsonld_analyzer_tab():
                         f"{i + 1}. {(cluster_labels[i].get('model_name') or f'Cluster {i + 1}').strip()} ({len(cluster_urls[i])} p.)"
                         for i in range(num_clusters)
                     ]
-                    col_src, col_tgt = st.columns(2)
-                    with col_src:
-                        idx = st.selectbox(
-                            "Cluster source (à fusionner)",
-                            range(num_clusters),
-                            format_func=lambda i: merge_options[i],
-                            key="fusion_source",
+                    selected_labels = st.multiselect(
+                        "Clusters à fusionner (sélectionnez 2 ou plus)",
+                        merge_options,
+                        default=[],
+                        key="fusion_multiselect",
+                        help="Maintenez Ctrl/Cmd pour sélectionner plusieurs clusters.",
+                    )
+                    selected_indices = sorted([merge_options.index(lbl) for lbl in selected_labels]) if selected_labels else []
+
+                    if len(selected_indices) >= 2:
+                        total_pages = sum(len(cluster_urls[i]) for i in selected_indices)
+                        names_preview = " + ".join(
+                            (cluster_labels[i].get("model_name") or f"Cluster {i + 1}").strip()
+                            for i in selected_indices
                         )
-                    with col_tgt:
-                        other_options = [(i, merge_options[i]) for i in range(num_clusters) if i != idx]
-                        target_sel = st.selectbox(
-                            "Fusionner avec",
-                            [name for _, name in other_options],
-                            key="fusion_target",
-                        )
-                        target_idx = next(i for i, name in other_options if name == target_sel)
+                        st.markdown("**Aperçu :**")
+                        st.markdown(f"- {names_preview} → **{total_pages}** pages fusionnées")
 
-                    urls_in_cluster = cluster_urls[idx] if idx < len(cluster_urls) else []
-                    current_name = (cluster_labels[idx].get("model_name") or f"Cluster {idx + 1}").strip()
-                    target_name = (cluster_labels[target_idx].get("model_name") or f"Cluster {target_idx + 1}").strip()
-
-                    st.markdown("**Aperçu :**")
-                    st.markdown(f"- **{current_name}** ({len(urls_in_cluster)} p.) + **{target_name}** ({len(cluster_urls[target_idx])} p.) → {len(urls_in_cluster) + len(cluster_urls[target_idx])} pages fusionnées")
-
-                    if st.button("FUSIONNER", type="primary", key="fusion_manual_btn"):
-                        merged_urls = list(set(cluster_urls[idx] + cluster_urls[target_idx]))
-                        if len(cluster_urls[idx]) >= len(cluster_urls[target_idx]):
-                            merged_dom = cluster_dom[idx]
-                            merged_jsonld = cluster_jsonld[idx]
-                            base_label = cluster_labels[idx]
-                        else:
-                            merged_dom = cluster_dom[target_idx]
-                            merged_jsonld = cluster_jsonld[target_idx]
-                            base_label = cluster_labels[target_idx]
-                        new_label = base_label
-                        try:
-                            mistral_key = st.secrets["mistral"]["api_key"]
-                        except Exception:
-                            mistral_key = None
-                        if mistral_key:
-                            merged_sample_pages = []
-                            crawl_results = st.session_state.get("jsonld_analyzer_crawl_results", [])
-                            for url in merged_urls[:5]:
-                                for page in crawl_results:
-                                    if page.get("url") == url:
-                                        merged_sample_pages.append(page)
-                                        break
-                            if merged_sample_pages:
-                                with st.spinner("Mistral génère un nouveau nom..."):
-                                    renamed = name_cluster_with_mistral(
-                                        mistral_key, merged_sample_pages, list(range(len(merged_sample_pages)))
-                                    )
-                                    if renamed:
-                                        new_label = renamed
-                        cluster_urls[target_idx] = merged_urls
-                        cluster_dom[target_idx] = merged_dom
-                        cluster_jsonld[target_idx] = merged_jsonld
-                        cluster_labels[target_idx] = new_label
-                        del cluster_urls[idx]
-                        del cluster_dom[idx]
-                        del cluster_jsonld[idx]
-                        del cluster_labels[idx]
-                        results_data = st.session_state.get("jsonld_analyzer_results", {})
-                        results_data["cluster_urls"] = cluster_urls
-                        results_data["cluster_dom_structures"] = cluster_dom
-                        results_data["cluster_jsonld"] = cluster_jsonld
-                        results_data["cluster_labels"] = cluster_labels
-                        st.session_state["jsonld_analyzer_results"] = results_data
-                        for k in list(st.session_state.keys()):
-                            if k.startswith("optimized_jsonld_"):
-                                del st.session_state[k]
-                        st.session_state["jsonld_selected_cluster"] = target_idx - 1 if idx < target_idx else target_idx
-                        st.success(f" Fusionné ! Nouveau nom : {new_label.get('model_name', 'Cluster fusionné')}")
-                        st.balloons()
-                        st.rerun()
+                        if st.button("FUSIONNER", type="primary", key="fusion_manual_btn"):
+                            keep_idx = selected_indices[0]
+                            merged_urls = []
+                            for i in selected_indices:
+                                merged_urls.extend(cluster_urls[i] if i < len(cluster_urls) else [])
+                            merged_urls = list(dict.fromkeys(merged_urls))
+                            best_idx = max(selected_indices, key=lambda i: len(cluster_urls[i]) if i < len(cluster_urls) else 0)
+                            merged_dom = cluster_dom[best_idx] if best_idx < len(cluster_dom) else {}
+                            merged_jsonld = cluster_jsonld[best_idx] if best_idx < len(cluster_jsonld) else None
+                            new_label = (cluster_labels[best_idx] if best_idx < len(cluster_labels) else {}).copy()
+                            try:
+                                mistral_key = st.secrets["mistral"]["api_key"]
+                            except Exception:
+                                mistral_key = None
+                            if mistral_key:
+                                merged_sample_pages = []
+                                crawl_results = st.session_state.get("jsonld_analyzer_crawl_results", [])
+                                for url in merged_urls[:5]:
+                                    for page in crawl_results:
+                                        if page.get("url") == url:
+                                            merged_sample_pages.append(page)
+                                            break
+                                if merged_sample_pages:
+                                    with st.spinner("Mistral génère un nouveau nom..."):
+                                        renamed = name_cluster_with_mistral(
+                                            mistral_key, merged_sample_pages, list(range(len(merged_sample_pages)))
+                                        )
+                                        if renamed:
+                                            new_label = renamed
+                            new_cluster_urls = []
+                            new_cluster_dom = []
+                            new_cluster_jsonld = []
+                            new_cluster_labels = []
+                            new_optimized = []
+                            for i in range(num_clusters):
+                                if i in selected_indices and i != keep_idx:
+                                    continue
+                                if i == keep_idx:
+                                    new_cluster_urls.append(merged_urls)
+                                    new_cluster_dom.append(merged_dom)
+                                    new_cluster_jsonld.append(merged_jsonld)
+                                    new_cluster_labels.append(new_label)
+                                    new_optimized.append(None)
+                                else:
+                                    new_cluster_urls.append(cluster_urls[i])
+                                    new_cluster_dom.append(cluster_dom[i] if i < len(cluster_dom) else {})
+                                    new_cluster_jsonld.append(cluster_jsonld[i] if i < len(cluster_jsonld) else None)
+                                    new_cluster_labels.append(cluster_labels[i] if i < len(cluster_labels) else {"model_name": f"Cluster {i + 1}", "schema_type": "WebPage"})
+                                    new_optimized.append(st.session_state.get(f"optimized_jsonld_{i}"))
+                            for k in list(st.session_state.keys()):
+                                if k.startswith("optimized_jsonld_"):
+                                    del st.session_state[k]
+                            for j, opt in enumerate(new_optimized):
+                                if opt is not None:
+                                    st.session_state[f"optimized_jsonld_{j}"] = opt
+                            results_data = st.session_state.get("jsonld_analyzer_results", {})
+                            results_data["cluster_urls"] = new_cluster_urls
+                            results_data["cluster_dom_structures"] = new_cluster_dom
+                            results_data["cluster_jsonld"] = new_cluster_jsonld
+                            results_data["cluster_labels"] = new_cluster_labels
+                            st.session_state["jsonld_analyzer_results"] = results_data
+                            new_keep_pos = new_cluster_urls.index(merged_urls)
+                            st.session_state["jsonld_selected_cluster"] = new_keep_pos
+                            st.success(f" Fusionné ! Nouveau nom : {new_label.get('model_name', 'Cluster fusionné')}")
+                            st.balloons()
+                            st.rerun()
+                    elif selected_indices:
+                        st.warning("Sélectionnez au moins 2 clusters pour fusionner.")
 
             with tab_tableau:
                 tab_labels = []
@@ -920,9 +934,94 @@ def render_jsonld_analyzer_tab():
                     )
                 st.markdown("---")
 
-                # Génération en masse
+                # 01 — Charger depuis Google Sheets (en premier pour l'UX)
                 st.markdown(
-                    '<p style="font-weight:700; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em; margin:0 0 0.5rem 0;">01 — Génération en masse</p>'
+                    '<p style="font-weight:700; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em; margin:0 0 0.5rem 0;">01 — Charger depuis Google Sheets</p>',
+                    unsafe_allow_html=True,
+                )
+                _user_email = get_current_user_email() or ""
+                _db = AuditDatabase()
+                _selected_ws = st.session_state.get("audit_workspace_select", "Non classé") or "Non classé"
+                if _selected_ws in ("+ Creer Nouveau", "+ Créer Nouveau", "+ Create New"):
+                    _selected_ws = "Non classé"
+                _unified = [u for u in (_db.list_unified_saves(_user_email, workspace=_selected_ws) or []) if u.get("has_jsonld")] if getattr(_db, "sheet_file", None) else []
+                if _unified:
+                    _unified_labels = {f"{u.get('nom_site') or 'Site'} ({u.get('created_at')})": u for u in _unified}
+                    _sel_u = st.selectbox("Sauvegardes unifiées", list(_unified_labels.keys()), key="jsonld_load_export_unified")
+                    if st.button("CHARGER (unifié)", use_container_width=True, key="jsonld_load_export_unified_btn"):
+                        _u = _unified_labels[_sel_u]
+                        _loaded = _db.load_unified(_u["save_id"], _user_email)
+                        if _loaded and _loaded.get("jsonld_data"):
+                            _jd = _loaded["jsonld_data"]
+                            _site_url = _loaded.get("site_url", "")
+                            _domain = urlparse(_site_url).netloc or "site"
+                            _labels = [{"model_name": m.get("model_name") or "Cluster", "schema_type": m.get("schema_type") or "WebPage"} for m in _jd]
+                            _urls = [m.get("sample_urls") if isinstance(m.get("sample_urls"), list) else [] for m in _jd]
+                            _doms = [m.get("dom_structure") or {} for m in _jd]
+                            _jlds = [m.get("existing_jsonld") for m in _jd]
+                            for k in list(st.session_state.keys()):
+                                if k.startswith("optimized_jsonld_"):
+                                    del st.session_state[k]
+                            for i, m in enumerate(_jd):
+                                opt = m.get("optimized_jsonld")
+                                if opt is not None and isinstance(opt, dict):
+                                    st.session_state[f"optimized_jsonld_{i}"] = opt
+                            st.session_state["jsonld_analyzer_results"] = {"site_url": _site_url, "domain": _domain, "total_pages": sum(m.get("page_count", 0) for m in _jd), "cluster_labels": _labels, "cluster_urls": _urls, "cluster_dom_structures": _doms, "cluster_jsonld": _jlds, "logs": [], "loaded_from_sheet": True}
+                            if _loaded.get("crawl_data"):
+                                st.session_state["jsonld_analyzer_crawl_results"] = _loaded["crawl_data"]
+                            st.success("Données chargées (sauvegardes unifiées).")
+                            st.rerun()
+                        else:
+                            st.warning("Sauvegarde introuvable ou sans données JSON-LD.")
+                _sites = _db.list_jsonld_sites(_user_email) if _user_email and _db.client else []
+                if _sites:
+                    if _unified:
+                        st.caption("Anciennes (onglet jsonld) :")
+                    _opt_labels = [f"{s['site_url']} — {s['workspace']}" for s in _sites]
+                    _sel_idx = st.selectbox("Site enregistré", range(len(_opt_labels)), format_func=lambda i: _opt_labels[i], key="jsonld_load_export")
+                    if st.button("CHARGER DEPUIS GOOGLE SHEETS", use_container_width=True, key="jsonld_load_export_btn"):
+                        _s = _sites[_sel_idx]
+                        _models = _db.load_jsonld_models(_user_email, site_url=_s["site_url"])
+                        _models = [m for m in _models if (m.get("workspace") or "").strip() == (_s.get("workspace") or "").strip()]
+                        if _models:
+                            _domain = urlparse(_s["site_url"]).netloc or "site"
+                            _labels = []
+                            _urls = []
+                            _doms = []
+                            _jlds = []
+                            for i, m in enumerate(_models):
+                                _labels.append({"model_name": m.get("model_name") or "Cluster", "schema_type": m.get("recommended_schema") or "WebPage"})
+                                _us = m.get("sample_urls") or "[]"
+                                try:
+                                    _u = json.loads(_us) if isinstance(_us, str) else _us
+                                except json.JSONDecodeError:
+                                    try:
+                                        _u = json.loads(__import__("zlib").decompress(__import__("base64").b64decode(_us)).decode())
+                                    except Exception:
+                                        _u = []
+                                _urls.append(_u if isinstance(_u, list) else [])
+                                _doms.append(_db._decompress_from_sheet(m.get("dom_structure") or "") or {})
+                                _jlds.append(_db._decompress_from_sheet(m.get("existing_jsonld") or ""))
+                                _opt = _db._decompress_from_sheet(m.get("optimized_jsonld") or "")
+                                st.session_state[f"optimized_jsonld_{i}"] = _opt if isinstance(_opt, dict) else None
+                            st.session_state["jsonld_analyzer_results"] = {
+                                "site_url": _s["site_url"], "domain": _domain,
+                                "total_pages": sum(m.get("page_count", 0) for m in _models),
+                                "cluster_labels": _labels, "cluster_urls": _urls,
+                                "cluster_dom_structures": _doms, "cluster_jsonld": _jlds,
+                                "logs": [], "loaded_from_sheet": True,
+                            }
+                            st.success("Données chargées.")
+                            st.rerun()
+                        else:
+                            st.warning("Aucun modèle trouvé pour ce site et workspace.")
+                else:
+                    st.caption("Aucune donnée enregistrée.")
+                st.markdown("---")
+
+                # 02 — Génération en masse
+                st.markdown(
+                    '<p style="font-weight:700; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em; margin:0 0 0.5rem 0;">02 — Génération en masse</p>'
                     '<p style="font-size:0.85rem; color:#64748b; margin:0 0 1rem 0;">Générez automatiquement les JSON-LD optimisés pour tous les clusters.</p>',
                     unsafe_allow_html=True,
                 )
@@ -1004,7 +1103,7 @@ def render_jsonld_analyzer_tab():
 
                 st.markdown("---")
                 st.markdown(
-                    '<p style="font-weight:700; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em; margin:0 0 0.5rem 0;">02 — Export complet</p>'
+                    '<p style="font-weight:700; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em; margin:0 0 0.5rem 0;">03 — Export complet</p>'
                     '<p style="font-size:0.85rem; color:#64748b; margin:0 0 1rem 0;">Téléchargez un ZIP contenant tous les JSON-LD générés, organisés par cluster avec README et manifest.</p>',
                     unsafe_allow_html=True,
                 )
@@ -1027,86 +1126,6 @@ def render_jsonld_analyzer_tab():
                             key="export_zip_all",
                         )
 
-                st.markdown("---")
-                st.markdown(
-                    '<p style="font-weight:700; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em; margin:0 0 0.5rem 0;">03 — Charger depuis Google Sheets</p>',
-                    unsafe_allow_html=True,
-                )
-                _user_email = get_current_user_email() or ""
-                _db = AuditDatabase()
-                _unified = [u for u in (_db.list_unified_saves(_user_email, workspace=None) or []) if u.get("has_jsonld")] if getattr(_db, "sheet_file", None) else []
-                if _unified:
-                    _unified_labels = {f"{u.get('nom_site') or 'Site'} ({u.get('created_at')})": u for u in _unified}
-                    _sel_u = st.selectbox("Sauvegardes unifiées", list(_unified_labels.keys()), key="jsonld_load_export_unified")
-                    if st.button("CHARGER (unifié)", use_container_width=True, key="jsonld_load_export_unified_btn"):
-                        _u = _unified_labels[_sel_u]
-                        _loaded = _db.load_unified(_u["save_id"], _user_email)
-                        if _loaded and _loaded.get("jsonld_data"):
-                            _jd = _loaded["jsonld_data"]
-                            _site_url = _loaded.get("site_url", "")
-                            _domain = urlparse(_site_url).netloc or "site"
-                            _labels = [{"model_name": m.get("model_name") or "Cluster", "schema_type": m.get("schema_type") or "WebPage"} for m in _jd]
-                            _urls = [m.get("sample_urls") if isinstance(m.get("sample_urls"), list) else [] for m in _jd]
-                            _doms = [m.get("dom_structure") or {} for m in _jd]
-                            _jlds = [m.get("existing_jsonld") for m in _jd]
-                            for k in list(st.session_state.keys()):
-                                if k.startswith("optimized_jsonld_"):
-                                    del st.session_state[k]
-                            for i, m in enumerate(_jd):
-                                opt = m.get("optimized_jsonld")
-                                if opt is not None and isinstance(opt, dict):
-                                    st.session_state[f"optimized_jsonld_{i}"] = opt
-                            st.session_state["jsonld_analyzer_results"] = {"site_url": _site_url, "domain": _domain, "total_pages": sum(m.get("page_count", 0) for m in _jd), "cluster_labels": _labels, "cluster_urls": _urls, "cluster_dom_structures": _doms, "cluster_jsonld": _jlds, "logs": [], "loaded_from_sheet": True}
-                            if _loaded.get("crawl_data"):
-                                st.session_state["jsonld_analyzer_crawl_results"] = _loaded["crawl_data"]
-                            st.success("Données chargées (sauvegardes unifiées).")
-                            st.rerun()
-                        else:
-                            st.warning("Sauvegarde introuvable ou sans données JSON-LD.")
-                _sites = _db.list_jsonld_sites(_user_email) if _user_email and _db.client else []
-                if _sites:
-                    if _unified:
-                        st.caption("Anciennes (onglet jsonld) :")
-                    _opt_labels = [f"{s['site_url']} — {s['workspace']}" for s in _sites]
-                    _sel_idx = st.selectbox("Site enregistré", range(len(_opt_labels)), format_func=lambda i: _opt_labels[i], key="jsonld_load_export")
-                    if st.button("CHARGER DEPUIS GOOGLE SHEETS", use_container_width=True, key="jsonld_load_export_btn"):
-                        _s = _sites[_sel_idx]
-                        _models = _db.load_jsonld_models(_user_email, site_url=_s["site_url"])
-                        _models = [m for m in _models if (m.get("workspace") or "").strip() == (_s.get("workspace") or "").strip()]
-                        if _models:
-                            _domain = urlparse(_s["site_url"]).netloc or "site"
-                            _labels = []
-                            _urls = []
-                            _doms = []
-                            _jlds = []
-                            for i, m in enumerate(_models):
-                                _labels.append({"model_name": m.get("model_name") or "Cluster", "schema_type": m.get("recommended_schema") or "WebPage"})
-                                _us = m.get("sample_urls") or "[]"
-                                try:
-                                    _u = json.loads(_us) if isinstance(_us, str) else _us
-                                except json.JSONDecodeError:
-                                    try:
-                                        _u = json.loads(__import__("zlib").decompress(__import__("base64").b64decode(_us)).decode())
-                                    except Exception:
-                                        _u = []
-                                _urls.append(_u if isinstance(_u, list) else [])
-                                _doms.append(_db._decompress_from_sheet(m.get("dom_structure") or "") or {})
-                                _jlds.append(_db._decompress_from_sheet(m.get("existing_jsonld") or ""))
-                                _opt = _db._decompress_from_sheet(m.get("optimized_jsonld") or "")
-                                st.session_state[f"optimized_jsonld_{i}"] = _opt if isinstance(_opt, dict) else None
-                            st.session_state["jsonld_analyzer_results"] = {
-                                "site_url": _s["site_url"], "domain": _domain,
-                                "total_pages": sum(m.get("page_count", 0) for m in _models),
-                                "cluster_labels": _labels, "cluster_urls": _urls,
-                                "cluster_dom_structures": _doms, "cluster_jsonld": _jlds,
-                                "logs": [], "loaded_from_sheet": True,
-                            }
-                            st.success("Données chargées.")
-                            st.rerun()
-                        else:
-                            st.warning("Aucun modèle trouvé pour ce site et workspace.")
-                else:
-                    st.caption("Aucune donnée enregistrée.")
                 st.markdown("---")
                 st.markdown(
                     '<p style="font-weight:700; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em; margin:0 0 0.5rem 0;">04 — Enregistrer dans Google Sheets</p>',

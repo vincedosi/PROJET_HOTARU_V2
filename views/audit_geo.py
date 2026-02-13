@@ -1007,7 +1007,13 @@ def render_mistral_optimization(base_url):
 
     # ==================== ROBOTS.TXT ====================
     with tab_robots:
-        content, found = fetch_file_content(base_url, "robots.txt")
+        if "geo_robots_txt_raw" in st.session_state and "geo_robots_txt_found" in st.session_state:
+            content = st.session_state["geo_robots_txt_raw"]
+            found = st.session_state["geo_robots_txt_found"]
+        else:
+            content, found = fetch_file_content(base_url, "robots.txt")
+            st.session_state["geo_robots_txt_raw"] = content or ""
+            st.session_state["geo_robots_txt_found"] = found
 
         # Status
         if found:
@@ -1084,7 +1090,13 @@ def render_mistral_optimization(base_url):
 
     # ==================== LLMS.TXT ====================
     with tab_llms:
-        content, found = fetch_file_content(base_url, "llms.txt")
+        if "geo_llms_txt_raw" in st.session_state and "geo_llms_txt_found" in st.session_state:
+            content = st.session_state["geo_llms_txt_raw"]
+            found = st.session_state["geo_llms_txt_found"]
+        else:
+            content, found = fetch_file_content(base_url, "llms.txt")
+            st.session_state["geo_llms_txt_raw"] = content or ""
+            st.session_state["geo_llms_txt_found"] = found
 
         if found:
             st.markdown(
@@ -1374,7 +1386,79 @@ def render_audit_geo():
     # ========================== TAB 1 : AUDIT SITE ==========================
     with tab1:
         # =================================================================
-        # ZONE DE SCAN
+        # ARCHIVES (charger en priorité — logique UX)
+        # =================================================================
+        if unified_saves:
+            st.markdown(
+                '<p class="section-title">CHARGER UN AUDIT</p>',
+                unsafe_allow_html=True,
+            )
+            unified_labels = {f"{a.get('nom_site') or 'Audit'} ({a.get('created_at')})": a for a in unified_saves}
+            col1, col2 = st.columns([3, 1])
+            choice = col1.selectbox("Charger un audit", list(unified_labels.keys()), label_visibility="collapsed", key="geo_archive_select")
+            if col2.button("VISUALISER", use_container_width=True, type="primary", key="geo_archive_btn"):
+                r = unified_labels[choice]
+                save_id = r["save_id"]
+                loaded = db.load_unified(save_id, user_email or "")
+                if not loaded:
+                    st.error("Sauvegarde introuvable ou accès refusé.")
+                else:
+                    crawl_data = loaded.get("crawl_data") or []
+                    geo_data = loaded.get("geo_data") or {}
+                    st.session_state.update({
+                        "results": crawl_data,
+                        "clusters": geo_data.get("clusters", []),
+                        "target_url": loaded.get("site_url", ""),
+                        "geo_infra": geo_data.get("geo_infra", {}),
+                        "geo_score": geo_data.get("geo_score", 0),
+                        "current_ws": loaded.get("workspace", selected_ws),
+                        "crawl_stats": geo_data.get("stats", {}),
+                        "filtered_log": geo_data.get("filtered_log", []),
+                        "duplicate_log": geo_data.get("duplicate_log", []),
+                        "ai_accessibility": geo_data.get("ai_accessibility", {}),
+                        "start_urls": geo_data.get("start_urls", [loaded.get("site_url", "")]),
+                        "geo_graph_ai_toggle": geo_data.get("graph_show_ai_score", False),
+                        "geo_ai_report": geo_data.get("geo_ai_report", ""),
+                        "geo_robots_txt_raw": geo_data.get("mistral_robots_raw", ""),
+                        "geo_robots_txt_found": geo_data.get("mistral_robots_found", False),
+                        "mistral_robots_code": geo_data.get("mistral_robots_code", ""),
+                        "mistral_robots_analysis": geo_data.get("mistral_robots_analysis", ""),
+                        "geo_llms_txt_raw": geo_data.get("mistral_llms_raw", ""),
+                        "geo_llms_txt_found": geo_data.get("mistral_llms_found", False),
+                        "mistral_llms_code": geo_data.get("mistral_llms_code", ""),
+                    })
+                    st.rerun()
+            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+        elif filtered_audits:
+            st.markdown(
+                '<p class="section-title">CHARGER UN AUDIT (anciennes archives)</p>',
+                unsafe_allow_html=True,
+            )
+            audit_labels = {f"{a.get('nom_site') or 'Audit'} ({a.get('date')})": a for a in filtered_audits}
+            col1, col2 = st.columns([3, 1])
+            choice = col1.selectbox("Charger un audit", list(audit_labels.keys()), label_visibility="collapsed", key="geo_legacy_select")
+            if col2.button("VISUALISER", use_container_width=True, type="primary", key="geo_legacy_btn"):
+                r = audit_labels[choice]
+                raw_data = zlib.decompress(base64.b64decode(r['data_compressed'])).decode('utf-8')
+                data = json.loads(raw_data)
+                st.session_state.update({
+                    "results": data['results'],
+                    "clusters": data['clusters'],
+                    "target_url": r['site_url'],
+                    "geo_infra": data.get('geo_infra', {}),
+                    "geo_score": data.get('geo_score', 0),
+                    "current_ws": selected_ws,
+                    "crawl_stats": data.get('stats', {}),
+                    "filtered_log": data.get('filtered_log', []),
+                    "duplicate_log": data.get('duplicate_log', []),
+                    "ai_accessibility": data.get('ai_accessibility', {}),
+                    "start_urls": data.get("start_urls", [r['site_url']]),
+                })
+                st.rerun()
+            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+
+        # =================================================================
+        # ZONE DE SCAN (nouvelle analyse)
         # =================================================================
         st.markdown(
             '<p class="section-title">01 / NOUVELLE ANALYSE</p>',
@@ -1610,74 +1694,7 @@ def render_audit_geo():
                 st.rerun()
 
         # =================================================================
-        # ARCHIVES (sauvegardes unifiées)
-        # =================================================================
-        if unified_saves:
-            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-            st.markdown(
-                '<p class="section-title">ARCHIVES</p>',
-                unsafe_allow_html=True
-            )
-
-            unified_labels = {f"{a.get('nom_site') or 'Audit'} ({a.get('created_at')})": a for a in unified_saves}
-
-            col1, col2 = st.columns([3, 1])
-            choice = col1.selectbox("Charger un audit", list(unified_labels.keys()), label_visibility="collapsed", key="geo_archive_select")
-
-            if col2.button("VISUALISER", use_container_width=True, type="primary", key="geo_archive_btn"):
-                r = unified_labels[choice]
-                save_id = r["save_id"]
-                loaded = db.load_unified(save_id, user_email or "")
-                if not loaded:
-                    st.error("Sauvegarde introuvable ou accès refusé.")
-                else:
-                    crawl_data = loaded.get("crawl_data") or []
-                    geo_data = loaded.get("geo_data") or {}
-                    st.session_state.update({
-                        "results": crawl_data,
-                        "clusters": geo_data.get("clusters", {}),
-                        "target_url": loaded.get("site_url", ""),
-                        "geo_infra": geo_data.get("geo_infra", {}),
-                        "geo_score": geo_data.get("geo_score", 0),
-                        "current_ws": loaded.get("workspace", selected_ws),
-                        "crawl_stats": geo_data.get("stats", {}),
-                        "filtered_log": geo_data.get("filtered_log", []),
-                        "duplicate_log": geo_data.get("duplicate_log", []),
-                        "ai_accessibility": geo_data.get("ai_accessibility", {}),
-                        "start_urls": geo_data.get("start_urls", [loaded.get("site_url", "")]),
-                    })
-                    st.rerun()
-        elif filtered_audits:
-            # Anciennes archives (onglet audits)
-            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-            st.markdown(
-                '<p class="section-title">ARCHIVES (anciennes)</p>',
-                unsafe_allow_html=True
-            )
-            audit_labels = {f"{a.get('nom_site') or 'Audit'} ({a.get('date')})": a for a in filtered_audits}
-            col1, col2 = st.columns([3, 1])
-            choice = col1.selectbox("Charger un audit", list(audit_labels.keys()), label_visibility="collapsed", key="geo_legacy_select")
-            if col2.button("VISUALISER", use_container_width=True, type="primary", key="geo_legacy_btn"):
-                r = audit_labels[choice]
-                raw_data = zlib.decompress(base64.b64decode(r['data_compressed'])).decode('utf-8')
-                data = json.loads(raw_data)
-                st.session_state.update({
-                    "results": data['results'],
-                    "clusters": data['clusters'],
-                    "target_url": r['site_url'],
-                    "geo_infra": data.get('geo_infra', {}),
-                    "geo_score": data.get('geo_score', 0),
-                    "current_ws": selected_ws,
-                    "crawl_stats": data.get('stats', {}),
-                    "filtered_log": data.get('filtered_log', []),
-                    "duplicate_log": data.get('duplicate_log', []),
-                    "ai_accessibility": data.get('ai_accessibility', {}),
-                    "start_urls": data.get("start_urls", [r['site_url']]),
-                })
-                st.rerun()
-
-        # =================================================================
-        # RESULTATS (affiché seulement si un Audit Site a été lancé)
+        # RESULTATS (affiché seulement si un Audit Site a été lancé ou chargé)
         # =================================================================
         if "results" in st.session_state:
             st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
@@ -1828,7 +1845,11 @@ def render_audit_geo():
             )
 
             c_expert, c_save_name, c_save_btn = st.columns([1, 2, 1])
-            expert_on = c_expert.toggle("Score AI-READABLE", value=False)
+            expert_on = c_expert.toggle(
+                "Score AI-READABLE",
+                value=st.session_state.get("geo_graph_ai_toggle", False),
+                key="geo_graph_ai_toggle"
+            )
 
             domain = urlparse(st.session_state.target_url).netloc
             s_name = c_save_name.text_input("Nom sauvegarde", value=domain.split('.')[0], label_visibility="collapsed")
@@ -1852,10 +1873,20 @@ def render_audit_geo():
 
                 compact_clusters = []
                 for cluster in st.session_state.clusters:
+                    samples = []
+                    for p in (cluster.get("samples") or [])[:40]:
+                        samples.append({
+                            "url": p.get("url"),
+                            "title": (p.get("title") or "")[:200],
+                            "description": (p.get("description") or "")[:300],
+                            "h1": (p.get("h1") or "")[:100],
+                            "has_structured_data": p.get("has_structured_data", False),
+                            "h2_count": p.get("h2_count", 0),
+                        })
                     compact_clusters.append({
                         "name": cluster["name"],
                         "count": cluster["count"],
-                        "samples": []
+                        "samples": samples
                     })
 
                 geo_data = {
@@ -1875,6 +1906,15 @@ def render_audit_geo():
                     "ai_accessibility": st.session_state.get('ai_accessibility', {}),
                     "filtered_log": st.session_state.get('filtered_log', []),
                     "duplicate_log": st.session_state.get('duplicate_log', []),
+                    "graph_show_ai_score": st.session_state.get("geo_graph_ai_toggle", False),
+                    "geo_ai_report": st.session_state.get("geo_ai_report", ""),
+                    "mistral_robots_raw": st.session_state.get("geo_robots_txt_raw", ""),
+                    "mistral_robots_found": st.session_state.get("geo_robots_txt_found", False),
+                    "mistral_robots_code": st.session_state.get("mistral_robots_code", ""),
+                    "mistral_robots_analysis": st.session_state.get("mistral_robots_analysis", ""),
+                    "mistral_llms_raw": st.session_state.get("geo_llms_txt_raw", ""),
+                    "mistral_llms_found": st.session_state.get("geo_llms_txt_found", False),
+                    "mistral_llms_code": st.session_state.get("mistral_llms_code", ""),
                 }
 
                 if len(st.session_state.results) > max_pages_to_save:

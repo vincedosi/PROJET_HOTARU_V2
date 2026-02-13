@@ -2,7 +2,7 @@
 
 **SaaS d'audit et d'optimisation pour le web lisible par l'IA**
 
-HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority Index (AI-Native), Master Data (JSON-LD entité), **Analyse JSON-LD** (clustering DOM intelligent, graphe interactif, génération JSON-LD optimisé via Mistral AI, fusion manuelle des clusters, export Google Sheets), **Eco-Score** (AIO Impact Calculator). Multi-utilisateurs avec isolation stricte des données par utilisateur.
+HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority Index (AI-Native), Master Data (JSON-LD entité), **Analyse JSON-LD** (clustering DOM, graphe interactif, génération JSON-LD optimisé via Mistral AI, **fusion multi-clusters** à choix multiples, export Google Sheets), **Eco-Score** (AIO Impact Calculator). Multi-utilisateurs avec **isolation stricte par `user_email` et par workspace**.
 
 **Interface :** Français uniquement.
 
@@ -10,21 +10,21 @@ HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority I
 
 ## Vision produit
 
-- **Audit** : 3 sous-onglets — **Audit GEO** (structure du site, graphe interactif, patterns d'URL, renommage IA Mistral ; 3 tabs : Audit Site | Audit Externe | Méthodologie), **Authority Score** (AI Authority Index v2 — 5 piliers : Ancrage Knowledge Graph, Interopérabilité des Données, Autorité de Citation, Densité Vectorielle, Fraîcheur ; embeddings + sameAs), **Scraping** (diagnostic URL + logs JSON-LD / techno / Selenium).
-- **JSON-LD** : 2 sous-onglets — **Master** (données d'entité Wikidata + Mistral, JSON-LD Organization, audit & gap, sauvegarde audits), **Analyse JSON-LD** (clustering DOM intelligent, nommage Mistral, graphe interactif, génération JSON-LD Schema.org optimisé par cluster, **fusion manuelle des clusters**, indicateur variabilité DOM, sauvegarde/chargement Google Sheets).
-- **Eco-Score** : **AIO Efficiency** — calculatrice d'impact carbone (tokens, kWh, gCO₂), paramètres site (pages catalogue, vues/jour) dans un expander, Big Numbers annuels, graphique Plotly 12 mois, méthodologie scientifique.
-- **Design :** Fond blanc, noir + rouge `rgb(168, 27, 35)`. Titres de section au format `XX / TITRE`, rouge souligné.
+- **Audit** : **Audit GEO** (structure du site, graphe interactif, patterns d'URL, renommage IA Mistral ; **charger un audit en priorité** puis nouvelle analyse ; sauvegarde unifiée), **Authority Score** (AI Authority Index — 5 piliers), **Scraping** (diagnostic URL + logs JSON-LD / techno / Selenium).
+- **JSON-LD** : **Master** (données d'entité Wikidata + Mistral, JSON-LD Organization, audit & gap, sauvegarde audits), **Analyse JSON-LD** (clustering DOM, nommage Mistral, graphe, génération JSON-LD Schema.org par cluster, **fusion manuelle à choix multiples** : sélection de X clusters puis fusion en un seul ; **charger depuis Google Sheets en premier** puis nouvelle analyse ; sauvegarde/chargement unifié + onglet jsonld legacy).
+- **Eco-Score** : **AIO Efficiency** — calculatrice d'impact carbone (tokens, kWh, gCO₂), paramètres site, Big Numbers, graphique Plotly 12 mois.
+- **Design :** Fond blanc, noir + rouge `rgb(168, 27, 35)`. Titres `XX / TITRE`, rouge souligné.
 
 ---
 
 ## Versioning
 
 À **chaque push ou merge sur `main`** (pull request), mettre à jour **`version.py`** :
-- `VERSION` : incrémenter si besoin (ex. 3.0.32 → 3.0.33)
-- `BUILD_DATE` : heure système au chargement de l'app (automatique)
-- `RELEASE_NOTE` : mini description des changements (affichée dans le cartouche Home)
+- `VERSION` : incrémenter si besoin
+- `BUILD_DATE` : date/heure courantes (automatique au chargement)
+- `RELEASE_NOTE` : mini description (affichée sur la Home)
 
-L'app affiche **V {VERSION} // {BUILD_DATE}** dans le header et le footer. Un cartouche sur la Home affiche version, date/heure et description.
+L'app affiche **V {VERSION} // {BUILD_DATE}** dans le header et le footer.
 
 ---
 
@@ -32,46 +32,43 @@ L'app affiche **V {VERSION} // {BUILD_DATE}** dans le header et le footer. Un ca
 
 ```
 PROJET_HOTARU_V2/
-├── app.py                      # Point d'entrée : auth, header, 4 tabs, footer
+├── app.py                      # Point d'entrée : auth, header (workspace + déconnexion), 4 tabs, footer
 ├── version.py                  # VERSION + BUILD_DATE (à mettre à jour à chaque push/PR)
 ├── packages.txt                # Streamlit Cloud : chromium, chromium-driver
-├── requirements.txt            # Python deps (selenium, tiktoken, trafilatura, pyvis, networkx, etc.)
+├── requirements.txt
 ├── assets/
 │   ├── logo.png
 │   └── style.css               # Design system (noir, rouge, section-title)
 ├── core/
 │   ├── auth.py                 # AuthManager (Google Sheets users)
-│   ├── database.py             # AuditDatabase (audits, Master, jsonld : save/load/list)
-│   ├── session_keys.py         # Clés de session SaaS
-│   └── scraping.py             # SmartScraper (crawl, Selenium Streamlit Cloud, fetch_page)
+│   ├── database.py             # AuditDatabase (audits, jsonld, unified_saves)
+│   ├── runtime.py              # get_secrets(), get_session() — agnostique UI
+│   ├── session_keys.py         # SESSION_*, get_current_user_email(), is_authenticated()
+│   └── scraping.py             # SmartScraper (crawl, Selenium, fetch_page)
 ├── engine/
-│   ├── master_handler.py        # MasterDataHandler, Wikidata + Mistral, heuristiques
+│   ├── master_handler.py       # MasterDataHandler, Wikidata + Mistral
 │   ├── dynamic_handler.py      # Prédictions Mistral (LEAF)
 │   └── template_builder.py     # Génération JSON-LD
-├── services/                    # Logique métier réutilisable (Streamlit + API)
-│   ├── __init__.py
-│   └── jsonld_service.py       # Clustering, Mistral, génération JSON-LD (sans Streamlit)
-├── docs/
-│   └── CLAUDE.md               # Référence agent (voir README)
-├── modules/
-│   ├── home.py                 # Page d'accueil
-│   ├── audit/                  # Onglet Audit (GEO, Authority, Scraping, Off-Page)
-│   │   ├── __init__.py
-│   │   ├── audit_geo.py         # Audit GEO (workspace, Audit Site | Externe | Méthodologie)
-│   │   ├── audit_scraping.py   # Scraping debug (URL, logs JSON-LD, techno, Selenium)
-│   │   ├── authority_score.py  # Authority Score AI-Native (5 piliers)
-│   │   ├── off_page.py         # Audit Externe (réputation, Audit Miroir)
-│   │   └── geo_scoring.py      # Scoring GEO
-│   ├── jsonld/                 # Onglet JSON-LD (Master, Analyse JSON-LD)
-│   │   ├── __init__.py
-│   │   ├── master.py           # Master Data (Wikidata/INSEE, audit gap, JSON-LD)
-│   │   ├── jsonld_analyzer.py  # Analyse JSON-LD (clustering, Mistral, graphe, fusion manuelle)
-│   │   ├── leaf.py             # Leaf Builder (JSON-LD par page)
-│   │   └── methodologie_blocks.py  # Contenu Méthodologie (Authority, Master)
-│   └── eco/                    # Onglet Eco-Score
-│       ├── __init__.py
-│       └── eco_impact.py        # AIO Impact Calculator (tokens, kWh, gCO₂, Plotly)
-└── README.md                   # Ce fichier
+├── services/                   # Logique métier réutilisable (Streamlit + API)
+│   └── jsonld_service.py       # cluster_pages, generate_optimized_jsonld, extract_dom_structure (sans st)
+├── views/                      # UI Streamlit (découplée des modules)
+│   ├── audit_geo.py            # Audit GEO (charger en priorité, puis 01 Nouvelle analyse)
+│   ├── audit_scraping.py
+│   ├── authority_score.py
+│   ├── jsonld_analyzer.py      # Analyse JSON-LD (onglet Charger d'abord, fusion multi-select)
+│   ├── master.py
+│   ├── eco_impact.py
+│   ├── off_page.py
+│   ├── leaf.py
+│   └── methodologie_blocks.py
+├── modules/                    # Ré-exports vers views/ (lazy load depuis app.py)
+│   ├── home.py
+│   ├── audit/                  # render_audit_geo, etc. (importe views)
+│   ├── jsonld/                 # render_master_tab, render_jsonld_analyzer_tab
+│   └── eco/
+├── api/
+│   └── main.py                 # FastAPI : /audit/authority, /health (base pour future API)
+└── README.md
 ```
 
 ---
@@ -79,105 +76,81 @@ PROJET_HOTARU_V2/
 ## SaaS : authentification et isolation
 
 - **Login :** `core.auth.AuthManager` — email + mot de passe, hash en Google Sheets (onglet `users`).
-- **Session :** `st.session_state` avec clés dans `core.session_keys` (`authenticated`, `user_email`, etc.).
-- **Isolation :** `AuditDatabase.load_user_audits(user_email)` filtre strictement par `user_email`.
-- **Usage :** `get_current_user_email()`, `is_authenticated()` depuis `core.session_keys`.
+- **Session :** `core.session_keys` — `get_current_user_email()`, `is_authenticated()`. Stockage via `core.runtime.get_session()` (compatible Streamlit ou autre runtime).
+- **Workspace :** Sélecteur dans le header (`audit_workspace_select`). Toutes les listes de sauvegardes (Audit GEO, Analyse JSON-LD) filtrent par **workspace courant** pour une logique SaaS multi-projets.
+- **Isolation :**
+  - `AuditDatabase.load_user_audits(user_email)` — audits filtrés par email.
+  - `AuditDatabase.list_unified_saves(user_email, workspace=selected_ws)` — sauvegardes unifiées par email + workspace.
+  - `AuditDatabase.load_unified(save_id, user_email)` — vérifie `user_email` avant de renvoyer les données.
+- **Usage :** Toujours utiliser `get_current_user_email()` et le workspace de session pour lire/écrire les données.
 
 ---
 
-## Navigation
+## Sauvegardes unifiées (unified_saves)
 
-**Onglets principaux (app.py) :** Accueil | Audit | JSON-LD | Eco-Score — onglets classiques (st.tabs).
+Un **onglet Google Sheets** unique pour Audit GEO et Analyse JSON-LD :
 
-- **Header** : logo, version, workspace, déconnexion.
-- **Audit** : sous-onglets **Audit GEO**, **Authority Score**, **Scraping**.
-- **JSON-LD** : sous-onglets **Master**, **Analyse JSON-LD**.
-- **Eco-Score** : AIO Efficiency (paramètres site dans expander, Big Numbers, graphique 12 mois).
-- Méthodologie par module : dédiée (Audit GEO, Off-Page, Eco) ou `methodologie_blocks.render_methodologie_for_module("authority"|"master")`.
-
----
-
-## Analyse JSON-LD
-
-Module dédié à la détection des types de pages par structure DOM et pattern d'URL :
-
-1. **Clustering intelligent** : Structure HTML 40 %, Pattern URL 30 %, Contenu sémantique 30 % — seuil 85 %. **Tolérances variables** : balises structurelles (h1, article, section, form, table) ±20 %, balises de contenu (h2, h3) ±60 % pour regrouper les fiches métiers malgré des variations de contenu.
-2. **Interface** : URL, slider pages (50–500), bouton Lancer l'analyse, bouton Effacer les résultats.
-3. **Nommage Mistral** : chaque cluster reçoit un nom et un type Schema.org recommandé.
-4. **Graphe interactif** : domaine → clusters → URLs exemples (pyvis + networkx). Nœuds colorés : domaine noir, chaque cluster couleur distincte, pages gris clair.
-5. **Onglets** : GRAPHE (détail cluster sélectionné, dropdown) | TABLEAU (tabs par cluster) | EXPORT | Logs.
-6. **Indicateur variabilité DOM** : affichage "H2: 8-16" dans l'onglet DOM pour les clusters avec plusieurs pages (variation normale du contenu).
-7. **Fusion manuelle** : dans "Actions avancées", l'utilisateur peut fusionner deux clusters (ex: "Fiches métiers" + "Offres d'emploi") — Mistral renomme le cluster fusionné.
-8. **Génération JSON-LD optimisé** : bouton **GÉNÉRER** dans le panneau détails. Mistral AI analyse la structure DOM et génère un JSON-LD Schema.org complet. Messages d'erreur détaillés (timeout, parse, API).
-9. **Sauvegarde / Chargement** : Google Sheets (onglet `jsonld`). Colonne `optimized_jsonld` pour les JSON-LD générés.
-10. **Cas 0 clusters** : message d'info, pas d'affichage des onglets.
+- **Onglet :** `unified_saves`
+- **Colonnes (25, décomposées, JSON brut sans compression) :**  
+  `save_id`, `user_email`, `workspace`, `site_url`, `nom_site`, `created_at`,  
+  `crawl_pages_count`, `geo_score`, `geo_clusters_count`, `jsonld_models_count`,  
+  `geo_stats_*`, `geo_infra_1`…`4`,  
+  `crawl_data_1`, `crawl_data_2`, `geo_data_1`, `geo_data_2`, `jsonld_data_1`, `jsonld_data_2`
+- **API DB :** `save_unified()`, `list_unified_saves(user_email, workspace=…)`, `load_unified(save_id, user_email)`.
+- **Flux UX :** Sur chaque module concerné, **charger en priorité** (liste filtrée par workspace), puis **nouvelle analyse / scrape**.
 
 ---
 
-## Eco-Score (AIO Efficiency)
+## Navigation et flux UX
 
-- **AIOImpactCalculator** : compare page brute (HTML complet) vs page optimisée (signal pur).
-- **Paramètres site** : dans un expander "Paramètres du Site" (nombre de pages catalogue 1–100k, vues/jour par page 1–1000).
-- **Big Numbers** : CO₂ économisé/an (t ou g), énergie (MWh), équivalent vols Paris–NY.
-- **Graphique Plotly** : 12 mois, 3 axes (tokens, kWh, gCO₂ cumulés).
-- **Méthodologie** : triptyque AIO, formule Scale, cache Hash, tableau.
+- **Header :** Logo, version, **Projets (Workspace)**, déconnexion.
+- **Onglets principaux :** Accueil | Audit | JSON-LD | Eco-Score.
+- **Audit GEO :** En tête d’onglet Audit Site → **CHARGER UN AUDIT** (unifié ou anciennes archives), puis **01 / NOUVELLE ANALYSE** (URLs, limite, Selenium, lancer le crawl).
+- **Analyse JSON-LD :** Premier onglet **Charger depuis Google Sheets** (sauvegardes unifiées filtrées par workspace + anciennes jsonld), second onglet **Nouvelle analyse**. Dans les résultats, **01 — Charger depuis Google Sheets** puis 02 Génération, 03 Export, 04 Enregistrer, 05 Télécharger.
 
 ---
 
-## Scraping & Selenium (Streamlit Cloud)
+## Analyse JSON-LD (détail)
 
-- **packages.txt** : `chromium`, `chromium-driver` pour l'environnement Linux Streamlit Cloud.
-- **core/scraping.py** : `SmartScraper` avec `_init_selenium()` compatible Cloud. `fetch_page()` pour récupération HTTP simple.
-- **Logs :** `log_callback` passé au SmartScraper pour afficher les logs de crawl et de détection JSON-LD en temps réel.
+1. **Clustering** : Structure HTML, pattern URL, contenu sémantique — seuil configurable. Tolérances variables (h1, article, h2/h3…).
+2. **Interface :** Onglet **Charger depuis Google Sheets** en premier (liste à choix unique), puis **Nouvelle analyse** (URL, nombre de pages, seuil).
+3. **Nommage Mistral** : nom + type Schema.org par cluster.
+4. **Graphe interactif** : domaine → clusters → URLs (pyvis + networkx).
+5. **Onglets résultats :** GRAPHE | TABLEAU | EXPORT | **FUSION** | Logs.
+6. **Fusion manuelle :** **Liste à choix multiples** (multiselect) — sélection de 2 clusters ou plus, bouton **FUSIONNER** → un seul cluster (Mistral renomme). Plus de dropdown source/cible.
+7. **Génération JSON-LD** : GÉNÉRER par cluster (Mistral), export ZIP, sauvegarde Google Sheets (unifié + onglet jsonld).
+8. **Sauvegarde :** `save_unified()` (crawl + geo + jsonld) + `save_jsonld_models()` (legacy onglet jsonld). Chargement via `list_unified_saves` + `load_unified` (workspace filtré).
 
 ---
 
 ## Base de données (Google Sheets)
 
 - **Onglet `users` :** email, password_hash, created_at, last_login, role.
-- **Onglet `audits` :** audit_id, user_email, workspace, date, site_url, nb_urls, data_compressed, nom_site, colonne `master_json`. Filtrage obligatoire par `user_email`.
-- **Onglet `jsonld` :** site_url, model_id, model_name, page_count, url_pattern, sample_urls, dom_structure, existing_jsonld, recommended_schema, **optimized_jsonld**, created_at, workspace, user_email. **AuditDatabase** : `save_jsonld_models()`, `load_jsonld_models()`, `list_jsonld_sites()`, `_decompress_from_sheet()`.
+- **Onglet `audits` :** audit_id, user_email, workspace, date, site_url, nb_urls, data_compressed, nom_site, master_json. (Legacy ; préférer unified_saves.)
+- **Onglet `jsonld` :** site_url, model_id, model_name, page_count, url_pattern, sample_urls, dom_structure, existing_jsonld, recommended_schema, optimized_jsonld, created_at, workspace, user_email. (Legacy ; sauvegarde unifiée complète en plus.)
+- **Onglet `unified_saves` :** 25 colonnes (voir ci-dessus). Filtrage par `user_email` et optionnellement par `workspace` pour les listes.
 
 ---
 
-## Structure SaaS et réutilisation pour une API
+## Structure SaaS et préparation API
 
-### Respect du pattern SaaS
+### Checklist SaaS
 
-Le projet respecte les principes SaaS :
+- **Isolation par `user_email`** : toutes les lectures/écritures DB utilisent `get_current_user_email()`.
+- **Workspace** : listes de sauvegardes filtrées par `audit_workspace_select` ; sauvegarde avec workspace courant.
+- **Session** : `core.session_keys` + `core.runtime` pour rester découplé de l’UI.
 
-- **Isolation par `user_email`** : toutes les requêtes DB filtrent par `get_current_user_email()`.
-- **Session** : `core.session_keys` centralise les clés, `AuditDatabase` est la couche de persistance.
-- **Core / Engine / Modules** : séparation nette (auth, DB, scraping) vs (logique métier) vs (UI Streamlit).
+### Préparation API (future)
 
-### Développer une API à partir des modules
-
-**Structure actuelle :** Les modules mélangent logique métier et UI Streamlit. Cependant, `jsonld_analyzer.py` (et d'autres) exposent des fonctions **réutilisables sans Streamlit** :
-
-- `extract_dom_structure(html_content)` → dict
-- `extract_semantic_features(html_content, json_ld)` → dict
-- `structure_similarity(struct_a, struct_b)` → float
-- `page_similarity(page_a, page_b)` → float
-- `cluster_pages(results, threshold)` → list
-- `name_cluster_with_mistral(api_key, results, cluster_indices)` → dict
-- `generate_optimized_jsonld(api_key, schema_type, dom_structure, sample_pages, existing_jsonld, url_pattern)` → tuple
-
-Ces fonctions n'utilisent pas `st.*` ni `session_state`. Elles peuvent être importées et appelées depuis une API REST.
-
-**Recommandation pour une API :**
-
-1. **Couche `services/` en place** : `services/jsonld_service.py` centralise la logique JSON-LD (clustering, Mistral, graphe). Le module Streamlit `modules/jsonld/jsonld_analyzer.py` l'importe. Une API FastAPI peut importer directement :
-   ```python
-   from services.jsonld_service import cluster_pages, generate_optimized_jsonld, extract_dom_structure
-   ```
-2. **Pour étendre** : créer `api/main.py` (FastAPI) qui importe ces fonctions et expose des routes (ex: `POST /analyze`, `POST /generate-jsonld`).
-3. **Authentification API** : passer `user_email` en paramètre ou le déduire du token JWT / API key.
+- **Couche `services/`** : `services/jsonld_service.py` — clustering, Mistral, génération JSON-LD **sans Streamlit**. Réutilisable par une API.
+- **`api/main.py`** (FastAPI) : routes existantes `POST /audit/authority`, `GET /health`. Base pour ajouter d’autres routes (analyse JSON-LD, crawl, etc.).
+- **Recommandation API :** Pour une API multi-tenant, passer **`user_email`** (et optionnellement **`workspace`**) en header ou dans le corps des requêtes (ou les déduire d’un JWT / API key), et les fournir à `AuditDatabase` et aux services. Ne jamais faire confiance au client pour l’isolation ; toujours filtrer côté serveur par `user_email` (et workspace si besoin).
 
 ---
 
 ## Installation
 
-**Prérequis :** Python 3.9+, clé API Mistral (nommage clusters + génération JSON-LD optimisé), Google Sheets pour auth/audits. Pour **Streamlit Cloud**, le fichier `packages.txt` installe Chromium et ChromeDriver.
+**Prérequis :** Python 3.9+, clé API Mistral, Google Sheets (users + audits/jsonld/unified_saves). Pour **Streamlit Cloud** : `packages.txt` (chromium, chromium-driver).
 
 ```bash
 git clone https://github.com/vincedosi/PROJET_HOTARU_V2.git
@@ -186,14 +159,14 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-**Configuration — Streamlit Secrets :** Toutes les clés sont dans `st.secrets` (local : `.streamlit/secrets.toml` ; Cloud : paramètres de l'app > Secrets).
+**Secrets (`.streamlit/secrets.toml` ou paramètres Cloud) :**
 
 ```toml
 [mistral]
-api_key = "votre-cle-mistral"
+api_key = "..."
 
 [gcp_service_account]
-# JSON du compte de service Google
+# JSON compte de service Google
 
 sheet_url = "https://docs.google.com/spreadsheets/d/..."
 SERPAPI_KEY = "..."  # Optionnel, Audit Externe
@@ -204,42 +177,37 @@ SERPAPI_KEY = "..."  # Optionnel, Audit Externe
 ## Conventions de code
 
 - **Session :** `core.session_keys` et `get_current_user_email()` pour les données utilisateur.
-- **Scraping :** `core.scraping.SmartScraper(start_urls, max_urls=..., log_callback=...)` ; `fetch_page(url)` pour requête HTTP simple.
-- **Titres de section :** Classe CSS `.section-title`, format `XX / TITRE`.
-- **Version :** `version.py` (VERSION, BUILD_DATE) — mis à jour à chaque push.
+- **Scraping :** `core.scraping.SmartScraper(…)` ; `fetch_page(url)` pour HTTP simple.
+- **Titres :** Classe `.section-title`, format `XX / TITRE`.
+- **Version :** `version.py` mis à jour à chaque push.
 
 ---
 
 ## Design system
 
 - **Couleurs :** Fond `#FFFFFF`, texte `#000000`, accent rouge `rgb(168, 27, 35)`, noir `#0f172a`.
-- **Scores :** Vert (bon), orange (moyen), rouge (à améliorer).
-- **Typographie :** Inter, uppercase pour labels, wide tracking.
+- **Scores :** Vert / orange / rouge selon niveau.
 
 ---
 
 ## Roadmap
 
 - [x] Navigation SaaS, isolation par user_email
-- [x] SmartScraper (Selenium Streamlit Cloud, log_callback, JSON-LD), packages.txt
-- [x] Audit GEO (Audit Site | Audit Externe | Méthodologie), logs crawl
-- [x] Authority Score AI-Native (5 piliers, embeddings, sameAs, méthodologie v2)
-- [x] Onglet JSON-LD (Master + Analyse JSON-LD), Master audit gap, sauvegarde audits
-- [x] Analyse JSON-LD : clustering DOM intelligent (h2/h3 ±60%), Mistral, graphe pyvis, sauvegarde/chargement Google Sheets
-- [x] Analyse JSON-LD : génération JSON-LD optimisé via Mistral AI, messages d'erreur détaillés
-- [x] Analyse JSON-LD : fusion manuelle des clusters, indicateur variabilité DOM
-- [x] Eco-Score : AIO Impact Calculator, paramètres dans expander
-- [x] Scraping debug (module Audit)
-- [x] Méthodologie Audit Externe toujours visible
+- [x] Workspace (header) et filtre workspace sur toutes les sauvegardes (Audit GEO, JSON-LD)
+- [x] Sauvegardes unifiées (onglet unified_saves, 25 colonnes décomposées, JSON brut)
+- [x] Flux UX : charger en priorité, puis nouvelle analyse / scrape (Audit GEO, JSON-LD)
+- [x] Analyse JSON-LD : fusion manuelle à choix multiples (multiselect)
+- [x] SmartScraper, Audit GEO, Authority Score, Master, Analyse JSON-LD, Eco-Score
+- [x] Analyse JSON-LD : génération JSON-LD optimisé Mistral, sauvegarde/chargement Sheets
 - [ ] Onglet Paramètres (profil, préférences)
 - [ ] Vault : clés API chiffrées par utilisateur
-- [ ] Rôle admin (stats globales, gestion comptes)
-- [ ] Export PDF, API REST
+- [ ] Rôle admin (stats, gestion comptes)
+- [ ] API REST étendue (user_email/workspace en entrée, routes analyse/crawl)
 
 ---
 
 ## Licence
 
-MIT — libre d'utilisation et de modification.
+MIT — libre d’utilisation et de modification.
 
 **HOTARU** — *Éclairer votre SEO comme une luciole dans la nuit*
