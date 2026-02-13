@@ -151,12 +151,12 @@ def render_jsonld_analyzer_tab():
         )
         max_pages = st.slider(
             "Nombre de pages à crawler",
-            min_value=50,
-            max_value=500,
+            min_value=1,
+            max_value=10000,
             value=150,
             step=10,
             key="jsonld_analyzer_max_pages",
-            help="~1-2 s/page (mode requests). Clustering < 30 s pour 500 pages.",
+            help="~1-2 s/page (mode requests). De 1 à 10 000 pages (palier 10).",
         )
         cluster_threshold = st.slider(
             "Seuil de similarité pour le clustering (%)",
