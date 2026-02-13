@@ -32,91 +32,41 @@ SOURCE_CONFIG = {
 }
 
 # ==========================================
-# SCRAPING & IA (CODE INCHANGÉ)
+# SCRAPING : module universel core.scraping (cascade + Selenium)
 # ==========================================
 
-class SmartScraper:
-    """Scraper robuste pour extraction de l'ADN d'un site"""
-    
-    def __init__(self, start_urls: List[str], max_urls: int = 1, use_selenium: bool = False):
-        self.start_urls = start_urls
-        self.max_urls = max_urls
-        self.use_selenium = use_selenium
-        self.results = []
-    
-    def run_analysis(self):
-        """Lance le scraping"""
-        for url in self.start_urls[:self.max_urls]:
-            try:
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                }
-                response = requests.get(url, headers=headers, timeout=10)
-                response.raise_for_status()
-                
-                soup = BeautifulSoup(response.content, 'html.parser')
-                
-                title = soup.find('title')
-                title_text = title.get_text(strip=True) if title else ""
-                
-                h1 = soup.find('h1')
-                h1_text = h1.get_text(strip=True) if h1 else ""
-                
-                meta_desc = soup.find('meta', attrs={'name': 'description'})
-                meta_text = meta_desc.get('content', '') if meta_desc else ""
-                
-                content_parts = []
-                
-                if h1_text:
-                    content_parts.append(h1_text)
-                
-                for h2 in soup.find_all('h2')[:5]:
-                    content_parts.append(h2.get_text(strip=True))
-                
-                for p in soup.find_all('p')[:10]:
-                    text = p.get_text(strip=True)
-                    if len(text) > 20:
-                        content_parts.append(text)
-                
-                raw_text = " ".join(content_parts)[:1000]
-                
-                self.results.append({
-                    'url': url,
-                    'title': self._clean_text(title_text),
-                    'h1': self._clean_text(h1_text),
-                    'meta': self._clean_text(meta_text),
-                    'raw_text': self._clean_text(raw_text),
-                    'success': True
-                })
-                
-            except Exception as e:
-                self.results.append({
-                    'url': url,
-                    'error': str(e),
-                    'success': False
-                })
-    
-    def _clean_text(self, text: str) -> str:
-        """Nettoie le texte extrait"""
-        text = re.sub(r'\s+', ' ', text)
-        return text.strip()
+from core.scraping import SmartScraper as _SmartScraper
+
+
+def _clean_text(text: str) -> str:
+    """Nettoie le texte extrait"""
+    if not text:
+        return ""
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
+
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_internal_dna(url: str) -> Optional[Dict]:
-    """Extrait l'ADN interne du site officiel"""
+    """Extrait l'ADN interne du site officiel (SmartScraper universel = cascade si timeout)."""
     try:
-        scraper = SmartScraper(start_urls=[url], max_urls=1, use_selenium=False)
-        scraper.run_analysis()
-        
-        if scraper.results and scraper.results[0].get('success'):
-            result = scraper.results[0]
-            return {
-                'title': result['title'],
-                'h1': result['h1'],
-                'meta': result['meta'],
-                'raw_text': result['raw_text']
-            }
-        return None
+        if not url.startswith(("http://", "https://")):
+            url = "https://" + url
+        scraper = _SmartScraper([url], max_urls=1, use_selenium=False)
+        data = scraper.get_page_details(url)
+        if not data:
+            return None
+        raw_text = " ".join(filter(None, [
+            data.get("title"),
+            data.get("h1"),
+            data.get("description"),
+        ]))[:1000]
+        return {
+            "title": _clean_text(data.get("title") or ""),
+            "h1": _clean_text(data.get("h1") or ""),
+            "meta": _clean_text(data.get("description") or ""),
+            "raw_text": _clean_text(raw_text),
+        }
     except Exception as e:
         return None
 

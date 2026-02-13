@@ -1456,17 +1456,22 @@ def render_audit_geo():
                     base_url = "https://" + base_url
                 base_url = base_url.rstrip("/")
 
-                # ========== ÉTAPE 1 : ANALYSE HOME (FLASH) ==========
+                # ========== ÉTAPE 1 : ANALYSE HOME (SmartScraper universel = cascade si timeout type BMW) ==========
                 with st.spinner("Analyse de la page d'accueil..."):
                     try:
-                        response = requests.get(
-                            base_url,
-                            timeout=10,
-                            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+                        scraper_home = SmartScraper(
+                            [base_url],
+                            max_urls=1,
+                            use_selenium=False,
+                            log_callback=None,
                         )
-                        soup = BeautifulSoup(response.text, "html.parser")
-                        jsonld_scripts = soup.find_all("script", type="application/ld+json")
-                        has_jsonld = len(jsonld_scripts) > 0
+                        data_home = scraper_home.get_page_details(base_url)
+                        if data_home is None:
+                            st.error("Impossible d'accéder au site (timeout ou erreur). Essayez d'activer Selenium dans l'onglet Diagnostic Scraping pour les sites protégés.")
+                            return
+                        json_ld_list = data_home.get("json_ld") or []
+                        has_jsonld = len(json_ld_list) > 0
+                        jsonld_scripts = []  # pour affichage on utilise json_ld_list
                     except Exception as e:
                         st.error(f"Impossible d'accéder au site : {e}")
                         return
@@ -1476,13 +1481,12 @@ def render_audit_geo():
                 # ========== ÉTAPE 2 : DÉCISION ==========
                 if has_jsonld:
                     st.success("**JSON-LD détecté sur la page d'accueil**")
-                    st.info(f"{len(jsonld_scripts)} bloc(s) JSON-LD trouvé(s)")
+                    st.info(f"{len(json_ld_list)} bloc(s) JSON-LD trouvé(s)")
                     st.markdown("**Aperçu du JSON-LD détecté**")
                     try:
-                        jsonld_data = json.loads(jsonld_scripts[0].string)
-                        st.json(jsonld_data)
+                        st.json(json_ld_list[0])
                     except Exception:
-                        st.code((jsonld_scripts[0].string or "")[:500])
+                        st.code(json.dumps(json_ld_list[0], indent=2)[:500] if json_ld_list else "")
                     st.markdown("**Stratégie recommandée** : Mode Flash (rapide, 1-2s/page)")
                     force_selenium = st.checkbox(
                         "Forcer Selenium quand même (utile si pages internes sont SPA)",
