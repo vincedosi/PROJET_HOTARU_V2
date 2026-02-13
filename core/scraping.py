@@ -1,5 +1,10 @@
 """
-SMART SCRAPER HYBRIDE — requests + Selenium, support proxy, cascade timeout.
+SMART SCRAPER UNIVERSEL (core/scraping.py)
+- Sites normaux : requests rapide.
+- Sites protégés (ex. BMW) : use_selenium=True ou cascade timeout (requests → requests-html → Selenium non-headless).
+- Proxy optionnel (requests + Selenium).
+- JSON-LD : extraction double (soup + DOM Selenium) fusionnée sans doublons.
+- Utilisé par audit, GEO, et tous les modules.
 """
 import requests
 from bs4 import BeautifulSoup
@@ -239,23 +244,46 @@ class SmartScraper:
         text = text.strip()
         return text[:40] + ".." if len(text) > 40 else text
 
+    def _extract_jsonld_from_soup(self, soup):
+        """Extraction JSON-LD classique depuis les balises <script type=\"application/ld+json\"> du HTML."""
+        out = []
+        for script in soup.find_all("script"):
+            t = (script.get("type") or "").lower()
+            if "ld+json" not in t:
+                continue
+            try:
+                raw = script.string or script.get_text(strip=True) or ""
+                if not raw.strip():
+                    continue
+                out.append(json.loads(raw))
+            except (json.JSONDecodeError, TypeError):
+                continue
+        return out
+
+    def _merge_jsonld_no_duplicates(self, list_a, list_b=None):
+        """Fusionne deux listes de blocs JSON-LD et supprime les doublons (comparaison canonique)."""
+        list_b = list_b or []
+        seen = set()
+        merged = []
+        for block in list_a + list_b:
+            if block is None:
+                continue
+            try:
+                canonical = json.dumps(block, sort_keys=True)
+                if canonical in seen:
+                    continue
+                seen.add(canonical)
+                merged.append(block)
+            except (TypeError, ValueError):
+                continue
+        return merged
+
     def _build_page_result(self, url, soup, html_content, response_time, raw_links=None, json_ld_data=None):
         """Construit le dict de résultat standard à partir de HTML/soup."""
         if raw_links is None:
             raw_links = [a["href"] for a in soup.find_all("a", href=True)]
         if json_ld_data is None:
-            json_ld_data = []
-            for script in soup.find_all("script"):
-                t = (script.get("type") or "").lower()
-                if "ld+json" not in t:
-                    continue
-                try:
-                    raw = script.string or script.get_text(strip=True) or ""
-                    if not raw.strip():
-                        continue
-                    json_ld_data.append(json.loads(raw))
-                except (json.JSONDecodeError, TypeError):
-                    continue
+            json_ld_data = self._extract_jsonld_from_soup(soup)
 
         raw_title = soup.title.string.strip() if soup.title else ""
         h1 = soup.find("h1").get_text().strip() if soup.find("h1") else ""
@@ -574,21 +602,9 @@ class SmartScraper:
             unique_links = list(set(links))
             self.stats["links_discovered"] += len(unique_links)
 
-            if self.use_selenium and json_ld_from_js:
-                json_ld_data = json_ld_from_js
-            else:
-                json_ld_data = []
-                for script in soup.find_all("script"):
-                    t = (script.get("type") or "").lower()
-                    if "ld+json" not in t:
-                        continue
-                    try:
-                        raw = script.string or script.get_text(strip=True) or ""
-                        if not raw.strip():
-                            continue
-                        json_ld_data.append(json.loads(raw))
-                    except (json.JSONDecodeError, TypeError):
-                        continue
+            # Fusion des deux méthodes d'extraction JSON-LD (soup + Selenium DOM si utilisé)
+            json_ld_classic = self._extract_jsonld_from_soup(soup)
+            json_ld_data = self._merge_jsonld_no_duplicates(json_ld_classic, json_ld_from_js)
 
             return {
                 "url": url,
