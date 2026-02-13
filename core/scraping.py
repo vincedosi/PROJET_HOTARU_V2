@@ -74,6 +74,10 @@ class SmartScraper:
             "errors": 0,
             "queue_full_blocks": 0,
             "start_urls_count": len(self.start_urls),
+            "protected_sites_detected": 0,
+            "advanced_solutions_used": 0,
+            "requests_html_successes": 0,
+            "selenium_nonheadless_successes": 0,
         }
 
         self.filtered_log = []
@@ -320,13 +324,146 @@ class SmartScraper:
         text = text.strip()
         return text[:40] + ".." if len(text) > 40 else text
 
+    def _build_page_result(self, url, soup, html_content, response_time, raw_links=None, json_ld_data=None):
+        """Construit le dict de résultat standard à partir de HTML/soup."""
+        if raw_links is None:
+            raw_links = [a["href"] for a in soup.find_all("a", href=True)]
+        if json_ld_data is None:
+            json_ld_data = []
+            for script in soup.find_all("script"):
+                t = (script.get("type") or "").lower()
+                if "ld+json" not in t:
+                    continue
+                try:
+                    raw = script.string or script.get_text(strip=True) or ""
+                    if not raw.strip():
+                        continue
+                    json_ld_data.append(json.loads(raw))
+                except (json.JSONDecodeError, TypeError):
+                    continue
+
+        raw_title = soup.title.string.strip() if soup.title else ""
+        h1 = soup.find("h1").get_text().strip() if soup.find("h1") else ""
+        final_title = self.clean_title(raw_title, h1, url)
+        meta_desc = ""
+        meta_tag = soup.find("meta", attrs={"name": "description"})
+        if meta_tag and meta_tag.get("content"):
+            meta_desc = meta_tag["content"].strip()
+
+        normalized_current = self.normalize_url(url)
+        links = []
+        for href in raw_links:
+            if not href:
+                continue
+            full_url = urljoin(url, href)
+            if (
+                urlparse(full_url).netloc.lower() == self.domain.lower()
+                and self.is_valid_url(full_url)
+            ):
+                clean_link = self.normalize_url(full_url)
+                if clean_link != normalized_current:
+                    links.append(clean_link)
+            else:
+                self.stats["links_filtered"] += 1
+        unique_links = list(set(links))
+        self.stats["links_discovered"] += len(unique_links)
+
+        return {
+            "url": url,
+            "title": final_title,
+            "links": unique_links,
+            "description": meta_desc,
+            "h1": h1,
+            "response_time": response_time,
+            "html_content": html_content,
+            "last_modified": "",
+            "has_structured_data": bool(json_ld_data),
+            "json_ld": json_ld_data,
+            "h2_count": len(soup.find_all("h2")),
+            "lists_count": len(soup.find_all(["ul", "ol"])),
+        }
+
+    def _get_with_requests(self, url):
+        """Méthode A : requests classique. Retourne le dict résultat ou lève Timeout/RequestException."""
+        start_time = time.time()
+        self._log(f" [Requests] {url}")
+        resp = self.session.get(url, timeout=15)
+        response_time = time.time() - start_time
+        if resp.status_code != 200:
+            self.stats["errors"] += 1
+            raise requests.exceptions.HTTPError(f"HTTP {resp.status_code}")
+        soup = BeautifulSoup(resp.content, "html.parser")
+        html_content = str(soup)
+        raw_links = [a["href"] for a in soup.find_all("a", href=True)]
+        self._log(f"   {len(html_content)} chars")
+        return self._build_page_result(url, soup, html_content, response_time, raw_links=raw_links)
+
+    def _get_with_requests_html(self, url):
+        """
+        Méthode B : requests-html (JavaScript rendu).
+        Idéal pour CloudFlare et sites protégés.
+        Retourne dict avec html_content, soup, raw_links, response_time pour _build_page_result.
+        """
+        try:
+            from requests_html import HTMLSession
+        except ImportError:
+            raise RuntimeError("requests-html non installé. pip install requests-html")
+
+        start_time = time.time()
+        session = HTMLSession()
+        resp = session.get(url, timeout=15)
+        resp.html.render()
+        response_time = time.time() - start_time
+        html = resp.html.html
+        soup = BeautifulSoup(html, "html.parser")
+        raw_links = [a.get("href", "") for a in soup.find_all("a", href=True)]
+        return {
+            "html_content": html,
+            "soup": soup,
+            "raw_links": raw_links,
+            "response_time": response_time,
+        }
+
+    def _get_with_selenium_nonheadless(self, url):
+        """
+        Méthode C : Selenium en mode graphique (pas headless).
+        Dernier recours avant abandon.
+        """
+        start_time = time.time()
+        chrome_options = Options()
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        driver = webdriver.Chrome(options=chrome_options)
+        try:
+            driver.set_page_load_timeout(60)
+            driver.get(url)
+            time.sleep(10)
+            html = driver.page_source
+            response_time = time.time() - start_time
+            soup = BeautifulSoup(html, "html.parser")
+            raw_links = [a.get("href", "") for a in soup.find_all("a", href=True)]
+            return {
+                "html_content": html,
+                "soup": soup,
+                "raw_links": raw_links,
+                "response_time": response_time,
+            }
+        finally:
+            driver.quit()
+
+    def _is_timeout_error(self, e):
+        """Détecte si l'exception est un timeout (Read timed out, ConnectTimeout, etc.)."""
+        msg = str(e).lower()
+        if "read timed out" in msg or "readtimeout" in msg or "connecttimeout" in msg or "timed out" in msg:
+            return True
+        return isinstance(e, (requests.exceptions.Timeout, TimeoutError))
+
     def get_page_details(self, url):
-        """Scrape une page."""
+        """Scrape une page. Cascade automatique vers solutions avancées si timeout (sites protégés type BMW)."""
         try:
             start_time = time.time()
             json_ld_from_js = []
 
-            # ========== MODE SELENIUM ==========
+            # ========== MODE SELENIUM (déjà initialisé au démarrage) ==========
             if self.use_selenium and self.driver:
                 try:
                     self._log(f" [Selenium] {url}")
@@ -437,23 +574,59 @@ class SmartScraper:
                     self._log(f"Erreur Selenium : {se}")
                     raise
 
-            # ========== MODE REQUESTS ==========
+            # ========== MODE REQUESTS (priorité) ou CASCADE si timeout ==========
             else:
-                self._log(f" [Requests] {url}")
-                resp = self.session.get(url, timeout=15)
-                response_time = time.time() - start_time
-                
-                if resp.status_code != 200:
-                    self._log(f"    HTTP {resp.status_code}")
-                    self.stats["errors"] += 1
-                    return None
-                    
-                soup = BeautifulSoup(resp.content, "html.parser")
-                html_content = str(soup)
-                raw_links = [a["href"] for a in soup.find_all("a", href=True)]
-                self._log(f"   {len(html_content)} chars")
+                # ESSAI 1 : requests normal
+                try:
+                    return self._get_with_requests(url)
+                except Exception as e1:
+                    if not self._is_timeout_error(e1):
+                        self.stats["errors"] += 1
+                        self._log(f"Erreur requests : {e1}")
+                        return None
+                    self.stats["protected_sites_detected"] += 1
+                    self.stats["advanced_solutions_used"] += 1
+                    self._log("Site protégé détecté (timeout) → Basculement solution avancée")
+                    self._log(f"Timeout détecté : {e1}")
+                    self._log("Basculement vers solution avancée...")
 
-            # ========== EXTRACTION DONNÉES ==========
+                # ESSAI 2 : requests-html (JavaScript rendu)
+                try:
+                    raw = self._get_with_requests_html(url)
+                    self.stats["requests_html_successes"] += 1
+                    self._log("requests-html fonctionne")
+                    return self._build_page_result(
+                        url,
+                        raw["soup"],
+                        raw["html_content"],
+                        raw["response_time"],
+                        raw_links=raw["raw_links"],
+                    )
+                except Exception as e2:
+                    self._log(f"requests-html échoué : {e2}")
+                    self._log("Essai suivant...")
+
+                # ESSAI 3 : Selenium non-headless
+                try:
+                    raw = self._get_with_selenium_nonheadless(url)
+                    self.stats["selenium_nonheadless_successes"] += 1
+                    self._log("Selenium non-headless fonctionne")
+                    return self._build_page_result(
+                        url,
+                        raw["soup"],
+                        raw["html_content"],
+                        raw["response_time"],
+                        raw_links=raw["raw_links"],
+                    )
+                except Exception as e3:
+                    self._log(f"Selenium non-headless échoué : {e3}")
+
+                # ESSAI 4 : Abandon
+                self._log(f"Impossible d'accéder à {url}")
+                self.stats["errors"] += 1
+                return None
+
+            # ========== EXTRACTION DONNÉES (après bloc Selenium) ==========
             raw_title = soup.title.string.strip() if soup.title else ""
             h1 = soup.find("h1").get_text().strip() if soup.find("h1") else ""
             final_title = self.clean_title(raw_title, h1, url)
@@ -463,10 +636,8 @@ class SmartScraper:
             if meta_tag and meta_tag.get("content"):
                 meta_desc = meta_tag["content"].strip()
 
-            # Liens
             links = []
             normalized_current = self.normalize_url(url)
-
             for href in raw_links:
                 if not href:
                     continue
@@ -480,11 +651,9 @@ class SmartScraper:
                         links.append(clean_link)
                 else:
                     self.stats["links_filtered"] += 1
-
             unique_links = list(set(links))
             self.stats["links_discovered"] += len(unique_links)
 
-            # JSON-LD
             if self.use_selenium and json_ld_from_js:
                 json_ld_data = json_ld_from_js
             else:
@@ -495,17 +664,11 @@ class SmartScraper:
                         continue
                     try:
                         raw = script.string or script.get_text(strip=True) or ""
-                        raw = raw.strip()
-                        if not raw:
+                        if not raw.strip():
                             continue
-                        parsed = json.loads(raw)
-                        json_ld_data.append(parsed)
+                        json_ld_data.append(json.loads(raw))
                     except (json.JSONDecodeError, TypeError):
                         continue
-
-            has_structured_data = bool(json_ld_data)
-            h2_count = len(soup.find_all("h2"))
-            lists_count = len(soup.find_all(["ul", "ol"]))
 
             return {
                 "url": url,
@@ -516,10 +679,10 @@ class SmartScraper:
                 "response_time": response_time,
                 "html_content": html_content,
                 "last_modified": "",
-                "has_structured_data": has_structured_data,
+                "has_structured_data": bool(json_ld_data),
                 "json_ld": json_ld_data,
-                "h2_count": h2_count,
-                "lists_count": lists_count,
+                "h2_count": len(soup.find_all("h2")),
+                "lists_count": len(soup.find_all(["ul", "ol"])),
             }
 
         except Exception as e:

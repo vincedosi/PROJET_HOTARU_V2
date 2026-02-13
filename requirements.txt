@@ -14,6 +14,8 @@ scikit-learn
 sentence-transformers
 selenium
 webdriver-manager==4.0.1
+# Optionnel : cascade timeout (sites protégés type BMW)
+requests-html
 tiktoken
 plotly
 googlesearch-python
