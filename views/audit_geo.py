@@ -374,7 +374,7 @@ def check_geo_infrastructure(base_url, crawl_results=None):
         except: 
             results[name] = {"status": False, "meta": data}
     
-    # ✅ FIX : Vérifier JSON-LD depuis les résultats du crawl (déjà fait avec Selenium si SPA)
+    # FIX : Vérifier JSON-LD depuis les résultats du crawl (déjà fait avec Selenium si SPA)
     has_json = False
     if crawl_results:
         # Chercher dans les pages crawlées si au moins une a du JSON-LD
@@ -1457,7 +1457,7 @@ def render_audit_geo():
                 base_url = base_url.rstrip("/")
 
                 # ========== ÉTAPE 1 : ANALYSE HOME (FLASH) ==========
-                with st.spinner("🔍 Analyse de la page d'accueil..."):
+                with st.spinner("Analyse de la page d'accueil..."):
                     try:
                         response = requests.get(
                             base_url,
@@ -1468,15 +1468,15 @@ def render_audit_geo():
                         jsonld_scripts = soup.find_all("script", type="application/ld+json")
                         has_jsonld = len(jsonld_scripts) > 0
                     except Exception as e:
-                        st.error(f"❌ Impossible d'accéder au site : {e}")
+                        st.error(f"Impossible d'accéder au site : {e}")
                         return
 
                 st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
 
                 # ========== ÉTAPE 2 : DÉCISION ==========
                 if has_jsonld:
-                    st.success("✅ **JSON-LD détecté sur la page d'accueil**")
-                    st.info(f"📊 {len(jsonld_scripts)} bloc(s) JSON-LD trouvé(s)")
+                    st.success("**JSON-LD détecté sur la page d'accueil**")
+                    st.info(f"{len(jsonld_scripts)} bloc(s) JSON-LD trouvé(s)")
                     st.markdown("**Aperçu du JSON-LD détecté**")
                     try:
                         jsonld_data = json.loads(jsonld_scripts[0].string)
@@ -1485,21 +1485,21 @@ def render_audit_geo():
                         st.code((jsonld_scripts[0].string or "")[:500])
                     st.markdown("**Stratégie recommandée** : Mode Flash (rapide, 1-2s/page)")
                     force_selenium = st.checkbox(
-                        "🔄 Forcer Selenium quand même (utile si pages internes sont SPA)",
+                        "Forcer Selenium quand même (utile si pages internes sont SPA)",
                         value=False,
                         key="force_selenium_checkbox",
                     )
                     selenium_enabled = force_selenium
                     selenium_mode = "light" if force_selenium else None
                 else:
-                    st.warning("⚠️ **Aucun JSON-LD détecté sur la page d'accueil**")
+                    st.warning("**Aucun JSON-LD détecté sur la page d'accueil**")
                     st.info(
                         "Le JSON-LD peut être injecté dynamiquement par JavaScript (sites SPA : Nuxt, React, Vue). "
                         "Selenium peut résoudre ce problème mais ralentit le crawl (4-6s/page au lieu de 1-2s)."
                     )
                     col1, col2 = st.columns(2)
                     with col1:
-                        if st.button("⚡ **Continuer en Flash**", use_container_width=True, key="btn_flash"):
+                        if st.button("**Continuer en Flash**", use_container_width=True, key="btn_flash"):
                             st.session_state["geo_pending_urls"] = urls
                             st.session_state["geo_pending_limit"] = limit_in
                             st.session_state["geo_pending_ws"] = ws_in or "Non classe"
@@ -1507,7 +1507,7 @@ def render_audit_geo():
                             st.session_state["geo_crawl_decision"] = "flash"
                             st.rerun()
                     with col2:
-                        if st.button("🔄 **Activer Selenium**", use_container_width=True, type="primary", key="btn_selenium"):
+                        if st.button("**Activer Selenium**", use_container_width=True, type="primary", key="btn_selenium"):
                             st.session_state["geo_pending_urls"] = urls
                             st.session_state["geo_pending_limit"] = limit_in
                             st.session_state["geo_pending_ws"] = ws_in or "Non classe"
@@ -1515,14 +1515,14 @@ def render_audit_geo():
                             st.session_state["geo_crawl_decision"] = "selenium"
                             st.rerun()
                     if "geo_crawl_decision" not in st.session_state or st.session_state.get("geo_crawl_decision") not in ("flash", "selenium"):
-                        st.info("👆 Choisissez une stratégie pour continuer")
+                        st.info("Choisissez une stratégie pour continuer")
                         return
                     selenium_enabled = st.session_state.get("geo_crawl_decision") == "selenium"
                     selenium_mode = "light" if selenium_enabled else None
 
                 # ========== ÉTAPE 3 : CRAWL ==========
                 st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-                strategy_label = "🔄 Selenium Light" if selenium_enabled else "⚡ Flash (Requests)"
+                strategy_label = "Selenium Light" if selenium_enabled else "Flash (Requests)"
                 st.info(f"**Mode de crawl** : {strategy_label}")
 
                 bar = st.progress(0, "Crawl en cours...")

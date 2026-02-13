@@ -639,13 +639,13 @@ Extrait HTML (5000 premiers chars) :
 **JSON-LD actuel détecté sur ces pages :**
 {json.dumps(existing_jsonld, indent=2, ensure_ascii=False)[:3000]}
 
-⚠️ ATTENTION : Le JSON-LD actuel est incomplet. Ton objectif est de le COMPLÉTER et l'OPTIMISER en ajoutant TOUS les champs manquants recommandés par Schema.org pour le type `{schema_type}`.
+ ATTENTION : Le JSON-LD actuel est incomplet. Ton objectif est de le COMPLÉTER et l'OPTIMISER en ajoutant TOUS les champs manquants recommandés par Schema.org pour le type `{schema_type}`.
 """
     else:
         user_prompt += f"""
 **JSON-LD actuel :** Aucun JSON-LD détecté sur ces pages.
 
-⚠️ Tu dois créer un JSON-LD COMPLET from scratch.
+ Tu dois créer un JSON-LD COMPLET from scratch.
 """
     user_prompt += f"""
 
@@ -745,7 +745,7 @@ def validate_jsonld_schema(jsonld_data: dict, timeout: int = 10) -> dict:
     warnings = []
 
     if not jsonld_data or not isinstance(jsonld_data, dict):
-        return {"valid": False, "errors": ["JSON-LD vide ou invalide"], "warnings": [], "message": "❌ JSON-LD invalide"}
+        return {"valid": False, "errors": ["JSON-LD vide ou invalide"], "warnings": [], "message": " JSON-LD invalide"}
 
     if "@context" not in jsonld_data:
         errors.append("Champ @context manquant")
@@ -788,11 +788,11 @@ def validate_jsonld_schema(jsonld_data: dict, timeout: int = 10) -> dict:
 
     valid = len(errors) == 0
     if valid and not warnings:
-        message = "✅ JSON-LD valide sans erreur ni warning"
+        message = " JSON-LD valide sans erreur ni warning"
     elif valid:
-        message = f"⚠️ JSON-LD valide avec {len(warnings)} warning(s)"
+        message = f" JSON-LD valide avec {len(warnings)} warning(s)"
     else:
-        message = f"❌ JSON-LD invalide : {len(errors)} erreur(s)"
+        message = f" JSON-LD invalide : {len(errors)} erreur(s)"
 
     return {"valid": valid, "errors": errors, "warnings": warnings, "message": message}
 

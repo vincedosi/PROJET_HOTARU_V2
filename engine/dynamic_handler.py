@@ -288,9 +288,9 @@ class DynamicDataHandler:
         """Group fields by decision category for UX display"""
         
         grouped = {
-            "keep": [],      # ✅ High confidence (>0.7)
-            "hesitant": [],  # ⚠️ Medium confidence (0.4-0.7)
-            "reject": []     # 🚫 Low confidence (<0.4)
+            "keep": [],      # High confidence (>0.7)
+            "hesitant": [],  # Medium confidence (0.4-0.7)
+            "reject": []     # Low confidence (<0.4)
         }
         
         for field in dynamic_data.fields:

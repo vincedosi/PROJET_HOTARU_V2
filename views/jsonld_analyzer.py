@@ -447,7 +447,7 @@ def render_jsonld_analyzer_tab():
                             st.session_state["jsonld_merge_suggestion_idx"] = min(suggestion_idx, len(merged_suggestions) - 1) if merged_suggestions else 0
                             new_merged_idx = target_idx - 1 if idx < target_idx else target_idx
                             st.session_state["jsonld_selected_cluster"] = new_merged_idx
-                            st.success(f"✅ Fusionné ! Nouveau nom : {new_label.get('model_name', 'Cluster fusionné')}")
+                            st.success(f" Fusionné ! Nouveau nom : {new_label.get('model_name', 'Cluster fusionné')}")
                             st.rerun()
                 with col_refuse:
                     if st.button("Refuser", key="jsonld_merge_refuse"):
@@ -586,10 +586,10 @@ def render_jsonld_analyzer_tab():
                                     )
                                     if optimized:
                                         st.session_state[f"optimized_jsonld_{idx}"] = optimized
-                                        st.success("✅ JSON-LD optimisé généré !")
+                                        st.success(" JSON-LD optimisé généré !")
                                         st.rerun()
                                     else:
-                                        st.error(f"❌ Échec de la génération. {err_msg or 'Erreur inconnue.'}")
+                                        st.error(f" Échec de la génération. {err_msg or 'Erreur inconnue.'}")
                                 elif not sample_pages:
                                     st.warning("Résultats du crawl non disponibles (analyse chargée depuis Sheets). Lancez une nouvelle analyse.")
 
@@ -601,10 +601,10 @@ def render_jsonld_analyzer_tab():
                             if jld:
                                 st.json(jld)
                             else:
-                                st.warning("⚠️ Aucun JSON-LD détecté sur ces pages.")
+                                st.warning(" Aucun JSON-LD détecté sur ces pages.")
 
                         with col_optimized:
-                            st.markdown("**JSON-LD optimisé** ✨")
+                            st.markdown("**JSON-LD optimisé**")
                             optimized_data = st.session_state.get(f"optimized_jsonld_{idx}")
                             if optimized_data:
                                 st.json(optimized_data)
@@ -612,18 +612,18 @@ def render_jsonld_analyzer_tab():
                                 if validation_result["valid"]:
                                     if validation_result["warnings"]:
                                         st.warning(validation_result["message"])
-                                        with st.expander("⚠️ Voir les warnings"):
+                                        with st.expander("Voir les warnings"):
                                             for w in validation_result["warnings"]:
                                                 st.markdown(f"- {w}")
                                     else:
                                         st.success(validation_result["message"])
                                 else:
                                     st.error(validation_result["message"])
-                                    with st.expander("❌ Voir les erreurs"):
+                                    with st.expander("Voir les erreurs"):
                                         for e in validation_result["errors"]:
                                             st.markdown(f"- {e}")
                                 st.download_button(
-                                    "📋 Télécharger JSON-LD",
+                                    "Télécharger JSON-LD",
                                     data=json.dumps(optimized_data, ensure_ascii=False, indent=2),
                                     file_name=f"jsonld_optimized_{name.lower().replace(' ', '_')[:30]}.json",
                                     mime="application/json",
@@ -656,7 +656,7 @@ def render_jsonld_analyzer_tab():
                                             if counts and max(counts) != min(counts):
                                                 variability_info.append(f"{tag.upper()}: {min(counts)}-{max(counts)}")
                                         if variability_info:
-                                            st.caption(f"ℹ️ **Variabilité détectée** : {' • '.join(variability_info)}")
+                                            st.caption(f"**Variabilité détectée** : {' • '.join(variability_info)}")
                                             st.caption("(Normal : le contenu varie entre pages du même type)")
                             else:
                                 st.caption("Non disponible.")
@@ -765,7 +765,7 @@ def render_jsonld_analyzer_tab():
                             if k.startswith("optimized_jsonld_"):
                                 del st.session_state[k]
                         st.session_state["jsonld_selected_cluster"] = target_idx - 1 if idx < target_idx else target_idx
-                        st.success(f"✅ Fusionné ! Nouveau nom : {new_label.get('model_name', 'Cluster fusionné')}")
+                        st.success(f" Fusionné ! Nouveau nom : {new_label.get('model_name', 'Cluster fusionné')}")
                         st.balloons()
                         st.rerun()
 
@@ -775,7 +775,7 @@ def render_jsonld_analyzer_tab():
                     label = cluster_labels[i] if i < len(cluster_labels) else {"model_name": f"Cluster {i + 1}", "schema_type": "WebPage"}
                     name = (label.get("model_name") or "").strip() or f"Cluster {i + 1}"
                     n = len(cluster_urls[i]) if i < len(cluster_urls) else 0
-                    has_jld = "✓" if st.session_state.get(f"optimized_jsonld_{i}") else "○"
+                    has_jld = "Oui" if st.session_state.get(f"optimized_jsonld_{i}") else "Non"
                     tab_labels.append(f"{i + 1}. {name} ({n} p.) {has_jld}")
 
                 cluster_tabs = st.tabs(tab_labels)
@@ -792,12 +792,12 @@ def render_jsonld_analyzer_tab():
 
                         if has_opt:
                             st.markdown(
-                                '<span style="display:inline-block; background:#dcfce7; color:#166534; padding:4px 10px; font-size:0.75rem; font-weight:700; text-transform:uppercase;">✓ JSON-LD généré</span>',
+                                '<span style="display:inline-block; background:#dcfce7; color:#166534; padding:4px 10px; font-size:0.75rem; font-weight:700; text-transform:uppercase;">JSON-LD généré</span>',
                                 unsafe_allow_html=True,
                             )
                         else:
                             st.markdown(
-                                '<span style="display:inline-block; background:#fef3c7; color:#92400e; padding:4px 10px; font-size:0.75rem; font-weight:700; text-transform:uppercase;">○ En attente</span>',
+                                '<span style="display:inline-block; background:#fef3c7; color:#92400e; padding:4px 10px; font-size:0.75rem; font-weight:700; text-transform:uppercase;">En attente</span>',
                                 unsafe_allow_html=True,
                             )
                         st.markdown("")
@@ -859,9 +859,9 @@ def render_jsonld_analyzer_tab():
                 col_batch_info, col_batch_btn = st.columns([3, 1])
                 with col_batch_info:
                     if pending_count == 0:
-                        st.success(f"✅ Tous les {num_clusters} clusters ont déjà un JSON-LD optimisé généré.")
+                        st.success(f" Tous les {num_clusters} clusters ont déjà un JSON-LD optimisé généré.")
                     else:
-                        st.info(f"📊 {pending_count} cluster(s) sur {num_clusters} en attente de génération.")
+                        st.info(f" {pending_count} cluster(s) sur {num_clusters} en attente de génération.")
                 with col_batch_btn:
                     batch_btn = st.button(
                         "GÉNÉRER TOUS",
@@ -925,10 +925,10 @@ def render_jsonld_analyzer_tab():
                             time.sleep(0.5)
                         progress_bar.empty()
                         if fail_count == 0:
-                            st.success(f"🎉 {success_count} JSON-LD générés avec succès !")
+                            st.success(f"{success_count} JSON-LD générés avec succès !")
                             st.balloons()
                         else:
-                            st.warning(f"⚠️ {success_count} réussis, {fail_count} échecs. Réessayez les échecs individuellement.")
+                            st.warning(f" {success_count} réussis, {fail_count} échecs. Réessayez les échecs individuellement.")
                         st.rerun()
 
                 st.markdown("---")
@@ -948,7 +948,7 @@ def render_jsonld_analyzer_tab():
                         get_opt = lambda i: st.session_state.get(f"optimized_jsonld_{i}")
                         zip_data = _create_jsonld_zip(cluster_labels, cluster_urls, domain, get_opt)
                         st.download_button(
-                            "📦 TÉLÉCHARGER ZIP",
+                            "TÉLÉCHARGER ZIP",
                             data=zip_data,
                             file_name=f"jsonld_export_{domain.replace('.', '_')}.zip",
                             mime="application/zip",
@@ -1038,7 +1038,7 @@ def render_jsonld_analyzer_tab():
                     if db.save_jsonld_models(user_email, site_url, workspace, models_data):
                         st.success("Modèles JSON-LD enregistrés dans l'onglet 'jsonld' du Google Sheet.")
                         try:
-                            st.toast("Enregistrement réussi", icon="✅")
+                            st.toast("Enregistrement réussi")
                         except Exception:
                             pass
                     else:

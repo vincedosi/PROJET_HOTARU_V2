@@ -74,7 +74,7 @@ def render_scraping_debug_tab():
     """Onglet de debug Scraping/JSON-LD ultra-complet."""
 
     st.markdown(
-        '<p class="section-title">🔍 DIAGNOSTIC SCRAPING & JSON-LD</p>',
+        '<p class="section-title">DIAGNOSTIC SCRAPING & JSON-LD</p>',
         unsafe_allow_html=True,
     )
     
@@ -107,13 +107,13 @@ def render_scraping_debug_tab():
     log_placeholder = st.empty()
 
     if st.button(
-        "🚀 LANCER LE DIAGNOSTIC COMPLET",
+        "LANCER LE DIAGNOSTIC COMPLET",
         type="primary",
         use_container_width=True,
         key="scraping_debug_run",
     ):
         if not url:
-            st.warning("⚠️ Veuillez saisir une URL.")
+            st.warning("Veuillez saisir une URL.")
             return
 
         target_url = url.strip()
@@ -139,8 +139,8 @@ def render_scraping_debug_tab():
 
         scraper = None
         try:
-            # ⚠️ CRITIQUE : On crée une classe temporaire pour passer le callback AVANT __init__
-            add_log("🔧 Initialisation du scraper...")
+            # CRITIQUE : On crée une classe temporaire pour passer le callback AVANT __init__
+            add_log("Initialisation du scraper...")
             
             # On importe et on patche temporairement
             scraper = SmartScraper(
@@ -150,18 +150,18 @@ def render_scraping_debug_tab():
             log_callback=add_log
             )
             
-            # ⚠️ HACK : On réassigne le callback et on rejoue les logs manquants
+            # HACK : On réassigne le callback et on rejoue les logs manquants
             # (car __init__ a déjà eu lieu sans callback)
             scraper.log_callback = add_log
             
             # On simule les logs d'init qui ont été perdus
-            add_log(f"🌐 Domaine : {scraper.domain}")
-            add_log(f"⚙️ Selenium forcé : {'OUI' if force_selenium else 'NON'}")
-            add_log(f"⚙️ Selenium activé : {'OUI' if scraper.use_selenium else 'NON'}")
-            add_log(f"🚗 Driver : {'Initialisé' if scraper.driver else 'Non initialisé'}")
+            add_log(f"Domaine : {scraper.domain}")
+            add_log(f"Selenium forcé : {'OUI' if force_selenium else 'NON'}")
+            add_log(f"Selenium activé : {'OUI' if scraper.use_selenium else 'NON'}")
+            add_log(f"Driver : {'Initialisé' if scraper.driver else 'Non initialisé'}")
             
         except Exception as e:
-            st.error(f"❌ Erreur d'initialisation : {e}")
+            st.error(f"Erreur d'initialisation : {e}")
             import traceback
             st.code(traceback.format_exc())
             return
@@ -169,19 +169,19 @@ def render_scraping_debug_tab():
         # Affichage des métriques d'init
         col_init1, col_init2, col_init3 = st.columns(3)
         with col_init1:
-            st.metric("🌐 Domaine", scraper.domain)
+            st.metric("Domaine", scraper.domain)
         with col_init2:
-            selenium_status = "✅ ACTIVÉ" if scraper.use_selenium else "❌ DÉSACTIVÉ"
-            st.metric("⚙️ Mode Selenium", selenium_status)
+            selenium_status = "ACTIVÉ" if scraper.use_selenium else "DÉSACTIVÉ"
+            st.metric("Mode Selenium", selenium_status)
         with col_init3:
-            driver_type = "❌ Non initialisé"
+            driver_type = "Non initialisé"
             if scraper.driver:
-                driver_type = "✅ Opérationnel"
-            st.metric("🚗 Driver", driver_type)
+                driver_type = "Opérationnel"
+            st.metric("Driver", driver_type)
 
         # Analyse SPA AVANT le scraping
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("**🔎 Analyse des indicateurs SPA (HTML brut)**")
+        st.markdown("**Analyse des indicateurs SPA (HTML brut)**")
         
         try:
             import requests
@@ -191,13 +191,13 @@ def render_scraping_debug_tab():
             spa_indicators = _detect_spa_indicators(html_brut, soup_brut)
             
             if spa_indicators:
-                st.success(f"✅ {len(spa_indicators)} indicateur(s) SPA détecté(s)")
+                st.success(f"{len(spa_indicators)} indicateur(s) SPA détecté(s)")
                 for ind in spa_indicators[:5]:
                     st.markdown(f"- **{ind['signal']}** ({ind['type']}) : `{ind['pattern']}`")
                 if len(spa_indicators) > 5:
                     st.markdown(f"_... et {len(spa_indicators) - 5} autre(s)_")
             else:
-                st.warning("⚠️ Aucun indicateur SPA détecté")
+                st.warning("Aucun indicateur SPA détecté")
         except Exception as e:
             st.error(f"Erreur analyse préliminaire : {e}")
 
@@ -213,7 +213,7 @@ def render_scraping_debug_tab():
             with st.spinner("⏳ Scraping en cours..."):
                 data = scraper.get_page_details(target_url)
         except Exception as e:
-            st.error(f"❌ Erreur scraping : {e}")
+            st.error(f"Erreur scraping : {e}")
             import traceback
             st.code(traceback.format_exc())
         finally:
@@ -224,19 +224,19 @@ def render_scraping_debug_tab():
                     pass
 
         if not data:
-            st.error("❌ Aucune donnée renvoyée")
+            st.error("Aucune donnée renvoyée")
             return
 
         # Résultats scraping
         col_scrap1, col_scrap2, col_scrap3, col_scrap4 = st.columns(4)
         with col_scrap1:
-            st.metric("📄 Titre", data.get("title", "N/A")[:30] + "...")
+            st.metric("Titre", data.get("title", "N/A")[:30] + "...")
         with col_scrap2:
-            st.metric("⏱️ Temps", f"{data.get('response_time', 0):.2f}s")
+            st.metric("Temps", f"{data.get('response_time', 0):.2f}s")
         with col_scrap3:
-            st.metric("🔗 Liens", len(data.get("links", [])))
+            st.metric("Liens", len(data.get("links", [])))
         with col_scrap4:
-            st.metric("📐 HTML", f"{len(data.get('html_content', '')) // 1024}KB")
+            st.metric("HTML", f"{len(data.get('html_content', '')) // 1024}KB")
 
         # ===== JSON-LD =====
         st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
@@ -250,7 +250,7 @@ def render_scraping_debug_tab():
 
         col_ld1, col_ld2, col_ld3 = st.columns(3)
         with col_ld1:
-            status_ld = "✅ OUI" if has_structured else "❌ NON"
+            status_ld = "OUI" if has_structured else "NON"
             st.metric("JSON-LD DÉTECTÉ", status_ld)
         with col_ld2:
             st.metric("BLOCS JSON-LD", len(jsonld_blocks))
@@ -259,7 +259,7 @@ def render_scraping_debug_tab():
 
         if jsonld_blocks:
             st.markdown("<br>", unsafe_allow_html=True)
-            st.success(f"✅ {len(jsonld_blocks)} bloc(s) JSON-LD extrait(s) !")
+            st.success(f"{len(jsonld_blocks)} bloc(s) JSON-LD extrait(s) !")
             
             block_tab_labels = []
             for i, block in enumerate(jsonld_blocks, 1):
@@ -275,7 +275,7 @@ def render_scraping_debug_tab():
                     with block_tabs[i]:
                         st.json(block)
         else:
-            st.warning("⚠️ Aucun JSON-LD trouvé")
+            st.warning("Aucun JSON-LD trouvé")
 
         # ===== STRUCTURE HTML =====
         st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
@@ -307,21 +307,21 @@ def render_scraping_debug_tab():
         col_html1, col_html2 = st.columns(2)
         
         with col_html1:
-            st.markdown("**📜 Types de `<script>`**")
+            st.markdown("**Types de `<script>`**")
             for t, count in sorted(type_counts.items(), key=lambda kv: kv[1], reverse=True):
-                icon = "🎯" if "ld+json" in t.lower() else "📄"
+                icon = "JSON-LD" if "ld+json" in t.lower() else "Script"
                 st.markdown(f"{icon} `{t}` → **{count}**")
         
         with col_html2:
-            st.markdown("**🎨 Structure**")
-            st.markdown(f"📌 H1: {1 if soup.find('h1') else 0}")
-            st.markdown(f"📌 H2: {data.get('h2_count', 0)}")
-            st.markdown(f"📌 Listes: {data.get('lists_count', 0)}")
-            st.markdown(f"📌 Images: {len(soup.find_all('img'))}")
+            st.markdown("**Structure**")
+            st.markdown(f"H1: {1 if soup.find('h1') else 0}")
+            st.markdown(f"H2: {data.get('h2_count', 0)}")
+            st.markdown(f"Listes: {data.get('lists_count', 0)}")
+            st.markdown(f"Images: {len(soup.find_all('img'))}")
 
         if ld_scripts_in_html:
             st.markdown("<br>", unsafe_allow_html=True)
-            st.info(f"ℹ️ {len(ld_scripts_in_html)} script(s) JSON-LD dans HTML")
+            st.info(f"{len(ld_scripts_in_html)} script(s) JSON-LD dans HTML")
             
             script_tab_labels = [f"Script #{i} — {s['length']} chars" for i, s in enumerate(ld_scripts_in_html, 1)]
             script_tabs = st.tabs(script_tab_labels) if script_tab_labels else []
@@ -332,7 +332,7 @@ def render_scraping_debug_tab():
                             parsed = json.loads(script_data["content"])
                             st.json(parsed)
                         except json.JSONDecodeError as e:
-                            st.error(f"❌ Erreur JSON : {e}")
+                            st.error(f"Erreur JSON : {e}")
                             st.code(script_data["content"][:500])
 
         # ===== DIAGNOSTIC =====
@@ -344,19 +344,19 @@ def render_scraping_debug_tab():
 
         if has_structured and jsonld_blocks:
             st.success(
-                f"✅ **Parfait !** {len(jsonld_blocks)} bloc(s) JSON-LD extrait(s)."
+                f"**Parfait !** {len(jsonld_blocks)} bloc(s) JSON-LD extrait(s)."
             )
         elif ld_scripts_in_html and not jsonld_blocks:
             st.error(
-                "❌ **Problème d'extraction !** Scripts JSON-LD présents mais non extraits."
+                "**Problème d'extraction !** Scripts JSON-LD présents mais non extraits."
             )
         elif not ld_scripts_in_html and not jsonld_blocks and not scraper.use_selenium:
             st.warning(
-                "⚠️ **Active 'FORCER SELENIUM'** pour les sites SPA."
+                "**Active 'FORCER SELENIUM'** pour les sites SPA."
             )
         elif not ld_scripts_in_html and not jsonld_blocks and scraper.use_selenium:
             st.error(
-                "❌ **Aucun JSON-LD trouvé** même avec Selenium. Le site n'en a peut-être pas."
+                "**Aucun JSON-LD trouvé** même avec Selenium. Le site n'en a peut-être pas."
             )
         
         # ===== LOGS =====
@@ -371,7 +371,7 @@ def render_scraping_debug_tab():
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown(
             "<p style='color:#64748b;font-size:0.85rem;text-align:center;'>"
-            f"📊 Total : {len(logs)} ligne(s) de log"
+            f"Total : {len(logs)} ligne(s) de log"
             "</p>",
             unsafe_allow_html=True,
         )

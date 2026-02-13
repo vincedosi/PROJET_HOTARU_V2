@@ -294,9 +294,9 @@ def _scan_with_ui(brand: str, status_container, log_container, scan_mode: str, a
     logs = []
     
     configs = {
-        "fast": {"label": "⚡ RAPIDE", "eta": "~15s"},
-        "balanced": {"label": "⚖️ ÉQUILIBRÉ", "eta": "~25s"},
-        "safe": {"label": "🛡️ COMPLET", "eta": "~35s"}
+        "fast": {"label": "RAPIDE", "eta": "~15s"},
+        "balanced": {"label": "ÉQUILIBRÉ", "eta": "~25s"},
+        "safe": {"label": "COMPLET", "eta": "~35s"}
     }
     
     config_ui = configs.get(scan_mode, configs["balanced"])
@@ -353,9 +353,9 @@ def _scan_with_ui(brand: str, status_container, log_container, scan_mode: str, a
         count = results_by_source.get(source_name, 0)
         
         if count > 0:
-            log_html = f"<span style='color:#10b981'>[✓]</span> {count} mentions sur {source_name}"
+            log_html = f"<span style='color:#10b981'>[OK]</span> {count} mentions sur {source_name}"
         else:
-            log_html = f"<span style='color:#64748b'>[○]</span> Aucune donnée sur {source_name}"
+            log_html = f"<span style='color:#64748b'>[-]</span> Aucune donnée sur {source_name}"
         logs.append(log_html)
     
     log_display = "<br>".join(logs)
@@ -370,14 +370,14 @@ def _scan_with_ui(brand: str, status_container, log_container, scan_mode: str, a
             </div>
             {log_display}
             <div style="margin-top:12px; color:#10b981; font-weight:bold;">
-                ✓ {len(scan_data['results'])} mentions extraites via SerpAPI
+                {len(scan_data['results'])} mentions extraites via SerpAPI
             </div>
         </div>
         """,
         unsafe_allow_html=True
     )
     
-    progress_bar.progress(1.0, text="✓ Scan terminé avec succès")
+    progress_bar.progress(1.0, text="Scan terminé avec succès")
     time.sleep(1.5)
     status_container.empty()
     
@@ -400,7 +400,7 @@ def render_dashboard(brand: str, analysis: Dict, internal_data: Dict):
         f"""
         <div style="text-align:center; padding:20px; background:#f8fafc; border-radius:12px; margin-bottom:24px;">
             <div style="font-size:1.2rem; font-weight:700; color:#0f172a; margin-bottom:12px;">
-                🎯 AUDIT MIROIR : {brand.upper()}
+                AUDIT MIROIR : {brand.upper()}
             </div>
         </div>
         """,
@@ -415,10 +415,10 @@ def render_dashboard(brand: str, analysis: Dict, internal_data: Dict):
             """
             <div style="background:#ecfdf5; padding:16px; border-radius:8px; border:2px solid #10b981;">
                 <div style="text-align:center; font-size:1.1rem; font-weight:800; color:#10b981; margin-bottom:12px;">
-                    ✅ ALIGNÉS
+                    ALIGNÉS
                 </div>
                 <div style="text-align:center; font-size:0.75rem; color:#059669; margin-bottom:16px;">
-                    Vous dites + Google dit (BIEN ✓)
+                    Vous dites + Google dit (BIEN)
                 </div>
             </div>
             """,
@@ -451,10 +451,10 @@ def render_dashboard(brand: str, analysis: Dict, internal_data: Dict):
             """
             <div style="background:#fef2f2; padding:16px; border-radius:8px; border:2px solid #ef4444;">
                 <div style="text-align:center; font-size:1.1rem; font-weight:800; color:#ef4444; margin-bottom:12px;">
-                    ⚠️ BRUIT
+                    BRUIT
                 </div>
                 <div style="text-align:center; font-size:0.75rem; color:#dc2626; margin-bottom:16px;">
-                    Google dit MAIS vous ne dites pas (DANGER ⚠️)
+                    Google dit MAIS vous ne dites pas (DANGER)
                 </div>
             </div>
             """,
@@ -487,10 +487,10 @@ def render_dashboard(brand: str, analysis: Dict, internal_data: Dict):
             """
             <div style="background:#eff6ff; padding:16px; border-radius:8px; border:2px solid #3b82f6;">
                 <div style="text-align:center; font-size:1.1rem; font-weight:800; color:#3b82f6; margin-bottom:12px;">
-                    ❌ INVISIBLES
+                    INVISIBLES
                 </div>
                 <div style="text-align:center; font-size:0.75rem; color:#2563eb; margin-bottom:16px;">
-                    Vous dites MAIS Google ignore (GÂCHIS 💸)
+                    Vous dites MAIS Google ignore (GÂCHIS)
                 </div>
             </div>
             """,
@@ -502,7 +502,7 @@ def render_dashboard(brand: str, analysis: Dict, internal_data: Dict):
                 f"""
                 <div style="background:#bfdbfe; padding:10px; margin:8px 0; border-radius:6px; 
                             text-align:center; font-weight:600; color:#1e40af;">
-                    ❌ {concept.upper()}
+ {concept.upper()}
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -522,10 +522,10 @@ def render_dashboard(brand: str, analysis: Dict, internal_data: Dict):
     st.markdown(
         """
         <div style="background:#f1f5f9; padding:16px; border-radius:8px; font-size:0.85rem;">
-            <strong>🔑 Légende :</strong><br>
-            🟢 <strong>ALIGNÉS</strong> : Concepts présents sur votre site ET dans Google = Communication efficace<br>
-            🔴 <strong>BRUIT</strong> : Concepts absents de votre site MAIS dominants sur Google = Risque réputationnel<br>
-            🔵 <strong>INVISIBLES</strong> : Concepts présents sur votre site MAIS invisibles dans Google = SEO à optimiser
+            <strong>Légende :</strong><br>
+            <strong>ALIGNÉS</strong> : Concepts présents sur votre site ET dans Google = Communication efficace<br>
+            <strong>BRUIT</strong> : Concepts absents de votre site MAIS dominants sur Google = Risque réputationnel<br>
+            <strong>INVISIBLES</strong> : Concepts présents sur votre site MAIS invisibles dans Google = SEO à optimiser
         </div>
         """,
         unsafe_allow_html=True
@@ -549,7 +549,7 @@ def render_heat_map(brand: str, analysis: Dict, external_results: List[Dict], in
             'Concept': concept.upper(),
             'Site': '████',
             'Google': '████',
-            'Statut': '✅ Aligné',
+            'Statut': 'Aligné',
             'Catégorie': 'aligned'
         })
     
@@ -559,7 +559,7 @@ def render_heat_map(brand: str, analysis: Dict, external_results: List[Dict], in
             'Concept': concept.upper(),
             'Site': '░',
             'Google': '████',
-            'Statut': '🔴 Bruit',
+            'Statut': 'Bruit',
             'Catégorie': 'noise'
         })
     
@@ -569,7 +569,7 @@ def render_heat_map(brand: str, analysis: Dict, external_results: List[Dict], in
             'Concept': concept.upper(),
             'Site': '███',
             'Google': '░',
-            'Statut': '🔵 Invisible',
+            'Statut': 'Invisible',
             'Catégorie': 'invisible'
         })
     
@@ -579,7 +579,7 @@ def render_heat_map(brand: str, analysis: Dict, external_results: List[Dict], in
         """
         <div style="text-align:center; padding:16px; background:#f8fafc; border-radius:8px; margin-bottom:20px;">
             <div style="font-size:1.2rem; font-weight:700; color:#0f172a;">
-                🔥 CARTE DE CHALEUR : Promesse vs Réalité
+                CARTE DE CHALEUR : Promesse vs Réalité
             </div>
         </div>
         """,
@@ -624,7 +624,7 @@ def render_heat_map(brand: str, analysis: Dict, external_results: List[Dict], in
     st.markdown(
         """
         <div style="background:#f1f5f9; padding:16px; border-radius:8px; font-size:0.85rem;">
-            <strong>📊 Légende :</strong><br>
+            <strong>Légende :</strong><br>
             <span style="font-family:monospace;">████</span> = Très présent (5+ mentions)<br>
             <span style="font-family:monospace;">███</span> = Présent (3-4 mentions)<br>
             <span style="font-family:monospace;">██</span> = Peu présent (1-2 mentions)<br>
@@ -643,7 +643,7 @@ def render_detailed_analysis(brand: str, analysis: Dict, external_results: List[
     noise = nodes.get('noise', [])
     invisible = nodes.get('invisible', [])
     
-    st.markdown("## 📊 ANALYSE DÉTAILLÉE PAR CATÉGORIE")
+    st.markdown("## ANALYSE DÉTAILLÉE PAR CATÉGORIE")
     st.markdown("<br>", unsafe_allow_html=True)
     
     # === SECTION ALIGNÉS ===
@@ -651,7 +651,7 @@ def render_detailed_analysis(brand: str, analysis: Dict, external_results: List[
         """
         <div style="background:#ecfdf5; padding:16px; border-radius:8px; border-left:4px solid #10b981; margin-bottom:24px;">
             <div style="font-size:1.1rem; font-weight:800; color:#10b981; margin-bottom:8px;">
-                🟢 CONCEPTS ALIGNÉS ({}) - C'est votre force !
+                CONCEPTS ALIGNÉS ({}) - C'est votre force !
             </div>
             <div style="font-size:0.85rem; color:#059669;">
                 Ces concepts sont présents à la fois sur votre site ET dans les résultats Google
@@ -669,7 +669,7 @@ def render_detailed_analysis(brand: str, analysis: Dict, external_results: List[
             f"""
             <div style="background:#f0fdf4; padding:14px; margin:12px 0; border-radius:6px; border:1px solid #bbf7d0;">
                 <div style="font-weight:700; font-size:0.95rem; color:#15803d; margin-bottom:8px;">
-                    ✓ {concept.upper()}
+                    {concept.upper()}
                 </div>
                 <div style="font-size:0.8rem; color:#166534; margin-bottom:6px;">
                     <strong>Présent sur votre site :</strong> {internal_data.get('h1', 'N/A')[:80]}...
@@ -700,7 +700,7 @@ def render_detailed_analysis(brand: str, analysis: Dict, external_results: List[
         """
         <div style="background:#fef2f2; padding:16px; border-radius:8px; border-left:4px solid #ef4444; margin-bottom:24px;">
             <div style="font-size:1.1rem; font-weight:800; color:#ef4444; margin-bottom:8px;">
-                🔴 CONCEPTS BRUIT ({}) - DANGER ! Non maîtrisés
+                CONCEPTS BRUIT ({}) - DANGER ! Non maîtrisés
             </div>
             <div style="font-size:0.85rem; color:#dc2626;">
                 Ces concepts sont dominants sur Google MAIS absents de votre site
@@ -717,10 +717,10 @@ def render_detailed_analysis(brand: str, analysis: Dict, external_results: List[
             f"""
             <div style="background:#fef2f2; padding:14px; margin:12px 0; border-radius:6px; border:1px solid #fecaca;">
                 <div style="font-weight:700; font-size:0.95rem; color:#dc2626; margin-bottom:8px;">
-                    ⚠️ {concept.upper()}
+ {concept.upper()}
                 </div>
                 <div style="font-size:0.8rem; color:#991b1b; margin-bottom:6px;">
-                    ❌ Absent de votre site
+ Absent de votre site
                 </div>
             </div>
             """,
@@ -728,7 +728,7 @@ def render_detailed_analysis(brand: str, analysis: Dict, external_results: List[
         )
         
         if matching_results:
-            st.markdown(f'<div style="margin-left:16px; font-size:0.8rem; color:#991b1b; margin-bottom:6px;"><strong>✓ Sur Google ({len(matching_results)} mentions) :</strong></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="margin-left:16px; font-size:0.8rem; color:#991b1b; margin-bottom:6px;"><strong>Sur Google ({len(matching_results)} mentions) :</strong></div>', unsafe_allow_html=True)
             for res in matching_results[:3]:
                 domain = res['url'].split('/')[2] if len(res['url'].split('/')) > 2 else res['url']
                 st.markdown(
@@ -747,7 +747,7 @@ def render_detailed_analysis(brand: str, analysis: Dict, external_results: List[
         """
         <div style="background:#eff6ff; padding:16px; border-radius:8px; border-left:4px solid #3b82f6; margin-bottom:24px;">
             <div style="font-size:1.1rem; font-weight:800; color:#3b82f6; margin-bottom:8px;">
-                🔵 CONCEPTS INVISIBLES ({}) - Opportunités SEO
+                CONCEPTS INVISIBLES ({}) - Opportunités SEO
             </div>
             <div style="font-size:0.85rem; color:#2563eb;">
                 Ces concepts sont présents sur votre site MAIS invisibles dans Google
@@ -762,13 +762,13 @@ def render_detailed_analysis(brand: str, analysis: Dict, external_results: List[
             f"""
             <div style="background:#eff6ff; padding:14px; margin:12px 0; border-radius:6px; border:1px solid #bfdbfe;">
                 <div style="font-weight:700; font-size:0.95rem; color:#2563eb; margin-bottom:8px;">
-                    💸 {concept.upper()}
+                    {concept.upper()}
                 </div>
                 <div style="font-size:0.8rem; color:#1e40af; margin-bottom:6px;">
-                    <strong>✓ Présent sur votre site :</strong> {internal_data.get('meta', 'N/A')[:80]}...
+                    <strong>Présent sur votre site :</strong> {internal_data.get('meta', 'N/A')[:80]}...
                 </div>
                 <div style="font-size:0.8rem; color:#1e3a8a;">
-                    ❌ Google ne le voit pas (0 mentions)
+ Google ne le voit pas (0 mentions)
                 </div>
             </div>
             """,
@@ -798,12 +798,12 @@ def render_off_page_audit():
         pass
     
     if not serpapi_key:
-        st.error("❌ Clé SERPAPI_KEY manquante dans Secrets")
+        st.error(" Clé SERPAPI_KEY manquante dans Secrets")
         return
     
     st.markdown(
         f'<p style="font-size:0.75rem;color:#10b981;font-weight:600;margin-bottom:16px;">'
-        f'✓ SerpAPI configurée ({serpapi_key[:8]}...)</p>', 
+        f'SerpAPI configurée ({serpapi_key[:8]}...)</p>', 
         unsafe_allow_html=True
     )
     
@@ -831,9 +831,9 @@ def render_off_page_audit():
         "Mode",
         options=["balanced", "safe", "fast"],
         format_func=lambda x: {
-            "fast": "⚡ Rapide", 
-            "balanced": "⚖️ Équilibré", 
-            "safe": "🛡️ Complet"
+            "fast": "Rapide", 
+            "balanced": "Équilibré", 
+            "safe": "Complet"
         }[x],
         label_visibility="collapsed",
         index=0
@@ -850,7 +850,7 @@ def render_off_page_audit():
     
     if scan_button:
         if not brand_input:
-            st.warning("⚠️ Nom de marque requis")
+            st.warning(" Nom de marque requis")
         else:
             status_box = st.empty()
             log_box = st.empty()
@@ -864,11 +864,11 @@ def render_off_page_audit():
             
             # Audit Miroir si site officiel fourni
             if official_site and mistral_key:
-                with st.spinner("🔍 Scraping du site officiel..."):
+                with st.spinner(" Scraping du site officiel..."):
                     internal_data = get_internal_dna(official_site)
                 
                 if internal_data:
-                    with st.spinner("🧠 Analyse sémantique avec Mistral..."):
+                    with st.spinner("Analyse sémantique avec Mistral..."):
                         mirror_analysis = analyze_mirror_gap(internal_data, results, mistral_key)
                     
                     if mirror_analysis:
@@ -876,16 +876,16 @@ def render_off_page_audit():
                             'internal': internal_data,
                             'analysis': mirror_analysis
                         }
-                        st.success("✓ Audit Miroir terminé !")
+                        st.success("Audit Miroir terminé !")
                     else:
-                        st.warning("⚠️ Erreur lors de l'analyse Mistral")
+                        st.warning(" Erreur lors de l'analyse Mistral")
                 else:
-                    st.warning("⚠️ Impossible de scraper le site officiel")
+                    st.warning(" Impossible de scraper le site officiel")
             elif official_site and not mistral_key:
-                st.warning("⚠️ Clé Mistral manquante pour l'Audit Miroir")
+                st.warning(" Clé Mistral manquante pour l'Audit Miroir")
             
             if results:
-                st.success(f"✓ {len(results)} mentions trouvées")
+                st.success(f"{len(results)} mentions trouvées")
             else:
                 st.info("Aucune mention trouvée.")
     
@@ -933,7 +933,7 @@ def render_off_page_audit():
             st.markdown("<br>", unsafe_allow_html=True)
             
             # Analyse de l'IA
-            st.info(f"**💡 Analyse :** {analysis.get('analysis', 'N/A')}")
+            st.info(f"**Analyse :** {analysis.get('analysis', 'N/A')}")
             
             st.markdown("<br>", unsafe_allow_html=True)
         
@@ -941,7 +941,7 @@ def render_off_page_audit():
         k1, k2, k3, k4 = st.columns(4)
         k1.metric("Mentions", len(results))
         k2.metric("Sources", len(set(r['source'] for r in results)))
-        k3.metric("Mode", {"fast": "⚡", "balanced": "⚖️", "safe": "🛡️"}.get(scan_mode, '⚖️'))
+        k3.metric("Mode", {"fast": "Rapide", "balanced": "Équilibré", "safe": "Complet"}.get(scan_mode, 'Équilibré'))
         k4.metric("Cache", "1h")
         
         st.markdown("<br>", unsafe_allow_html=True)
@@ -949,11 +949,11 @@ def render_off_page_audit():
         # Tabs
         if mirror_data:
             tab_dashboard, tab_heatmap, tab_analysis, tab_export, tab_method = st.tabs([
-                "📊 DASHBOARD", 
-                "🔥 HEAT MAP",
-                "🔍 ANALYSE",
-                "💾 EXPORT",
-                "🧭 MÉTHODOLOGIE"
+                "DASHBOARD", 
+                "HEAT MAP",
+                "ANALYSE",
+                "EXPORT",
+                "MÉTHODOLOGIE"
             ])
             
             with tab_dashboard:
@@ -979,7 +979,7 @@ def render_off_page_audit():
                 json_data = json.dumps(export_data, indent=2, ensure_ascii=False)
                 
                 st.download_button(
-                    label="📥 Télécharger JSON Complet",
+                    label="Télécharger JSON Complet",
                     data=json_data,
                     file_name=f"hotaru_mirror_audit_{brand_name.lower().replace(' ', '_')}.json",
                     mime="application/json",
@@ -988,7 +988,7 @@ def render_off_page_audit():
             
             with tab_method:
                 st.markdown("""
-                ### 🧭 Boussole Méthodologique : Comprendre le Score d'Alignement
+                ### Boussole Méthodologique : Comprendre le Score d'Alignement
                 
                 Le **Score d'Alignement HOTARU** mesure la distance sémantique entre votre émission (Site Officiel) 
                 et votre réception (SERP Google).
@@ -1014,23 +1014,23 @@ def render_off_page_audit():
                 
                 #### Interprétation des Visualisations
                 
-                **📊 DASHBOARD (3 colonnes)**  
+                ** DASHBOARD (3 colonnes)**  
                 Vue d'ensemble immédiate de votre alignement :
                 * **Alignés** : Votre cœur de communication efficace
                 * **Bruit** : Risques réputationnels non maîtrisés
                 * **Invisibles** : Potentiel SEO inexploité
                 
-                **🔥 HEAT MAP (Tableau de chaleur)**  
+                **HEAT MAP (Tableau de chaleur)**  
                 Comparaison visuelle de la présence de chaque concept sur votre site vs Google.
                 Plus les barres sont pleines, plus le concept est présent.
                 
-                **🔍 ANALYSE DÉTAILLÉE**  
+                ** ANALYSE DÉTAILLÉE**  
                 Exploration approfondie concept par concept avec les sources Google exactes.
                 """)
         
         else:
             # Mode classique sans Audit Miroir (liste + export + méthodologie toujours visible)
-            tab_list, tab_export, tab_method = st.tabs(["📋 LISTE", "💾 EXPORT", "🧭 MÉTHODOLOGIE"])
+            tab_list, tab_export, tab_method = st.tabs(["LISTE", "EXPORT", "MÉTHODOLOGIE"])
             
             with tab_list:
                 for m in results:
@@ -1067,7 +1067,7 @@ def render_off_page_audit():
                 json_data = json.dumps(export_data, indent=2, ensure_ascii=False)
                 
                 st.download_button(
-                    label="📥 Télécharger JSON",
+                    label="Télécharger JSON",
                     data=json_data,
                     file_name=f"hotaru_scan_{brand_name.lower().replace(' ', '_')}.json",
                     mime="application/json",
@@ -1076,13 +1076,13 @@ def render_off_page_audit():
             
             with tab_method:
                 st.markdown("""
-                ### 🧭 Boussole Méthodologique : Audit Externe (Réputation)
+                ### Boussole Méthodologique : Audit Externe (Réputation)
 
                 L'**Audit Externe HOTARU** analyse la réception de votre marque sur Google : quels sites parlent de vous, avec quels angles.
 
                 #### Mode Liste (sans Site Officiel)
-                * **📋 LISTE** : Toutes les mentions trouvées (snippets, titres, URLs).
-                * **💾 EXPORT** : Téléchargement JSON pour analyse externe.
+                * **LISTE** : Toutes les mentions trouvées (snippets, titres, URLs).
+                * **EXPORT** : Téléchargement JSON pour analyse externe.
 
                 #### Mode Audit Miroir (avec Site Officiel)
                 Si vous renseignez le **Site Officiel** et relancez le scan, vous débloquez :
@@ -1101,15 +1101,15 @@ def render_off_page_audit():
     st.markdown("**Options avancées**")
     col_a, col_b = st.columns(2)
         
-    if col_a.button("🗑️ Vider le cache", use_container_width=True):
+    if col_a.button("Vider le cache", use_container_width=True):
         _cached_scan.clear()
         get_internal_dna.clear()
         analyze_mirror_gap.clear()
         st.session_state['offpage_results'] = []
         st.session_state['mirror_data'] = None
-        st.success("✓ Cache vidé.")
+        st.success("Cache vidé.")
     
-    if col_b.button("📊 Statistiques API", use_container_width=True):
+    if col_b.button("Statistiques API", use_container_width=True):
         st.info(
             "**APIs utilisées :**\n\n"
             "• SerpAPI : 100 req/mois gratuit\n"

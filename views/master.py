@@ -492,7 +492,7 @@ def _render_master_data_content():
             st.markdown("#### INSEE / SIREN")
             if st.session_state.master_insee_results:
                 for idx, item in enumerate(st.session_state.master_insee_results):
-                    statut = "🟢" if item.get("active") else "🔴"
+                    statut = "Actif" if item.get("active") else "Inactif"
                     name = item.get("name", "")
                     addr = item.get("address", "")
                     label = f"{statut} {name}\n{addr}"

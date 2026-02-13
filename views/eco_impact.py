@@ -91,7 +91,7 @@ def _render_calculatrice():
                     with col2:
                         st.metric("Énergie économisée", f"{annual_mwh:.2f} MWh", delta="Économie annuelle")
                     with col3:
-                        st.metric("Équivalent Vols Paris-NY", f"✈️ {vols_pny}", delta="Économie annuelle")
+                        st.metric("Équivalent Vols Paris-NY", f"{vols_pny}", delta="Économie annuelle")
 
                     st.markdown("##### Métriques par page (une vue)")
                     col1, col2, col3 = st.columns(3)

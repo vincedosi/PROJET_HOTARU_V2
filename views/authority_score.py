@@ -302,7 +302,7 @@ def _render_authority_analyse_content():
 
         warning = sc_d.get("warning")
         if warning:
-            st.info(f"🧠 {warning}")
+            st.info(f"{warning}")
 
     with tab5:
         cf_d = bd["content_freshness"].get("details", {})

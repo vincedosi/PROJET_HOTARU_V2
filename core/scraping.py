@@ -43,7 +43,7 @@ class SmartScraper:
         for url in self.start_urls:
             if urlparse(url).netloc != self.domain:
                 raise ValueError(
-                    f"❌ Toutes les URLs doivent être du même domaine. Trouvé: {urlparse(url).netloc} au lieu de {self.domain}"
+                    f"Toutes les URLs doivent être du même domaine. Trouvé: {urlparse(url).netloc} au lieu de {self.domain}"
                 )
 
         # Session requests
@@ -73,7 +73,7 @@ class SmartScraper:
             ".doc", ".docx", "tel:", "mailto:", "javascript:", "void(0)",
         ]
 
-        self._log(f"🔗 Initialisation : {len(self.start_urls)} URL(s)")
+        self._log(f"Initialisation : {len(self.start_urls)} URL(s)")
         for i, url in enumerate(self.start_urls, 1):
             self._log(f"   {i}. {url}")
 
@@ -81,34 +81,34 @@ class SmartScraper:
         spa_detected = False
         
         if self.use_selenium:
-            self._log("⚙️ Selenium FORCÉ par l'utilisateur")
+            self._log("Selenium FORCÉ par l'utilisateur")
         else:
-            self._log("🔍 Détection SPA automatique...")
+            self._log("Détection SPA automatique...")
             try:
                 spa_detected = self._is_spa_site()
                 
                 if spa_detected:
-                    self._log("✅ Site SPA détecté → Activation Selenium")
+                    self._log("Site SPA détecté → Activation Selenium")
                     self.use_selenium = True
                 else:
-                    self._log("✅ Site classique → Mode requests")
+                    self._log("Site classique → Mode requests")
                     
             except Exception as e:
-                self._log(f"⚠️ Erreur détection SPA : {e}")
+                self._log(f"Erreur détection SPA : {e}")
                 spa_detected = False
 
         # ========== INITIALISATION SELENIUM ==========
         if self.use_selenium:
-            self._log("🚗 Démarrage Selenium...")
+            self._log("Démarrage Selenium...")
             self._init_selenium()
             
             if self.driver is None:
-                self._log("❌ Selenium ÉCHEC → Fallback requests")
+                self._log("Selenium ÉCHEC → Fallback requests")
                 self.use_selenium = False
             else:
-                self._log("✅ Selenium OK (Chromium / Streamlit Cloud)")
+                self._log("Selenium OK (Chromium / Streamlit Cloud)")
         else:
-            self._log("📄 Mode requests activé")
+            self._log("Mode requests activé")
 
     def normalize_url(self, url):
         """Normalise une URL pour éviter les doublons."""
@@ -141,7 +141,7 @@ class SmartScraper:
             # ========== DÉTECTION 1 : SCRIPTS TYPE=MODULE ==========
             module_scripts = soup.find_all("script", type="module")
             if module_scripts:
-                self._log(f"   🎯 {len(module_scripts)} script(s) ES module → SPA")
+                self._log(f"    {len(module_scripts)} script(s) ES module → SPA")
                 return True
             
             # ========== DÉTECTION 2 : SCRIPTS SRC ==========
@@ -152,7 +152,7 @@ class SmartScraper:
                 src = script.get("src", "").lower()
                 for pattern in spa_patterns:
                     if pattern in src:
-                        self._log(f"   🎯 Pattern '{pattern}' → SPA")
+                        self._log(f"    Pattern '{pattern}' → SPA")
                         return True
             
             # ========== DÉTECTION 3 : LINK MODULEPRELOAD ==========
@@ -163,7 +163,7 @@ class SmartScraper:
                     rel = [rel]
                 
                 if "modulepreload" in rel:
-                    self._log(f"   🎯 modulepreload → SPA")
+                    self._log(f"    modulepreload → SPA")
                     return True
             
             # ========== DÉTECTION 4 : PATTERNS TEXTE ==========
@@ -178,14 +178,14 @@ class SmartScraper:
             
             for pattern, framework in critical_patterns.items():
                 if pattern in html_lower:
-                    self._log(f"   🎯 '{pattern}' ({framework}) → SPA")
+                    self._log(f"    '{pattern}' ({framework}) → SPA")
                     return True
             
-            self._log("   ❌ Pas de SPA détecté")
+            self._log("    Pas de SPA détecté")
             return False
             
         except Exception as e:
-            self._log(f"   ⚠️ Erreur : {e}")
+            self._log(f"    Erreur : {e}")
             return False
 
     def _init_selenium(self):
@@ -202,7 +202,7 @@ class SmartScraper:
 
             if getattr(self, "selenium_mode", None) == "light":
                 chrome_options.page_load_strategy = "eager"
-                self._log("   ⚡ Mode Selenium Light activé (eager loading)")
+                self._log("    Mode Selenium Light activé (eager loading)")
 
             # Recherche chromium installé via packages.txt
             import shutil
@@ -218,11 +218,11 @@ class SmartScraper:
             for path in chromium_paths:
                 if path:
                     chromium_binary = path
-                    self._log(f"   ✅ Chromium trouvé : {path}")
+                    self._log(f"   Chromium trouvé : {path}")
                     break
 
             if not chromium_binary:
-                self._log("   ❌ Chromium NON trouvé - Vérifie packages.txt")
+                self._log("    Chromium NON trouvé - Vérifie packages.txt")
             else:
                 chrome_options.binary_location = chromium_binary
 
@@ -236,11 +236,11 @@ class SmartScraper:
             for path in chromedriver_paths:
                 if path:
                     chromedriver_binary = path
-                    self._log(f"   ✅ ChromeDriver trouvé : {path}")
+                    self._log(f"   ChromeDriver trouvé : {path}")
                     break
 
             if not chromedriver_binary:
-                self._log("   ❌ ChromeDriver NON trouvé - Vérifie packages.txt")
+                self._log("    ChromeDriver NON trouvé - Vérifie packages.txt")
 
             # Démarrage
             if chromedriver_binary:
@@ -252,11 +252,11 @@ class SmartScraper:
                 self._log("   → Démarrage Chromium sans service...")
                 self.driver = webdriver.Chrome(options=chrome_options)
 
-            self._log("   ✅ Selenium OK !")
+            self._log("   Selenium OK !")
             return
 
         except Exception as e:
-            self._log(f"   ❌ ÉCHEC : {str(e)[:300]}")
+            self._log(f"    ÉCHEC : {str(e)[:300]}")
             self.use_selenium = False
             self.driver = None
 
@@ -319,7 +319,7 @@ class SmartScraper:
             # ========== MODE SELENIUM ==========
             if self.use_selenium and self.driver:
                 try:
-                    self._log(f"🔍 [Selenium] {url}")
+                    self._log(f" [Selenium] {url}")
                     self.driver.get(url)
 
                     if getattr(self, "selenium_mode", None) == "light":
@@ -331,24 +331,24 @@ class SmartScraper:
                                 ))
                             )
                             elapsed = time.time() - start_time
-                            self._log(f"   ✅ JSON-LD injecté après {elapsed:.2f}s")
+                            self._log(f"   JSON-LD injecté après {elapsed:.2f}s")
                         except Exception:
                             elapsed = time.time() - start_time
-                            self._log(f"   ⚠️ JSON-LD non détecté après {elapsed:.2f}s")
+                            self._log(f"    JSON-LD non détecté après {elapsed:.2f}s")
                     else:
                         WebDriverWait(self.driver, 10).until(
                             EC.presence_of_element_located((By.TAG_NAME, "body"))
                         )
-                        self._log("   ⏳ Attente JSON-LD...")
+                        self._log("   Attente JSON-LD...")
                         try:
                             WebDriverWait(self.driver, 10).until(
                                 lambda d: d.execute_script(
                                     'return document.querySelectorAll(\'script[type*="ld+json" i]\').length > 0'
                                 )
                             )
-                            self._log("   ✅ JSON-LD dans DOM")
+                            self._log("   JSON-LD dans DOM")
                         except Exception:
-                            self._log("   ⚠️ Timeout JSON-LD")
+                            self._log("    Timeout JSON-LD")
                         time.sleep(2)
 
                     # Cookies
@@ -379,12 +379,12 @@ class SmartScraper:
 
                     # EXTRACTION JSON-LD
                     try:
-                        self._log("   🔍 Extraction JSON-LD...")
+                        self._log("    Extraction JSON-LD...")
                         
                         script_count = self.driver.execute_script(
                             'return document.querySelectorAll(\'script[type*="ld+json" i]\').length'
                         )
-                        self._log(f"   📊 {script_count} script(s) JSON-LD")
+                        self._log(f"    {script_count} script(s) JSON-LD")
                         
                         json_ld_from_js = self.driver.execute_script(
                             """
@@ -403,15 +403,15 @@ class SmartScraper:
                         )
                         
                         if json_ld_from_js:
-                            self._log(f"   ✅ {len(json_ld_from_js)} bloc(s) extrait(s)")
+                            self._log(f"   {len(json_ld_from_js)} bloc(s) extrait(s)")
                             for i, block in enumerate(json_ld_from_js):
                                 block_type = block.get('@type', 'Unknown') if isinstance(block, dict) else f'Array[{len(block)}]'
                                 self._log(f"      • Bloc {i+1}: {block_type}")
                         else:
-                            self._log("   ❌ Aucun bloc extrait")
+                            self._log("    Aucun bloc extrait")
                             
                     except Exception as e:
-                        self._log(f"   ⚠️ Erreur extraction : {e}")
+                        self._log(f"    Erreur extraction : {e}")
                         json_ld_from_js = []
 
                     js_links = self.driver.execute_script(
@@ -424,24 +424,24 @@ class SmartScraper:
                     raw_links = js_links or []
 
                 except Exception as se:
-                    self._log(f"⚠️ Erreur Selenium : {se}")
+                    self._log(f"Erreur Selenium : {se}")
                     raise
 
             # ========== MODE REQUESTS ==========
             else:
-                self._log(f"📄 [Requests] {url}")
+                self._log(f" [Requests] {url}")
                 resp = self.session.get(url, timeout=5)
                 response_time = time.time() - start_time
                 
                 if resp.status_code != 200:
-                    self._log(f"   ❌ HTTP {resp.status_code}")
+                    self._log(f"    HTTP {resp.status_code}")
                     self.stats["errors"] += 1
                     return None
                     
                 soup = BeautifulSoup(resp.content, "html.parser")
                 html_content = str(soup)
                 raw_links = [a["href"] for a in soup.find_all("a", href=True)]
-                self._log(f"   ✅ {len(html_content)} chars")
+                self._log(f"   {len(html_content)} chars")
 
             # ========== EXTRACTION DONNÉES ==========
             raw_title = soup.title.string.strip() if soup.title else ""
@@ -514,7 +514,7 @@ class SmartScraper:
 
         except Exception as e:
             self.stats["errors"] += 1
-            self._log(f"⚠️ Erreur critique : {e}")
+            self._log(f"Erreur critique : {e}")
             return None
 
     def run_analysis(self, progress_callback=None, log_callback=None):
@@ -527,7 +527,7 @@ class SmartScraper:
         crawled_count = 0
 
         print(f"\n{'='*80}")
-        print(f"🚀 CRAWL: {self.max_urls} pages")
+        print(f"CRAWL: {self.max_urls} pages")
         print(f"{'='*80}\n")
 
         try:
@@ -537,7 +537,7 @@ class SmartScraper:
 
                 if progress_callback:
                     progress_callback(
-                        f"🔍 {crawled_count}/{self.max_urls} | Queue: {len(queue)}",
+                        f"{crawled_count}/{self.max_urls} | Queue: {len(queue)}",
                         percent,
                     )
 
@@ -563,16 +563,16 @@ class SmartScraper:
             if self.driver:
                 try:
                     self.driver.quit()
-                    self._log("🚗 Driver fermé")
+                    self._log("Driver fermé")
                 except Exception:
                     pass
 
-        print(f"\n✅ TERMINÉ: {self.stats['pages_crawled']} pages\n")
+        print(f"\nTERMINÉ: {self.stats['pages_crawled']} pages\n")
 
         patterns = self.analyze_patterns(self.results)
 
         if progress_callback:
-            progress_callback(f"✅ Terminé: {self.stats['pages_crawled']}", 1.0)
+            progress_callback(f"Terminé: {self.stats['pages_crawled']}", 1.0)
 
         return self.results, {
             "total_urls": len(self.results),
