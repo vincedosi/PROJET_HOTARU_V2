@@ -93,11 +93,82 @@ def render_jsonld_analyzer_tab():
 
         user_email = get_current_user_email() or ""
         db = AuditDatabase()
+
+        # --- Sauvegardes unifiées (onglet unified_saves) ---
+        unified_saves = []
+        if user_email and getattr(db, "sheet_file", None):
+            unified_saves = [u for u in db.list_unified_saves(user_email, workspace=None) if u.get("has_jsonld")]
+
+        if unified_saves:
+            st.markdown(
+                '<p style="font-weight:700; font-size:0.85rem; text-transform:uppercase; letter-spacing:0.05em; margin:0 0 0.5rem 0;">Sauvegardes unifiées</p>',
+                unsafe_allow_html=True,
+            )
+            unified_labels = {f"{u.get('nom_site') or 'Site'} ({u.get('created_at')}) — {u.get('workspace')}": u for u in unified_saves}
+            sel_unified = st.selectbox(
+                "Choisir une sauvegarde unifiée",
+                list(unified_labels.keys()),
+                key="jsonld_load_unified_select",
+                label_visibility="collapsed",
+            )
+            if st.button("CHARGER (sauvegardes unifiées)", type="primary", use_container_width=True, key="jsonld_load_unified_btn"):
+                u = unified_labels[sel_unified]
+                loaded = db.load_unified(u["save_id"], user_email)
+                if not loaded:
+                    st.error("Sauvegarde introuvable ou accès refusé.")
+                else:
+                    jsonld_data = loaded.get("jsonld_data") or []
+                    site_url = loaded.get("site_url", "")
+                    domain = urlparse(site_url).netloc or "site"
+                    cluster_labels = []
+                    cluster_urls = []
+                    cluster_dom = []
+                    cluster_jsonld = []
+                    total_pages = 0
+                    for i, m in enumerate(jsonld_data):
+                        cluster_labels.append({"model_name": m.get("model_name") or "Cluster", "schema_type": m.get("schema_type") or m.get("recommended_schema") or "WebPage"})
+                        urls = m.get("sample_urls")
+                        if not isinstance(urls, list):
+                            urls = urls if isinstance(urls, list) else []
+                        cluster_urls.append(urls)
+                        cluster_dom.append(m.get("dom_structure") or {})
+                        cluster_jsonld.append(m.get("existing_jsonld"))
+                        total_pages += m.get("page_count", 0)
+                    st.session_state["jsonld_analyzer_results"] = {
+                        "site_url": site_url,
+                        "domain": domain,
+                        "total_pages": total_pages,
+                        "cluster_labels": cluster_labels,
+                        "cluster_urls": cluster_urls,
+                        "cluster_dom_structures": cluster_dom,
+                        "cluster_jsonld": cluster_jsonld,
+                        "logs": [],
+                        "loaded_from_sheet": True,
+                    }
+                    for k in list(st.session_state.keys()):
+                        if k.startswith("optimized_jsonld_"):
+                            del st.session_state[k]
+                    for i, m in enumerate(jsonld_data):
+                        opt = m.get("optimized_jsonld")
+                        if opt is not None and isinstance(opt, dict):
+                            st.session_state[f"optimized_jsonld_{i}"] = opt
+                    crawl_data = loaded.get("crawl_data")
+                    if crawl_data:
+                        st.session_state["jsonld_analyzer_crawl_results"] = crawl_data
+                    st.success("Données chargées depuis les sauvegardes unifiées.")
+                    st.rerun()
+            st.markdown("---")
+
+        # --- Anciennes (onglet jsonld) ---
         sites = db.list_jsonld_sites(user_email) if user_email and db.client else []
 
-        if not sites:
+        if not sites and not unified_saves:
             st.caption("Aucune donnée enregistrée pour votre compte. Lancez une analyse puis enregistrez dans Google Sheets.")
-        else:
+        elif sites:
+            st.markdown(
+                '<p style="font-weight:700; font-size:0.85rem; text-transform:uppercase; letter-spacing:0.05em; margin:0 0 0.5rem 0;">Anciennes (onglet jsonld)</p>',
+                unsafe_allow_html=True,
+            )
             opt_labels = [f"{s['site_url']} — {s['workspace']}" for s in sites]
             sel_idx = st.selectbox("Sélectionner un site enregistré", range(len(opt_labels)), format_func=lambda i: opt_labels[i], key="jsonld_load_site")
             if st.button("CHARGER DEPUIS GOOGLE SHEETS", type="secondary", use_container_width=True, key="jsonld_load_btn"):
@@ -963,8 +1034,39 @@ def render_jsonld_analyzer_tab():
                 )
                 _user_email = get_current_user_email() or ""
                 _db = AuditDatabase()
+                _unified = [u for u in (_db.list_unified_saves(_user_email, workspace=None) or []) if u.get("has_jsonld")] if getattr(_db, "sheet_file", None) else []
+                if _unified:
+                    _unified_labels = {f"{u.get('nom_site') or 'Site'} ({u.get('created_at')})": u for u in _unified}
+                    _sel_u = st.selectbox("Sauvegardes unifiées", list(_unified_labels.keys()), key="jsonld_load_export_unified")
+                    if st.button("CHARGER (unifié)", use_container_width=True, key="jsonld_load_export_unified_btn"):
+                        _u = _unified_labels[_sel_u]
+                        _loaded = _db.load_unified(_u["save_id"], _user_email)
+                        if _loaded and _loaded.get("jsonld_data"):
+                            _jd = _loaded["jsonld_data"]
+                            _site_url = _loaded.get("site_url", "")
+                            _domain = urlparse(_site_url).netloc or "site"
+                            _labels = [{"model_name": m.get("model_name") or "Cluster", "schema_type": m.get("schema_type") or "WebPage"} for m in _jd]
+                            _urls = [m.get("sample_urls") if isinstance(m.get("sample_urls"), list) else [] for m in _jd]
+                            _doms = [m.get("dom_structure") or {} for m in _jd]
+                            _jlds = [m.get("existing_jsonld") for m in _jd]
+                            for k in list(st.session_state.keys()):
+                                if k.startswith("optimized_jsonld_"):
+                                    del st.session_state[k]
+                            for i, m in enumerate(_jd):
+                                opt = m.get("optimized_jsonld")
+                                if opt is not None and isinstance(opt, dict):
+                                    st.session_state[f"optimized_jsonld_{i}"] = opt
+                            st.session_state["jsonld_analyzer_results"] = {"site_url": _site_url, "domain": _domain, "total_pages": sum(m.get("page_count", 0) for m in _jd), "cluster_labels": _labels, "cluster_urls": _urls, "cluster_dom_structures": _doms, "cluster_jsonld": _jlds, "logs": [], "loaded_from_sheet": True}
+                            if _loaded.get("crawl_data"):
+                                st.session_state["jsonld_analyzer_crawl_results"] = _loaded["crawl_data"]
+                            st.success("Données chargées (sauvegardes unifiées).")
+                            st.rerun()
+                        else:
+                            st.warning("Sauvegarde introuvable ou sans données JSON-LD.")
                 _sites = _db.list_jsonld_sites(_user_email) if _user_email and _db.client else []
                 if _sites:
+                    if _unified:
+                        st.caption("Anciennes (onglet jsonld) :")
                     _opt_labels = [f"{s['site_url']} — {s['workspace']}" for s in _sites]
                     _sel_idx = st.selectbox("Site enregistré", range(len(_opt_labels)), format_func=lambda i: _opt_labels[i], key="jsonld_load_export")
                     if st.button("CHARGER DEPUIS GOOGLE SHEETS", use_container_width=True, key="jsonld_load_export_btn"):
@@ -1035,13 +1137,26 @@ def render_jsonld_analyzer_tab():
                 if st.button("ENREGISTRER DANS GOOGLE SHEETS", type="primary", use_container_width=True, key="jsonld_save_btn"):
                     user_email = get_current_user_email() or ""
                     db = AuditDatabase()
-                    if db.save_jsonld_models(user_email, site_url, workspace, models_data):
-                        st.success("Modèles JSON-LD enregistrés dans l'onglet 'jsonld' du Google Sheet.")
+                    ok_legacy = db.save_jsonld_models(user_email, site_url, workspace, models_data)
+                    nom_site = (data.get("domain") or domain or "Site")[:200]
+                    crawl_for_unified = st.session_state.get("jsonld_analyzer_crawl_results") or []
+                    ok_unified = False
+                    if getattr(db, "sheet_file", None):
+                        try:
+                            db.save_unified(user_email, workspace, site_url, nom_site, crawl_data=crawl_for_unified, geo_data=None, jsonld_data=models_data)
+                            ok_unified = True
+                        except Exception as e:
+                            if ok_legacy:
+                                st.warning("Enregistré dans l'onglet 'jsonld'. Sauvegarde unifiée en échec: " + str(e)[:80])
+                            else:
+                                st.error("Sauvegarde unifiée en échec: " + str(e)[:200])
+                    if ok_legacy or ok_unified:
+                        st.success("Enregistré dans Google Sheets" + (" (sauvegardes unifiées)" if ok_unified else " (onglet jsonld)."))
                         try:
                             st.toast("Enregistrement réussi")
                         except Exception:
                             pass
-                    else:
+                    elif not ok_legacy:
                         st.error("Échec de l'enregistrement. Vérifiez la config GCP (secrets) et l'URL du Sheet.")
 
                 st.markdown(

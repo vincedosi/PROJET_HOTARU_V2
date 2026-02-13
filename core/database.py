@@ -346,3 +346,256 @@ class AuditDatabase:
         except Exception as e:
             logger.error("Erreur lecture JSON-LD GSheet: %s", e)
             return []
+
+    # =========================================================================
+    # SAUVEGARDES UNIFIÉES (onglet unified_saves) — 100 % décomposé, aucune compression
+    # Données en JSON brut (lisible). Si > 45k caractères, réparti sur plusieurs colonnes.
+    # =========================================================================
+
+    _UNIFIED_MAX_CELL = 45000  # limite Google Sheets ~50k
+
+    UNIFIED_HEADERS = [
+        "save_id", "user_email", "workspace", "site_url", "nom_site", "created_at",
+        "crawl_pages_count", "geo_score", "geo_clusters_count", "jsonld_models_count",
+        "geo_stats_pages_crawled", "geo_stats_links_discovered", "geo_stats_links_filtered",
+        "geo_stats_links_duplicate", "geo_stats_errors",
+        "geo_infra_1", "geo_infra_2", "geo_infra_3", "geo_infra_4",
+        "crawl_data_1", "crawl_data_2", "geo_data_1", "geo_data_2", "jsonld_data_1", "jsonld_data_2"
+    ]
+    UNIFIED_COLS = 25
+
+    # Indices des colonnes (après en-têtes)
+    _U_SAVE_ID, _U_EMAIL, _U_WS, _U_SITE_URL, _U_NOM, _U_CREATED = 0, 1, 2, 3, 4, 5
+    _U_CRAWL_CNT, _U_GEO_SCORE, _U_GEO_CLUST_CNT, _U_JSONLD_CNT = 6, 7, 8, 9
+    _U_STATS_PAGES, _U_STATS_LINKS, _U_STATS_FILT, _U_STATS_DUP, _U_STATS_ERR = 10, 11, 12, 13, 14
+    _U_INFRA_1, _U_INFRA_2, _U_INFRA_3, _U_INFRA_4 = 15, 16, 17, 18
+    _U_CRAWL_1, _U_CRAWL_2, _U_GEO_1, _U_GEO_2, _U_JSONLD_1, _U_JSONLD_2 = 19, 20, 21, 22, 23, 24
+
+    def _get_unified_worksheet(self):
+        """Retourne l'onglet 'unified_saves' (à créer dans le GSheet si absent)."""
+        if not self.sheet_file:
+            return None
+        try:
+            ws = self.sheet_file.worksheet("unified_saves")
+            vals = ws.get_all_values()
+            if not vals or len(vals) == 0:
+                ws.append_row(self.UNIFIED_HEADERS)
+            return ws
+        except Exception:
+            try:
+                ws = self.sheet_file.add_worksheet(title="unified_saves", rows=1000, cols=self.UNIFIED_COLS)
+                ws.append_row(self.UNIFIED_HEADERS)
+                return ws
+            except Exception as e:
+                logger.error("Impossible de créer l'onglet unified_saves: %s", e)
+                return None
+
+    def _json_to_cells(self, data, max_chars=None):
+        """Sérialise en JSON et découpe en morceaux pour cellules (max_chars par cellule)."""
+        if data is None:
+            return []
+        max_chars = max_chars or self._UNIFIED_MAX_CELL
+        raw = json.dumps(data, ensure_ascii=False)
+        if not raw:
+            return []
+        chunks = []
+        while raw:
+            chunks.append(raw[:max_chars])
+            raw = raw[max_chars:]
+        return chunks
+
+    def _cells_to_json(self, row, start_idx, max_cols=2):
+        """Reconstruit un objet JSON à partir de plusieurs cellules (concat puis json.loads)."""
+        parts = []
+        for i in range(max_cols):
+            idx = start_idx + i
+            if idx < len(row):
+                parts.append((row[idx] or "").strip())
+        joined = "".join(parts)
+        if not joined:
+            return None
+        try:
+            return json.loads(joined)
+        except Exception:
+            return None
+
+    def save_unified(self, user_email: str, workspace: str, site_url: str, nom_site: str,
+                     crawl_data: list, geo_data: dict = None, jsonld_data: list = None) -> str:
+        """
+        Sauvegarde unifiée : tout en colonnes décomposées, JSON brut (aucune compression).
+        """
+        ws = self._get_unified_worksheet()
+        if not ws:
+            raise ValueError("Onglet unified_saves indisponible")
+
+        save_id = str(int(time.time()))
+        created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        final_ws = (workspace or "").strip() or "Non classé"
+        site_url = (site_url or "")[:500]
+        nom_site = (nom_site or "Site")[:200]
+
+        crawl_pages_count = len(crawl_data) if crawl_data else 0
+        geo_score_val = (geo_data or {}).get("geo_score")
+        geo_score_str = str(int(geo_score_val)) if geo_score_val is not None else ""
+        geo_clusters = (geo_data or {}).get("clusters") or {}
+        geo_clusters_count = len(geo_clusters) if isinstance(geo_clusters, dict) else 0
+        jsonld_models_count = len(jsonld_data) if jsonld_data else 0
+
+        stats = (geo_data or {}).get("stats") or {}
+        stats_pages = stats.get("pages_crawled", "")
+        stats_links = stats.get("links_discovered", "")
+        stats_filtered = stats.get("links_filtered", "")
+        stats_dup = stats.get("links_duplicate", "")
+        stats_err = stats.get("errors", "")
+
+        infra = (geo_data or {}).get("geo_infra") or {}
+        infra_names = list(infra.keys())[:4] if isinstance(infra, dict) else []
+        infra_vals = []
+        for i in range(4):
+            name = infra_names[i] if i < len(infra_names) else ""
+            if name and infra.get(name):
+                status = "Present" if infra[name].get("status") else "Absent"
+                infra_vals.append(f"{name}:{status}")
+            else:
+                infra_vals.append("")
+
+        crawl_chunks = self._json_to_cells(crawl_data)
+        geo_chunks = self._json_to_cells(geo_data)
+        jsonld_chunks = self._json_to_cells(jsonld_data)
+
+        row = [
+            save_id, (user_email or "").strip(), final_ws, site_url, nom_site, created_at,
+            crawl_pages_count, geo_score_str, geo_clusters_count, jsonld_models_count,
+            stats_pages, stats_links, stats_filtered, stats_dup, stats_err,
+            infra_vals[0] if len(infra_vals) > 0 else "",
+            infra_vals[1] if len(infra_vals) > 1 else "",
+            infra_vals[2] if len(infra_vals) > 2 else "",
+            infra_vals[3] if len(infra_vals) > 3 else "",
+            crawl_chunks[0] if len(crawl_chunks) > 0 else "",
+            crawl_chunks[1] if len(crawl_chunks) > 1 else "",
+            geo_chunks[0] if len(geo_chunks) > 0 else "",
+            geo_chunks[1] if len(geo_chunks) > 1 else "",
+            jsonld_chunks[0] if len(jsonld_chunks) > 0 else "",
+            jsonld_chunks[1] if len(jsonld_chunks) > 1 else "",
+        ]
+        ws.append_row(row, value_input_option="RAW")
+        session = get_session()
+        session["audit_cache_version"] = session.get("audit_cache_version", 0) + 1
+        return save_id
+
+    def list_unified_saves(self, user_email: str, workspace: str = None):
+        """
+        Liste les sauvegardes unifiées de l'utilisateur (SaaS).
+        workspace=None => toutes; sinon filtre par workspace.
+        Retourne liste de {save_id, site_url, nom_site, created_at, workspace, has_geo, has_jsonld}.
+        """
+        ws = self._get_unified_worksheet()
+        if not ws:
+            return []
+
+        try:
+            rows = ws.get_all_values()
+            if len(rows) < 2:
+                return []
+            email_norm = (user_email or "").strip().lower()
+            ws_filter = (workspace or "").strip() if workspace else None
+            out = []
+            for row in rows[1:]:
+                if len(row) < 6:
+                    continue
+                row_email = (row[1] or "").strip().lower()
+                if row_email != email_norm:
+                    continue
+                row_ws = (row[2] or "").strip() or "Non classé"
+                if ws_filter is not None and row_ws != ws_filter:
+                    continue
+                # Format 25 colonnes (décomposé): geo en 21-22, jsonld en 23-24
+                if len(row) > self._U_GEO_1:
+                    has_geo = bool((row[self._U_GEO_1] or "").strip())
+                    has_jsonld = bool((row[self._U_JSONLD_1] or "").strip())
+                else:
+                    # Ancien format 9/13 colonnes (compressé)
+                    geo_col = row[11] if len(row) > 11 else (row[7] if len(row) > 7 else "")
+                    jsonld_col = row[12] if len(row) > 12 else (row[8] if len(row) > 8 else "")
+                    has_geo = bool((geo_col or "").strip())
+                    has_jsonld = bool((jsonld_col or "").strip())
+                out.append({
+                    "save_id": row[0],
+                    "site_url": row[3] if len(row) > 3 else "",
+                    "nom_site": row[4] if len(row) > 4 else "Site",
+                    "created_at": row[5] if len(row) > 5 else "",
+                    "workspace": row_ws,
+                    "has_geo": has_geo,
+                    "has_jsonld": has_jsonld,
+                })
+            return sorted(out, key=lambda x: (x.get("created_at") or ""), reverse=True)
+        except Exception as e:
+            logger.error("Erreur list_unified_saves: %s", e)
+            return []
+
+    def load_unified(self, save_id: str, user_email: str) -> dict:
+        """
+        Charge une sauvegarde unifiée par save_id (vérifie user_email = SaaS).
+        Retourne {crawl_data, geo_data, jsonld_data, site_url, nom_site, workspace, created_at}.
+        Lit le format 25 colonnes (JSON brut) ou l'ancien format compressé (9/13 colonnes).
+        """
+        ws = self._get_unified_worksheet()
+        if not ws:
+            return None
+
+        def _decompress_blob(s):
+            if not s or not (s or "").strip():
+                return None
+            s = (s or "").strip()
+            if s[0] == "{" or s[0] == "[":
+                try:
+                    return json.loads(s)
+                except Exception:
+                    pass
+            try:
+                raw = base64.b64decode(s)
+                return json.loads(zlib.decompress(raw).decode("utf-8"))
+            except Exception:
+                return None
+
+        try:
+            rows = ws.get_all_values()
+            if len(rows) < 2:
+                return None
+            email_norm = (user_email or "").strip().lower()
+            for row in rows[1:]:
+                if len(row) < 6:
+                    continue
+                if (row[0] or "").strip() != str(save_id).strip():
+                    continue
+                row_email = (row[1] or "").strip().lower()
+                if row_email != email_norm:
+                    return None
+                # Format 25 colonnes (décomposé, JSON brut)
+                if len(row) > self._U_JSONLD_2:
+                    crawl_data = self._cells_to_json(row, self._U_CRAWL_1, 2)
+                    geo_data = self._cells_to_json(row, self._U_GEO_1, 2)
+                    jsonld_data = self._cells_to_json(row, self._U_JSONLD_1, 2)
+                else:
+                    # Ancien format 9/13 colonnes (compressé)
+                    if len(row) >= 12:
+                        crawl_data = _decompress_blob(row[10] if len(row) > 10 else "")
+                        geo_data = _decompress_blob(row[11] if len(row) > 11 else "")
+                        jsonld_data = _decompress_blob(row[12] if len(row) > 12 else "")
+                    else:
+                        crawl_data = _decompress_blob(row[6] if len(row) > 6 else "")
+                        geo_data = _decompress_blob(row[7] if len(row) > 7 else "")
+                        jsonld_data = _decompress_blob(row[8] if len(row) > 8 else "")
+                return {
+                    "site_url": row[3] if len(row) > 3 else "",
+                    "nom_site": row[4] if len(row) > 4 else "Site",
+                    "workspace": (row[2] or "").strip() or "Non classé",
+                    "created_at": row[5] if len(row) > 5 else "",
+                    "crawl_data": crawl_data,
+                    "geo_data": geo_data,
+                    "jsonld_data": jsonld_data,
+                }
+            return None
+        except Exception as e:
+            logger.error("Erreur load_unified: %s", e)
+            return None

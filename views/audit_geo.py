@@ -1367,6 +1367,7 @@ def render_audit_geo():
     # Workspace géré dans le header (app.py), au niveau du LOGOUT
     selected_ws = st.session_state.get("audit_workspace_select", "Nouveau")
     filtered_audits = [a for a in all_audits if (str(a.get('workspace', '')).strip() or "Non classé") == selected_ws]
+    unified_saves = db.list_unified_saves(user_email or "", workspace=selected_ws) if getattr(db, 'sheet_file', None) else []
 
     tab1, tab2, tab3 = st.tabs(["Audit Site", "Audit Externe", "Méthodologie"])
 
@@ -1609,21 +1610,54 @@ def render_audit_geo():
                 st.rerun()
 
         # =================================================================
-        # ARCHIVES
+        # ARCHIVES (sauvegardes unifiées)
         # =================================================================
-        if filtered_audits:
+        if unified_saves:
             st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
             st.markdown(
                 '<p class="section-title">ARCHIVES</p>',
                 unsafe_allow_html=True
             )
 
-            audit_labels = {f"{a.get('nom_site') or 'Audit'} ({a.get('date')})": a for a in filtered_audits}
+            unified_labels = {f"{a.get('nom_site') or 'Audit'} ({a.get('created_at')})": a for a in unified_saves}
 
             col1, col2 = st.columns([3, 1])
-            choice = col1.selectbox("Charger un audit", list(audit_labels.keys()), label_visibility="collapsed")
+            choice = col1.selectbox("Charger un audit", list(unified_labels.keys()), label_visibility="collapsed", key="geo_archive_select")
 
-            if col2.button("VISUALISER", use_container_width=True, type="primary"):
+            if col2.button("VISUALISER", use_container_width=True, type="primary", key="geo_archive_btn"):
+                r = unified_labels[choice]
+                save_id = r["save_id"]
+                loaded = db.load_unified(save_id, user_email or "")
+                if not loaded:
+                    st.error("Sauvegarde introuvable ou accès refusé.")
+                else:
+                    crawl_data = loaded.get("crawl_data") or []
+                    geo_data = loaded.get("geo_data") or {}
+                    st.session_state.update({
+                        "results": crawl_data,
+                        "clusters": geo_data.get("clusters", {}),
+                        "target_url": loaded.get("site_url", ""),
+                        "geo_infra": geo_data.get("geo_infra", {}),
+                        "geo_score": geo_data.get("geo_score", 0),
+                        "current_ws": loaded.get("workspace", selected_ws),
+                        "crawl_stats": geo_data.get("stats", {}),
+                        "filtered_log": geo_data.get("filtered_log", []),
+                        "duplicate_log": geo_data.get("duplicate_log", []),
+                        "ai_accessibility": geo_data.get("ai_accessibility", {}),
+                        "start_urls": geo_data.get("start_urls", [loaded.get("site_url", "")]),
+                    })
+                    st.rerun()
+        elif filtered_audits:
+            # Anciennes archives (onglet audits)
+            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+            st.markdown(
+                '<p class="section-title">ARCHIVES (anciennes)</p>',
+                unsafe_allow_html=True
+            )
+            audit_labels = {f"{a.get('nom_site') or 'Audit'} ({a.get('date')})": a for a in filtered_audits}
+            col1, col2 = st.columns([3, 1])
+            choice = col1.selectbox("Charger un audit", list(audit_labels.keys()), label_visibility="collapsed", key="geo_legacy_select")
+            if col2.button("VISUALISER", use_container_width=True, type="primary", key="geo_legacy_btn"):
                 r = audit_labels[choice]
                 raw_data = zlib.decompress(base64.b64decode(r['data_compressed'])).decode('utf-8')
                 data = json.loads(raw_data)
@@ -1637,7 +1671,8 @@ def render_audit_geo():
                     "crawl_stats": data.get('stats', {}),
                     "filtered_log": data.get('filtered_log', []),
                     "duplicate_log": data.get('duplicate_log', []),
-                    "ai_accessibility": data.get('ai_accessibility', {})
+                    "ai_accessibility": data.get('ai_accessibility', {}),
+                    "start_urls": data.get("start_urls", [r['site_url']]),
                 })
                 st.rerun()
 
@@ -1823,8 +1858,7 @@ def render_audit_geo():
                         "samples": []
                     })
 
-                payload = {
-                    "results": clean_results,
+                geo_data = {
                     "clusters": compact_clusters,
                     "geo_infra": st.session_state.get('geo_infra', {}),
                     "geo_score": st.session_state.get('geo_score', 0),
@@ -1838,7 +1872,9 @@ def render_audit_geo():
                         "start_urls_count": st.session_state.crawl_stats.get('start_urls_count', 1)
                     },
                     "start_urls": st.session_state.get('start_urls', [st.session_state.target_url])[:5],
-                    "ai_accessibility": st.session_state.get('ai_accessibility', {})
+                    "ai_accessibility": st.session_state.get('ai_accessibility', {}),
+                    "filtered_log": st.session_state.get('filtered_log', []),
+                    "duplicate_log": st.session_state.get('duplicate_log', []),
                 }
 
                 if len(st.session_state.results) > max_pages_to_save:
@@ -1849,8 +1885,16 @@ def render_audit_geo():
                         unsafe_allow_html=True
                     )
 
-                db.save_audit(user_email, st.session_state.current_ws, st.session_state.target_url, s_name, payload)
-                st.toast("Audit sauvegarde")
+                db.save_unified(
+                    user_email,
+                    st.session_state.current_ws,
+                    st.session_state.target_url,
+                    s_name,
+                    crawl_data=clean_results,
+                    geo_data=geo_data,
+                    jsonld_data=None
+                )
+                st.toast("Audit sauvegardé (sauvegardes unifiées)")
 
             # Construction du graphe
             G = nx.DiGraph()
