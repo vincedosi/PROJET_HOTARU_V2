@@ -1,6 +1,7 @@
 # HOTARU — Version affichée dans l'app (header + footer + home)
-# À chaque push : incrémenter VERSION et mettre BUILD_DATE = date/heure du push.
+# À chaque push : incrémenter VERSION. BUILD_DATE = heure système au démarrage de l'app.
 
-VERSION = "3.0.42"
-BUILD_DATE = "2026-02-11 14:00"  # Date/heure du dernier push (mettre à jour à chaque push)
+VERSION = "3.0.43"
+import datetime
+BUILD_DATE = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 RELEASE_NOTE = "SmartScraper : nettoyage (SPA, force_selenium), support proxy requests + Selenium."
