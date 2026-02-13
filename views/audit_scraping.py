@@ -95,9 +95,9 @@ def render_scraping_debug_tab():
         )
     with col2:
         force_selenium = st.checkbox(
-            "FORCER SELENIUM",
+            "Utiliser Selenium",
             value=False,
-            help="Force l'utilisation de Selenium même si la détection automatique ne détecte pas de SPA.",
+            help="Activer Selenium pour les sites SPA ou protégés (plus lent).",
         )
 
     st.markdown("</div>", unsafe_allow_html=True)

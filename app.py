@@ -247,7 +247,7 @@ def main():
         render_eco_tab = get_render_eco_tab()
         render_eco_tab()
 
-    # FOOTER
+    # FOOTER (BUILD = date/heure du push, dans version.py)
     st.markdown(
         f'<div class="hotaru-footer">'
         f'<span>HOTARU ENTITY FORGE V2</span>'

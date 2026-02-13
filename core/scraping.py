@@ -1,8 +1,5 @@
 """
-SMART SCRAPER HYBRIDE (V12 - FIX BUGS CRITIQUES)
-- force_selenium : force Selenium sans détection SPA (évite logique circulaire)
-- Hiérarchie décisionnelle : force_selenium | use_selenium | détection SPA
-- Headers anti-bot (BMW, etc.), timeouts augmentés, délai aléatoire 1-3s
+SMART SCRAPER HYBRIDE — requests + Selenium, support proxy, cascade timeout.
 """
 import requests
 from bs4 import BeautifulSoup
@@ -10,7 +7,6 @@ from urllib.parse import urlparse, urljoin, urlunparse
 import time
 import re
 import json
-import random
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -20,11 +16,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 class SmartScraper:
-    def __init__(self, start_urls, max_urls=500, use_selenium=False, selenium_mode=None, log_callback=None, force_selenium=False):
+    def __init__(self, start_urls, max_urls=500, use_selenium=False, selenium_mode=None, log_callback=None, proxy=None):
         """
         Args:
             selenium_mode: "light" pour eager loading + wait JSON-LD, None sinon
-            force_selenium: force Selenium directement sans détection SPA
+            proxy: "http://ip:port" ou "http://user:pass@ip:port" pour requests et Selenium
         """
         # Support ancien format (string unique) et nouveau (liste)
         if isinstance(start_urls, str):
@@ -39,7 +35,8 @@ class SmartScraper:
         self.use_selenium = use_selenium
         self.selenium_mode = selenium_mode
         self.driver = None
-        self.log_callback = log_callback  # ← CRITIQUE : dès le début
+        self.log_callback = log_callback
+        self.proxy = proxy
 
         # Vérifier que toutes les URLs sont du même domaine
         for url in self.start_urls:
@@ -48,20 +45,11 @@ class SmartScraper:
                     f"Toutes les URLs doivent être du même domaine. Trouvé: {urlparse(url).netloc} au lieu de {self.domain}"
                 )
 
-        # Session requests (headers anti-bot pour contourner protections type BMW)
+        # Session requests (headers simplifiés)
         self.session = requests.Session()
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
-            "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Connection": "keep-alive",
-            "Upgrade-Insecure-Requests": "1",
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "none",
-            "Sec-Fetch-User": "?1",
-            "Cache-Control": "max-age=0",
+            "Accept-Language": "fr-FR,fr;q=0.9",
         })
 
         # Compteurs
@@ -78,6 +66,7 @@ class SmartScraper:
             "advanced_solutions_used": 0,
             "requests_html_successes": 0,
             "selenium_nonheadless_successes": 0,
+            "proxy_used": self.proxy or "Aucun",
         }
 
         self.filtered_log = []
@@ -92,37 +81,20 @@ class SmartScraper:
         self._log(f"Initialisation : {len(self.start_urls)} URL(s)")
         for i, url in enumerate(self.start_urls, 1):
             self._log(f"   {i}. {url}")
+        self._log(f"Proxy : {self.proxy if self.proxy else 'Aucun'}")
 
-        # ========== HIÉRARCHIE DÉCISIVE (pas de circulaire) ==========
-        if force_selenium or use_selenium:
-            self._log("Selenium FORCÉ par paramètre")
+        if use_selenium:
+            self._log("Mode Selenium activé")
             self.use_selenium = True
         else:
-            self._log("Détection SPA automatique...")
-            try:
-                spa_detected = self._is_spa_site()
-                if spa_detected:
-                    self._log("Site SPA détecté → Activation Selenium")
-                    self.use_selenium = True
-                else:
-                    self._log("Site classique → Mode requests")
-                    self.use_selenium = False
-            except Exception as e:
-                self._log(f"Erreur détection SPA : {e}")
-                self.use_selenium = False  # Fallback safe
-
-        # ========== INITIALISATION SELENIUM ==========
-        if self.use_selenium:
-            self._log("Démarrage Selenium...")
-            self._init_selenium()
-
-            if self.driver is None:
-                self._log("Selenium ÉCHEC → Fallback requests")
-                self.use_selenium = False
-            else:
-                self._log("Selenium OK")
-        else:
             self._log("Mode requests activé")
+            self.use_selenium = False
+
+        if self.use_selenium:
+            self._init_selenium()
+            if self.driver is None:
+                self._log("Selenium échoué → Fallback requests")
+                self.use_selenium = False
 
     def normalize_url(self, url):
         """Normalise une URL pour éviter les doublons."""
@@ -141,67 +113,6 @@ class SmartScraper:
         if self.log_callback:
             self.log_callback(message)
 
-    def _is_spa_site(self):
-        """Détecte si le site utilise un framework JS."""
-        try:
-            self._log("   → Téléchargement HTML...")
-            resp = self.session.get(self.start_urls[0], timeout=10)
-            html = resp.text
-            
-            self._log(f"   → HTML reçu ({len(html)} chars)")
-            
-            soup = BeautifulSoup(html, "html.parser")
-            
-            # ========== DÉTECTION 1 : SCRIPTS TYPE=MODULE ==========
-            module_scripts = soup.find_all("script", type="module")
-            if module_scripts:
-                self._log(f"    {len(module_scripts)} script(s) ES module → SPA")
-                return True
-            
-            # ========== DÉTECTION 2 : SCRIPTS SRC ==========
-            self._log("   → Analyse scripts src...")
-            spa_patterns = ["_nuxt/", "__next/", "webpack", "vite", "/build/", ".module."]
-            
-            for script in soup.find_all("script", src=True):
-                src = script.get("src", "").lower()
-                for pattern in spa_patterns:
-                    if pattern in src:
-                        self._log(f"    Pattern '{pattern}' → SPA")
-                        return True
-            
-            # ========== DÉTECTION 3 : LINK MODULEPRELOAD ==========
-            self._log("   → Analyse modulepreload...")
-            for link in soup.find_all("link"):
-                rel = link.get("rel", [])
-                if isinstance(rel, str):
-                    rel = [rel]
-                
-                if "modulepreload" in rel:
-                    self._log(f"    modulepreload → SPA")
-                    return True
-            
-            # ========== DÉTECTION 4 : PATTERNS TEXTE ==========
-            self._log("   → Patterns texte...")
-            html_lower = html.lower()
-            
-            critical_patterns = {
-                "_nuxt": "Nuxt",
-                "__next": "Next.js",
-                "data-reactroot": "React",
-            }
-            
-            for pattern, framework in critical_patterns.items():
-                if pattern in html_lower:
-                    self._log(f"    '{pattern}' ({framework}) → SPA")
-                    return True
-            
-            self._log("    Pas de SPA détecté")
-            return False
-            
-        except Exception as e:
-            self._log(f"    Erreur : {e}")
-            return False
-
     def _init_selenium(self):
         """Initialise Selenium - Compatible Streamlit Cloud."""
         try:
@@ -217,6 +128,10 @@ class SmartScraper:
             if getattr(self, "selenium_mode", None) == "light":
                 chrome_options.page_load_strategy = "eager"
                 self._log("    Mode Selenium Light activé (eager loading)")
+
+            if getattr(self, "proxy", None):
+                self._log(f"   Proxy Selenium : {self.proxy}")
+                chrome_options.add_argument(f"--proxy-server={self.proxy}")
 
             # Recherche chromium installé via packages.txt
             import shutil
@@ -387,9 +302,14 @@ class SmartScraper:
         """Méthode A : requests classique. Retourne le dict résultat ou lève Timeout/RequestException."""
         start_time = time.time()
         self._log(f" [Requests] {url}")
-        resp = self.session.get(url, timeout=15)
+        request_proxies = {}
+        if self.proxy:
+            request_proxies = {"http": self.proxy, "https": self.proxy}
+            self._log(f"   Proxy : {self.proxy}")
+        resp = self.session.get(url, timeout=15, proxies=request_proxies)
         response_time = time.time() - start_time
         if resp.status_code != 200:
+            self._log(f"   HTTP {resp.status_code}")
             self.stats["errors"] += 1
             raise requests.exceptions.HTTPError(f"HTTP {resp.status_code}")
         soup = BeautifulSoup(resp.content, "html.parser")
@@ -729,8 +649,6 @@ class SmartScraper:
                             queue.append(link)
                 else:
                     self.stats["pages_skipped"] += 1
-
-                time.sleep(random.uniform(1, 3))  # Délai anti-bot aléatoire 1-3s
 
         finally:
             if self.driver:
