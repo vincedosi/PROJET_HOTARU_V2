@@ -400,15 +400,32 @@ def check_geo_infrastructure(base_url, crawl_results=None):
     return results, score
 
 
+def _is_html_response(content, content_type_header=""):
+    """Detecte si la reponse est une page HTML au lieu d'un fichier texte."""
+    if not content or not content.strip():
+        return False
+    ct = (content_type_header or "").lower()
+    if "text/html" in ct:
+        return True
+    content_lower = content.strip().lower()[:500]
+    if content_lower.startswith("<!") or "<html" in content_lower or "<!doctype" in content_lower:
+        return True
+    return False
+
+
 def fetch_file_content(base_url, filename):
-    """Recupere le contenu d'un fichier (robots.txt, llms.txt) sur le site"""
+    """Recupere le contenu d'un fichier (robots.txt, llms.txt) sur le site.
+    Si le serveur renvoie une page HTML (200), considere comme non trouve."""
     url = f"{base_url.rstrip('/')}/{filename}"
     try:
-        r = requests.get(url, timeout=5)
-        if r.status_code == 200:
-            return r.text.strip(), True
-        else:
+        r = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0 (compatible; HotaruBot/1.0)"})
+        if r.status_code != 200:
             return f"# {filename} non trouve (HTTP {r.status_code})", False
+        text = r.text.strip()
+        content_type = r.headers.get("Content-Type", "")
+        if _is_html_response(text, content_type):
+            return f"# Le serveur a renvoye une page HTML au lieu de {filename}\n# (URL : {url})", False
+        return text, True
     except Exception as e:
         return f"# Erreur de recuperation : {e}", False
 
