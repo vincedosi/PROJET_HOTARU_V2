@@ -361,6 +361,8 @@ def render_master_tab():
 
 def _render_master_data_content():
     """Contenu de l'onglet Données (Master)."""
+    if "master_data" not in st.session_state:
+        st.session_state.master_data = None
     _ensure_search_state()
     # =========================================================================
     # ETAPE 1 : RECHERCHE & ENRICHISSEMENT
@@ -761,40 +763,58 @@ def _render_master_data_content():
         unsafe_allow_html=True,
     )
 
-    col1, col2, col3 = st.columns([1, 1, 1])
+    st.caption("Ce qui est sauvegardé est uniquement le **template** (structure vide). L’option « Remplir les champs » est un aperçu visuel uniquement.")
+    col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
 
-    with col2:
+    with col_btn2:
         if st.button(
-            "GENERER LE JSON-LD",
+            "GENERER LE JSON-LD AVEC MISTRAL",
             type="primary",
             use_container_width=True,
             key="generate_btn",
         ):
-            with st.spinner("Generation en cours..."):
-                builder = TemplateBuilder()
-                jsonld_master = builder.generate_jsonld(
-                    master_data=master, dynamic_data=None, page_data=None
-                )
-                st.session_state.jsonld_master = jsonld_master
-                st.success("JSON-LD Master genere")
-                st.rerun()
+            mistral_key = _get_mistral_key()
+            if not mistral_key:
+                st.error("Clé API Mistral manquante (st.secrets['mistral']['api_key']).")
+            else:
+                with st.spinner("Génération du template (structure vide)..."):
+                    template_str, err = MasterDataHandler.generate_organization_template_mistral(mistral_key)
+                    if template_str:
+                        st.session_state.jsonld_master = template_str
+                        st.success("Template JSON-LD généré (champs vides). Ce template est ce qui sera sauvegardé.")
+                        st.rerun()
+                    else:
+                        st.error(f"Erreur : {err or 'Inconnue'}")
 
     if "jsonld_master" in st.session_state and st.session_state.jsonld_master:
         st.markdown("<br>", unsafe_allow_html=True)
+        fill_preview = st.checkbox(
+            "Remplir les champs (aperçu uniquement — non sauvegardé)",
+            value=False,
+            key="master_fill_preview",
+        )
         st.markdown('<div class="section-container">', unsafe_allow_html=True)
 
         col1, col2 = st.columns([3, 1])
 
         with col1:
-            st.code(
-                st.session_state.jsonld_master, language="json", line_numbers=True
-            )
+            if fill_preview and master:
+                filled = TemplateBuilder().generate_jsonld(
+                    master_data=master, dynamic_data=None, page_data=None
+                )
+                st.caption("Aperçu avec les données Master (non enregistré). Téléchargement / sauvegarde = template vide.")
+                st.code(filled, language="json", line_numbers=True)
+            else:
+                st.caption("Template (structure vide) — ce qui est enregistré et téléchargé.")
+                st.code(
+                    st.session_state.jsonld_master, language="json", line_numbers=True
+                )
 
         with col2:
             st.download_button(
                 label="TELECHARGER",
                 data=st.session_state.jsonld_master,
-                file_name=f"master_{master.brand_name.lower().replace(' ', '_')}.json",
+                file_name=f"master_template_{(master.brand_name or 'org').lower().replace(' ', '_')}.json",
                 mime="application/ld+json",
                 use_container_width=True,
             )
@@ -802,7 +822,7 @@ def _render_master_data_content():
             st.metric("LIGNES", len(st.session_state.jsonld_master.split("\n")))
             st.metric("TAILLE", f"{len(st.session_state.jsonld_master)} chars")
 
-            st.caption("Sauvegarde : utilisez le bouton **SAUVEGARDER** en haut de la page (enregistre audit + JSON-LD + MASTER).")
+            st.caption("Sauvegarde : **SAUVEGARDER** en haut enregistre le **template** (pas l’aperçu rempli).")
             if st.button("NOUVEAU", use_container_width=True, key="reset_btn"):
                 st.session_state.master_data = None
                 st.session_state.pop("jsonld_master", None)

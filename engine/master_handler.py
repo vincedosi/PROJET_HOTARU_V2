@@ -5,7 +5,7 @@ Gestion des données Master avec enrichissement Wikidata + Mistral
 
 import requests
 import json
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Tuple
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 
@@ -418,6 +418,69 @@ IMPORTANT :
         except Exception as e:
             master.errors.append(f"[Mistral] Exception: {str(e)}")
         return master
+
+    @staticmethod
+    def generate_organization_template_mistral(api_key: str) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Génère un template JSON-LD Schema.org Organization (structure avec champs vides).
+        À sauvegarder tel quel ; le remplissage des champs est optionnel et visuel uniquement.
+        Returns:
+            (jsonld_template_string, None) en succès, (None, error_message) en échec.
+        """
+        if not api_key or not api_key.strip():
+            return None, "Clé API Mistral manquante"
+        prompt = """Tu es un expert Schema.org. Génère un JSON-LD complet pour une Organisation (Schema.org type Organization ou Corporation).
+
+RÈGLE ABSOLUE : tous les champs doivent avoir une valeur VIDE : chaîne vide "" pour les strings, et pour les objets imbriqués (address, logo, etc.) utilise la structure complète mais avec des chaînes vides "" pour chaque propriété.
+
+Inclus au minimum :
+- @context, @type
+- name, legalName, description, slogan, url
+- logo (ImageObject avec url, width, height vides)
+- identifier (PropertyValue pour SIREN, SIRET si pertinent)
+- telephone, email, faxNumber
+- address (PostalAddress complète avec streetAddress, addressLocality, postalCode, addressRegion, addressCountry)
+- geo (GeoCoordinates avec latitude, longitude)
+- sameAs (tableau vide ou avec URLs vides)
+- foundingDate, founder, numberOfEmployees, parentOrganization
+- contactPoint (ContactPoint avec telephone, email, contactType, areaServed)
+
+Réponds UNIQUEMENT avec le JSON valide, sans texte avant ou après, sans balises markdown. Toutes les valeurs doivent être "" ou des structures avec valeurs ""."""
+        try:
+            response = requests.post(
+                MasterDataHandler.MISTRAL_API_URL,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": MasterDataHandler.MISTRAL_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.1,
+                    "max_tokens": 4000,
+                },
+                timeout=45,
+            )
+            if response.status_code != 200:
+                err = response.text[:400] if response.text else str(response.status_code)
+                return None, f"Mistral API erreur {response.status_code}: {err}"
+            data = response.json()
+            content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
+            if not content or not str(content).strip():
+                return None, "Réponse Mistral vide"
+            content_clean = (
+                str(content).replace("```json", "").replace("```", "").strip()
+            )
+            parsed = json.loads(content_clean)
+            if not isinstance(parsed, dict):
+                return None, "Réponse Mistral : JSON invalide (pas un objet)"
+            return json.dumps(parsed, ensure_ascii=False, indent=2), None
+        except json.JSONDecodeError as e:
+            return None, f"JSON invalide: {e}"
+        except requests.RequestException as e:
+            return None, f"Erreur réseau: {e}"
+        except Exception as e:
+            return None, str(e)
 
 
 __all__ = ['MasterData', 'MasterDataHandler', 'WikidataAPI']
