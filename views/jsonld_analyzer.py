@@ -22,6 +22,7 @@ from services.jsonld_service import (
     build_jsonld_graph_html,
     FLEXIBLE_TAGS,
 )
+from views.master import _render_master_data_content
 
 
 # (Logique extraite dans services/jsonld_service.py)
@@ -418,10 +419,10 @@ def render_jsonld_analyzer_tab():
         if num_clusters == 0:
             st.info("Lancez une nouvelle analyse avec une URL différente ou plus de pages.")
         else:
-            tab_names = ["GRAPHE", "TABLEAU", "EXPORT", "FUSION"] + (["Logs"] if logs else [])
+            tab_names = ["GRAPHE", "MASTER", "TABLEAU", "EXPORT", "FUSION"] + (["Logs"] if logs else [])
             tabs = st.tabs(tab_names)
-            tab_graphe, tab_tableau, tab_export, tab_fusion = tabs[0], tabs[1], tabs[2], tabs[3]
-            tab_logs = tabs[4] if logs else None
+            tab_graphe, tab_master, tab_tableau, tab_export, tab_fusion = tabs[0], tabs[1], tabs[2], tabs[3], tabs[4]
+            tab_logs = tabs[5] if logs else None
 
         if num_clusters > 0:
             with tab_graphe:
@@ -626,6 +627,36 @@ def render_jsonld_analyzer_tab():
                                 st.markdown(f"- [{u}]({u})")
                             if len(urls_in_cluster) > 5:
                                 st.caption(f"... et {len(urls_in_cluster) - 5} de plus.")
+
+            with tab_master:
+                st.markdown(
+                    "<p style='color:#0f172a; font-weight:700; font-size:1rem; margin:0 0 0.5rem 0;'>Master Data</p>",
+                    unsafe_allow_html=True,
+                )
+                st.caption("Choisissez la page / le nœud principal utilisé pour le Master (identification, enrichissement, JSON-LD, audit). Par défaut : nœud principal (premier cluster).")
+                master_options = [
+                    f"{i + 1}. {(cluster_labels[i].get('model_name') or '').strip() or f'Cluster {i + 1}'} ({len(cluster_urls[i])} p.)"
+                    for i in range(num_clusters)
+                ]
+                master_default = min(
+                    st.session_state.get("jsonld_master_cluster_idx", 0),
+                    len(master_options) - 1 if master_options else 0,
+                )
+                master_sel = st.selectbox(
+                    "Page / nœud principal pour le Master",
+                    master_options,
+                    index=max(0, master_default),
+                    key="jsonld_master_node_select",
+                )
+                if master_sel and master_options:
+                    master_idx = master_options.index(master_sel)
+                    st.session_state["jsonld_master_cluster_idx"] = master_idx
+                    urls_master = cluster_urls[master_idx] if master_idx < len(cluster_urls) else []
+                    st.session_state["target_url"] = data.get("site_url") or (urls_master[0] if urls_master else "")
+                else:
+                    st.session_state["target_url"] = data.get("site_url", "")
+                st.markdown("---")
+                _render_master_data_content()
 
             with tab_fusion:
                 st.markdown(

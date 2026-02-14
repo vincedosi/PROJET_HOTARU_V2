@@ -410,16 +410,9 @@ def main():
             render_scraping_debug_tab()
 
     with tab_jsonld:
-        sub_master, sub_analyzer = st.tabs([
-            "Master",
-            "Analyse JSON-LD",
-        ])
-        with sub_master:
-            render_master_tab = get_render_master_tab()
-            render_master_tab()
-        with sub_analyzer:
-            render_jsonld_analyzer_tab = get_render_jsonld_analyzer_tab()
-            render_jsonld_analyzer_tab()
+        # Master est intégré dans Analyse JSON-LD (onglet MASTER après GRAPHE, avant TABLEAU)
+        render_jsonld_analyzer_tab = get_render_jsonld_analyzer_tab()
+        render_jsonld_analyzer_tab()
 
     with tab_eco:
         render_eco_tab = get_render_eco_tab()
