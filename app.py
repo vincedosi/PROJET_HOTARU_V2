@@ -183,14 +183,21 @@ def main():
     )
     st.markdown('<div class="hotaru-header-divider"></div>', unsafe_allow_html=True)
 
-    # Workspace (niveau LOGOUT) + LOGOUT
+    # Workspace (niveau LOGOUT) + LOGOUT — inclut audits ET unified_saves pour afficher toutes les données
     cache_version = st.session_state.get("audit_cache_version", 0)
-    all_audits = _cached_load_user_audits(get_current_user_email() or "", cache_version)
+    user_email = get_current_user_email() or ""
+    all_audits = _cached_load_user_audits(user_email, cache_version)
+    db = get_cached_database()
+    unified_list = []
+    if getattr(db, "sheet_file", None):
+        unified_list = db.list_unified_saves(user_email, workspace=None) or []
     def _norm_ws(w):
         s = str(w or "").strip()
         return "Non classé" if not s or s in ("Non classé", "Uncategorized") else s
-    ws_set = {_norm_ws(a.get("workspace")) for a in all_audits}
+    ws_set = {_norm_ws(a.get("workspace")) for a in all_audits} | {_norm_ws(u.get("workspace")) for u in unified_list}
     ws_list = ["Nouveau"] if not ws_set else sorted(ws_set) + ["+ Créer Nouveau"]
+    if st.session_state.get("audit_workspace_select") not in ws_list:
+        st.session_state["audit_workspace_select"] = ws_list[0]
     c_ws, c_user = st.columns([2, 1])
     with c_ws:
         st.selectbox(

@@ -130,6 +130,8 @@ Un **onglet Google Sheets** unique pour Audit GEO et Analyse JSON-LD :
 - **Onglet `jsonld` :** site_url, model_id, model_name, page_count, url_pattern, sample_urls, dom_structure, existing_jsonld, recommended_schema, optimized_jsonld, created_at, workspace, user_email. (Legacy ; sauvegarde unifiée complète en plus.)
 - **Onglet `unified_saves` :** 25 colonnes (voir ci-dessus). Filtrage par `user_email` et optionnellement par `workspace` pour les listes.
 
+**Source de vérité du dashboard :** Le dash pointe vers **unified_saves** pour la liste des workspaces (header), le chargement/sauvegarde des audits (Audit GEO) et le chargement/sauvegarde JSON-LD (Analyse JSON-LD). L’onglet `audits` reste en lecture pour le fallback « anciennes archives » et pour l’onglet Master (liste + colonne master_json).
+
 ---
 
 ## Structure SaaS et préparation API
