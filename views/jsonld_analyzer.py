@@ -162,59 +162,8 @@ def render_jsonld_analyzer_tab():
                     st.rerun()
             st.markdown("---")
 
-        # --- Anciennes (onglet jsonld) ---
-        sites = db.list_jsonld_sites(user_email) if user_email and db.client else []
-
-        if not sites and not unified_saves:
-            st.caption("Aucune donnée enregistrée pour votre compte. Lancez une analyse puis enregistrez dans Google Sheets.")
-        elif sites:
-            st.markdown(
-                '<p style="font-weight:700; font-size:0.85rem; text-transform:uppercase; letter-spacing:0.05em; margin:0 0 0.5rem 0;">Anciennes (onglet jsonld)</p>',
-                unsafe_allow_html=True,
-            )
-            opt_labels = [f"{s['site_url']} — {s['workspace']}" for s in sites]
-            sel_idx = st.selectbox("Sélectionner un site enregistré", range(len(opt_labels)), format_func=lambda i: opt_labels[i], key="jsonld_load_site")
-            if st.button("CHARGER DEPUIS GOOGLE SHEETS", type="secondary", use_container_width=True, key="jsonld_load_btn"):
-                s = sites[sel_idx]
-                models = db.load_jsonld_models(user_email, site_url=s["site_url"])
-                models = [m for m in models if (m.get("workspace") or "").strip() == (s.get("workspace") or "").strip()]
-                if not models:
-                    st.warning("Aucun modèle trouvé pour ce site et workspace.")
-                else:
-                    domain = urlparse(s["site_url"]).netloc or "site"
-                    cluster_labels = []
-                    cluster_urls = []
-                    cluster_dom = []
-                    cluster_jsonld = []
-                    total_pages = 0
-                    for m in models:
-                        cluster_labels.append({"model_name": m.get("model_name") or "Cluster", "schema_type": m.get("recommended_schema") or "WebPage"})
-                        urls_str = m.get("sample_urls") or "[]"
-                        try:
-                            urls = json.loads(urls_str) if isinstance(urls_str, str) else urls_str
-                        except json.JSONDecodeError:
-                            try:
-                                raw = __import__("base64").b64decode(urls_str)
-                                urls = json.loads(__import__("zlib").decompress(raw).decode())
-                            except Exception:
-                                urls = []
-                        cluster_urls.append(urls if isinstance(urls, list) else [])
-                        cluster_dom.append(db._decompress_from_sheet(m.get("dom_structure") or "") or {})
-                        cluster_jsonld.append(db._decompress_from_sheet(m.get("existing_jsonld") or ""))
-                        total_pages += m.get("page_count", 0)
-                    st.session_state["jsonld_analyzer_results"] = {
-                        "site_url": s["site_url"],
-                        "domain": domain,
-                        "total_pages": total_pages,
-                        "cluster_labels": cluster_labels,
-                        "cluster_urls": cluster_urls,
-                        "cluster_dom_structures": cluster_dom,
-                        "cluster_jsonld": cluster_jsonld,
-                        "logs": [],
-                        "loaded_from_sheet": True,
-                    }
-                    st.success("Données chargées.")
-                    st.rerun()
+        if not unified_saves:
+            st.caption("Aucune donnée enregistrée pour votre compte. Lancez une analyse puis enregistrez dans Google Sheets (sauvegardes unifiées).")
 
     with tab_new:
         url_input = st.text_input(
@@ -973,50 +922,8 @@ def render_jsonld_analyzer_tab():
                             st.rerun()
                         else:
                             st.warning("Sauvegarde introuvable ou sans données JSON-LD.")
-                _sites = _db.list_jsonld_sites(_user_email) if _user_email and _db.client else []
-                if _sites:
-                    if _unified:
-                        st.caption("Anciennes (onglet jsonld) :")
-                    _opt_labels = [f"{s['site_url']} — {s['workspace']}" for s in _sites]
-                    _sel_idx = st.selectbox("Site enregistré", range(len(_opt_labels)), format_func=lambda i: _opt_labels[i], key="jsonld_load_export")
-                    if st.button("CHARGER DEPUIS GOOGLE SHEETS", use_container_width=True, key="jsonld_load_export_btn"):
-                        _s = _sites[_sel_idx]
-                        _models = _db.load_jsonld_models(_user_email, site_url=_s["site_url"])
-                        _models = [m for m in _models if (m.get("workspace") or "").strip() == (_s.get("workspace") or "").strip()]
-                        if _models:
-                            _domain = urlparse(_s["site_url"]).netloc or "site"
-                            _labels = []
-                            _urls = []
-                            _doms = []
-                            _jlds = []
-                            for i, m in enumerate(_models):
-                                _labels.append({"model_name": m.get("model_name") or "Cluster", "schema_type": m.get("recommended_schema") or "WebPage"})
-                                _us = m.get("sample_urls") or "[]"
-                                try:
-                                    _u = json.loads(_us) if isinstance(_us, str) else _us
-                                except json.JSONDecodeError:
-                                    try:
-                                        _u = json.loads(__import__("zlib").decompress(__import__("base64").b64decode(_us)).decode())
-                                    except Exception:
-                                        _u = []
-                                _urls.append(_u if isinstance(_u, list) else [])
-                                _doms.append(_db._decompress_from_sheet(m.get("dom_structure") or "") or {})
-                                _jlds.append(_db._decompress_from_sheet(m.get("existing_jsonld") or ""))
-                                _opt = _db._decompress_from_sheet(m.get("optimized_jsonld") or "")
-                                st.session_state[f"optimized_jsonld_{i}"] = _opt if isinstance(_opt, dict) else None
-                            st.session_state["jsonld_analyzer_results"] = {
-                                "site_url": _s["site_url"], "domain": _domain,
-                                "total_pages": sum(m.get("page_count", 0) for m in _models),
-                                "cluster_labels": _labels, "cluster_urls": _urls,
-                                "cluster_dom_structures": _doms, "cluster_jsonld": _jlds,
-                                "logs": [], "loaded_from_sheet": True,
-                            }
-                            st.success("Données chargées.")
-                            st.rerun()
-                        else:
-                            st.warning("Aucun modèle trouvé pour ce site et workspace.")
-                else:
-                    st.caption("Aucune donnée enregistrée.")
+                if not _unified:
+                    st.caption("Aucune sauvegarde unifiée avec JSON-LD. Lancez une analyse puis enregistrez.")
                 st.markdown("---")
 
                 # 02 — Génération en masse
@@ -1156,7 +1063,6 @@ def render_jsonld_analyzer_tab():
                 if st.button("ENREGISTRER DANS GOOGLE SHEETS", type="primary", use_container_width=True, key="jsonld_save_btn"):
                     user_email = get_current_user_email() or ""
                     db = AuditDatabase()
-                    ok_legacy = db.save_jsonld_models(user_email, site_url, workspace, models_data)
                     nom_site = (data.get("domain") or domain or "Site")[:200]
                     crawl_for_unified = st.session_state.get("jsonld_analyzer_crawl_results") or []
                     ok_unified = False
@@ -1165,17 +1071,14 @@ def render_jsonld_analyzer_tab():
                             db.save_unified(user_email, workspace, site_url, nom_site, crawl_data=crawl_for_unified, geo_data=None, jsonld_data=models_data)
                             ok_unified = True
                         except Exception as e:
-                            if ok_legacy:
-                                st.warning("Enregistré dans l'onglet 'jsonld'. Sauvegarde unifiée en échec: " + str(e)[:80])
-                            else:
-                                st.error("Sauvegarde unifiée en échec: " + str(e)[:200])
-                    if ok_legacy or ok_unified:
-                        st.success("Enregistré dans Google Sheets" + (" (sauvegardes unifiées)" if ok_unified else " (onglet jsonld)."))
+                            st.error("Sauvegarde unifiée en échec: " + str(e)[:200])
+                    if ok_unified:
+                        st.success("Enregistré dans les sauvegardes unifiées (unified_saves).")
                         try:
                             st.toast("Enregistrement réussi")
                         except Exception:
                             pass
-                    elif not ok_legacy:
+                    else:
                         st.error("Échec de l'enregistrement. Vérifiez la config GCP (secrets) et l'URL du Sheet.")
 
                 st.markdown(

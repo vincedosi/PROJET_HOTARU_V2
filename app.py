@@ -90,14 +90,80 @@ def get_cached_database():
     return st.session_state.db_instance
 
 
-@st.cache_data(ttl=60, show_spinner=False)
-def _cached_load_user_audits(user_email: str, _cache_version: int = 0):
-    """
-    Cache 60s les audits utilisateur pour éviter d'appeler Google Sheets à chaque run.
-    _cache_version : incrémenté après save pour invalider le cache.
-    """
-    db = get_cached_database()
-    return db.load_user_audits(user_email or "")
+# =============================================================================
+# GLOBAL SAVE (barre SaaS — bouton SAUVEGARDER)
+# =============================================================================
+def _do_global_save(session_state, db, user_email: str, workspace: str):
+    """Sauvegarde l'état courant (audit GEO et/ou JSON-LD) dans unified_saves."""
+    if not getattr(db, "sheet_file", None):
+        st.error("Connexion Google Sheet indisponible.")
+        return
+    target_url = (session_state.get("target_url") or "").strip()
+    results = session_state.get("results") or []
+    clusters = session_state.get("clusters") or []
+    nom_site = (session_state.get("target_url") or "Site").replace("https://", "").replace("http://", "").split("/")[0][:200] or "Site"
+    if not target_url:
+        st.warning("Aucune URL de site en mémoire. Lancez un audit ou chargez une sauvegarde puis VALIDER.")
+        return
+    max_pages = 800
+    crawl_data = results[:max_pages] if results else []
+    geo_data = {
+        "clusters": clusters,
+        "geo_infra": session_state.get("geo_infra", {}),
+        "geo_score": session_state.get("geo_score", 0),
+        "stats": session_state.get("crawl_stats", {}),
+        "start_urls": session_state.get("start_urls", [target_url])[:5],
+        "ai_accessibility": session_state.get("ai_accessibility", {}),
+        "filtered_log": session_state.get("filtered_log", []),
+        "duplicate_log": session_state.get("duplicate_log", []),
+        "graph_show_ai_score": session_state.get("geo_graph_ai_toggle", False),
+        "geo_ai_report": session_state.get("geo_ai_report", ""),
+        "mistral_robots_raw": session_state.get("geo_robots_txt_raw", ""),
+        "mistral_robots_found": session_state.get("geo_robots_txt_found", False),
+        "mistral_robots_code": session_state.get("mistral_robots_code", ""),
+        "mistral_robots_analysis": session_state.get("mistral_robots_analysis", ""),
+        "mistral_llms_raw": session_state.get("geo_llms_txt_raw", ""),
+        "mistral_llms_found": session_state.get("geo_llms_txt_found", False),
+        "mistral_llms_code": session_state.get("mistral_llms_code", ""),
+    }
+    jsonld_data = None
+    if session_state.get("jsonld_analyzer_results"):
+        num_clusters = len(session_state["jsonld_analyzer_results"].get("cluster_labels", []))
+        models_data = []
+        for i in range(num_clusters):
+            opt = session_state.get(f"optimized_jsonld_{i}")
+            labels = session_state["jsonld_analyzer_results"].get("cluster_labels", [])
+            urls = session_state["jsonld_analyzer_results"].get("cluster_urls", [])
+            dom = session_state["jsonld_analyzer_results"].get("cluster_dom_structures", [])
+            jld = session_state["jsonld_analyzer_results"].get("cluster_jsonld", [])
+            label = labels[i] if i < len(labels) else {}
+            models_data.append({
+                "model_name": label.get("model_name", "Cluster"),
+                "schema_type": label.get("schema_type", "WebPage"),
+                "page_count": len(urls[i]) if i < len(urls) else 0,
+                "sample_urls": urls[i] if i < len(urls) else [],
+                "dom_structure": dom[i] if i < len(dom) else {},
+                "existing_jsonld": jld[i] if i < len(jld) else None,
+                "optimized_jsonld": opt,
+            })
+        if models_data:
+            jsonld_data = models_data
+    try:
+        db.save_unified(
+            user_email,
+            workspace or "Non classé",
+            target_url,
+            nom_site,
+            crawl_data=crawl_data,
+            geo_data=geo_data,
+            jsonld_data=jsonld_data,
+        )
+        st.toast("Sauvegarde enregistrée dans unified_saves.")
+        from core.runtime import get_session
+        s = get_session()
+        s["audit_cache_version"] = s.get("audit_cache_version", 0) + 1
+    except Exception as e:
+        st.error("Erreur lors de la sauvegarde: " + str(e)[:150])
 
 
 # =============================================================================
@@ -183,10 +249,8 @@ def main():
     )
     st.markdown('<div class="hotaru-header-divider"></div>', unsafe_allow_html=True)
 
-    # Workspace (niveau LOGOUT) + LOGOUT — inclut audits ET unified_saves pour afficher toutes les données
-    cache_version = st.session_state.get("audit_cache_version", 0)
+    # ========== BARRE SAAS : Workspace + Sauvegarde (Valider) + Sauvegarder + Déconnexion ==========
     user_email = get_current_user_email() or ""
-    all_audits = _cached_load_user_audits(user_email, cache_version)
     db = get_cached_database()
     unified_list = []
     if getattr(db, "sheet_file", None):
@@ -194,23 +258,128 @@ def main():
     def _norm_ws(w):
         s = str(w or "").strip()
         return "Non classé" if not s or s in ("Non classé", "Uncategorized") else s
-    ws_set = {_norm_ws(a.get("workspace")) for a in all_audits} | {_norm_ws(u.get("workspace")) for u in unified_list}
+    ws_set = {_norm_ws(u.get("workspace")) for u in unified_list}
     ws_list = ["Nouveau"] if not ws_set else sorted(ws_set) + ["+ Créer Nouveau"]
     if st.session_state.get("audit_workspace_select") not in ws_list:
         st.session_state["audit_workspace_select"] = ws_list[0]
-    c_ws, c_user = st.columns([2, 1])
-    with c_ws:
+    selected_ws = st.session_state.get("audit_workspace_select", "Nouveau")
+    if selected_ws in ("+ Créer Nouveau", "+ Creer Nouveau"):
+        selected_ws = "Non classé"
+    saves_in_ws = [u for u in unified_list if _norm_ws(u.get("workspace")) == selected_ws]
+    save_options = ["— Aucune —"] + [
+        f"{u.get('nom_site') or 'Sauvegarde'} ({u.get('created_at')})"
+        for u in saves_in_ws
+    ]
+    save_to_id = {"— Aucune —": None}
+    for u in saves_in_ws:
+        label = f"{u.get('nom_site') or 'Sauvegarde'} ({u.get('created_at')})"
+        save_to_id[label] = u.get("save_id")
+    if st.session_state.get("header_save_select") not in save_options:
+        st.session_state["header_save_select"] = save_options[0]
+
+    row1_col_ws, row1_col_logout = st.columns([3, 1])
+    with row1_col_ws:
         st.selectbox(
-            "Projets (Workspace)",
+            "Choix du workspace",
             ws_list,
             key="audit_workspace_select",
-            label_visibility="collapsed",
-            help="Choisissez le projet / workspace pour filtrer les audits.",
+            label_visibility="visible",
+            help="Projet / workspace pour filtrer les sauvegardes.",
         )
-    with c_user:
-        if st.button("DÉCONNEXION", use_container_width=True):
+    with row1_col_logout:
+        if st.button("DÉCONNEXION", use_container_width=True, key="header_logout"):
             st.session_state.clear()
             st.rerun()
+
+    row2_col_save, row2_valider, row2_sauvegarder = st.columns([3, 1, 1])
+    with row2_col_save:
+        st.selectbox(
+            "Choix de la sauvegarde",
+            save_options,
+            key="header_save_select",
+            label_visibility="visible",
+            help="Sélectionnez une sauvegarde puis cliquez Valider pour la charger.",
+        )
+    with row2_valider:
+        st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
+        valider_clicked = st.button("VALIDER", use_container_width=True, type="primary", key="header_valider")
+    with row2_sauvegarder:
+        st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
+        sauvegarder_clicked = st.button("SAUVEGARDER", use_container_width=True, key="header_sauvegarder")
+
+    if valider_clicked:
+        chosen_label = st.session_state.get("header_save_select", "— Aucune —")
+        save_id = save_to_id.get(chosen_label)
+        if save_id and user_email:
+            loaded = db.load_unified(save_id, user_email)
+            if loaded:
+                selected_ws_loaded = loaded.get("workspace", selected_ws)
+                crawl_data = loaded.get("crawl_data") or []
+                geo_data = loaded.get("geo_data") or {}
+                st.session_state.update({
+                    "results": crawl_data,
+                    "clusters": geo_data.get("clusters", []),
+                    "target_url": loaded.get("site_url", ""),
+                    "geo_infra": geo_data.get("geo_infra", {}),
+                    "geo_score": geo_data.get("geo_score", 0),
+                    "current_ws": selected_ws_loaded,
+                    "crawl_stats": geo_data.get("stats", {}),
+                    "filtered_log": geo_data.get("filtered_log", []),
+                    "duplicate_log": geo_data.get("duplicate_log", []),
+                    "ai_accessibility": geo_data.get("ai_accessibility", {}),
+                    "start_urls": geo_data.get("start_urls", [loaded.get("site_url", "")]),
+                    "geo_graph_ai_toggle": geo_data.get("graph_show_ai_score", False),
+                    "geo_ai_report": geo_data.get("geo_ai_report", ""),
+                    "geo_robots_txt_raw": geo_data.get("mistral_robots_raw", ""),
+                    "geo_robots_txt_found": geo_data.get("mistral_robots_found", False),
+                    "mistral_robots_code": geo_data.get("mistral_robots_code", ""),
+                    "mistral_robots_analysis": geo_data.get("mistral_robots_analysis", ""),
+                    "geo_llms_txt_raw": geo_data.get("mistral_llms_raw", ""),
+                    "geo_llms_txt_found": geo_data.get("mistral_llms_found", False),
+                    "mistral_llms_code": geo_data.get("mistral_llms_code", ""),
+                })
+                jsonld_data = loaded.get("jsonld_data") or []
+                if jsonld_data:
+                    from urllib.parse import urlparse
+                    site_url = loaded.get("site_url", "")
+                    domain = urlparse(site_url).netloc or "site"
+                    cluster_labels = []
+                    cluster_urls = []
+                    cluster_dom = []
+                    cluster_jsonld = []
+                    for m in jsonld_data:
+                        cluster_labels.append({"model_name": m.get("model_name") or "Cluster", "schema_type": m.get("schema_type") or m.get("recommended_schema") or "WebPage"})
+                        urls = m.get("sample_urls") or []
+                        cluster_urls.append(urls if isinstance(urls, list) else [])
+                        cluster_dom.append(m.get("dom_structure") or {})
+                        cluster_jsonld.append(m.get("existing_jsonld"))
+                    st.session_state["jsonld_analyzer_results"] = {
+                        "site_url": site_url, "domain": domain, "total_pages": sum(m.get("page_count", 0) for m in jsonld_data),
+                        "cluster_labels": cluster_labels, "cluster_urls": cluster_urls,
+                        "cluster_dom_structures": cluster_dom, "cluster_jsonld": cluster_jsonld,
+                        "logs": [], "loaded_from_sheet": True,
+                    }
+                    for k in list(st.session_state.keys()):
+                        if k.startswith("optimized_jsonld_"):
+                            del st.session_state[k]
+                    for i, m in enumerate(jsonld_data):
+                        opt = m.get("optimized_jsonld")
+                        if opt is not None and isinstance(opt, dict):
+                            st.session_state[f"optimized_jsonld_{i}"] = opt
+                if loaded.get("crawl_data"):
+                    st.session_state["jsonld_analyzer_crawl_results"] = loaded["crawl_data"]
+                st.session_state["global_loaded_save_id"] = save_id
+                st.toast("Sauvegarde chargée.")
+                st.rerun()
+            else:
+                st.error("Sauvegarde introuvable ou accès refusé.")
+        else:
+            st.info("Sélectionnez une sauvegarde dans la liste.")
+
+    if sauvegarder_clicked:
+        _do_global_save(st.session_state, db, user_email, selected_ws)
+
+    st.markdown('<div class="hotaru-header-divider"></div>', unsafe_allow_html=True)
 
     # NAVIGATION — 4 onglets
     tab_home, tab_audit, tab_jsonld, tab_eco = st.tabs([

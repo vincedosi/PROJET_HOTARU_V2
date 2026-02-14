@@ -360,9 +360,10 @@ class AuditDatabase:
         "geo_stats_pages_crawled", "geo_stats_links_discovered", "geo_stats_links_filtered",
         "geo_stats_links_duplicate", "geo_stats_errors",
         "geo_infra_1", "geo_infra_2", "geo_infra_3", "geo_infra_4",
-        "crawl_data_1", "crawl_data_2", "geo_data_1", "geo_data_2", "jsonld_data_1", "jsonld_data_2"
+        "crawl_data_1", "crawl_data_2", "geo_data_1", "geo_data_2", "jsonld_data_1", "jsonld_data_2",
+        "master_json_1", "master_json_2",
     ]
-    UNIFIED_COLS = 25
+    UNIFIED_COLS = 27
 
     # Indices des colonnes (après en-têtes)
     _U_SAVE_ID, _U_EMAIL, _U_WS, _U_SITE_URL, _U_NOM, _U_CREATED = 0, 1, 2, 3, 4, 5
@@ -370,6 +371,7 @@ class AuditDatabase:
     _U_STATS_PAGES, _U_STATS_LINKS, _U_STATS_FILT, _U_STATS_DUP, _U_STATS_ERR = 10, 11, 12, 13, 14
     _U_INFRA_1, _U_INFRA_2, _U_INFRA_3, _U_INFRA_4 = 15, 16, 17, 18
     _U_CRAWL_1, _U_CRAWL_2, _U_GEO_1, _U_GEO_2, _U_JSONLD_1, _U_JSONLD_2 = 19, 20, 21, 22, 23, 24
+    _U_MASTER_1, _U_MASTER_2 = 25, 26
 
     def _get_unified_worksheet(self):
         """Retourne l'onglet 'unified_saves' (à créer dans le GSheet si absent)."""
@@ -420,7 +422,8 @@ class AuditDatabase:
             return None
 
     def save_unified(self, user_email: str, workspace: str, site_url: str, nom_site: str,
-                     crawl_data: list, geo_data: dict = None, jsonld_data: list = None) -> str:
+                     crawl_data: list, geo_data: dict = None, jsonld_data: list = None,
+                     master_json: str = None) -> str:
         """
         Sauvegarde unifiée : tout en colonnes décomposées, JSON brut (aucune compression).
         """
@@ -462,6 +465,11 @@ class AuditDatabase:
         crawl_chunks = self._json_to_cells(crawl_data)
         geo_chunks = self._json_to_cells(geo_data)
         jsonld_chunks = self._json_to_cells(jsonld_data)
+        master_str = (master_json or "").strip() if isinstance(master_json, str) else ""
+        master_chunks = []
+        if master_str:
+            for i in range(0, len(master_str), self._UNIFIED_MAX_CELL):
+                master_chunks.append(master_str[i : i + self._UNIFIED_MAX_CELL])
 
         row = [
             save_id, (user_email or "").strip(), final_ws, site_url, nom_site, created_at,
@@ -477,6 +485,8 @@ class AuditDatabase:
             geo_chunks[1] if len(geo_chunks) > 1 else "",
             jsonld_chunks[0] if len(jsonld_chunks) > 0 else "",
             jsonld_chunks[1] if len(jsonld_chunks) > 1 else "",
+            master_chunks[0] if len(master_chunks) > 0 else "",
+            master_chunks[1] if len(master_chunks) > 1 else "",
         ]
         ws.append_row(row, value_input_option="RAW")
         session = get_session()
@@ -509,16 +519,18 @@ class AuditDatabase:
                 row_ws = (row[2] or "").strip() or "Non classé"
                 if ws_filter is not None and row_ws != ws_filter:
                     continue
-                # Format 25 colonnes (décomposé): geo en 21-22, jsonld en 23-24
+                # Format 27 colonnes (décomposé): geo 21-22, jsonld 23-24, master 25-26
                 if len(row) > self._U_GEO_1:
                     has_geo = bool((row[self._U_GEO_1] or "").strip())
                     has_jsonld = bool((row[self._U_JSONLD_1] or "").strip())
+                    has_master = bool((row[self._U_MASTER_1] or "").strip()) if len(row) > self._U_MASTER_1 else False
                 else:
                     # Ancien format 9/13 colonnes (compressé)
                     geo_col = row[11] if len(row) > 11 else (row[7] if len(row) > 7 else "")
                     jsonld_col = row[12] if len(row) > 12 else (row[8] if len(row) > 8 else "")
                     has_geo = bool((geo_col or "").strip())
                     has_jsonld = bool((jsonld_col or "").strip())
+                    has_master = False
                 out.append({
                     "save_id": row[0],
                     "site_url": row[3] if len(row) > 3 else "",
@@ -527,6 +539,7 @@ class AuditDatabase:
                     "workspace": row_ws,
                     "has_geo": has_geo,
                     "has_jsonld": has_jsonld,
+                    "has_master": has_master,
                 })
             return sorted(out, key=lambda x: (x.get("created_at") or ""), reverse=True)
         except Exception as e:
@@ -571,11 +584,16 @@ class AuditDatabase:
                 row_email = (row[1] or "").strip().lower()
                 if row_email != email_norm:
                     return None
-                # Format 25 colonnes (décomposé, JSON brut)
+                # Format 27 colonnes (décomposé, JSON brut) ou 25 / ancien
                 if len(row) > self._U_JSONLD_2:
                     crawl_data = self._cells_to_json(row, self._U_CRAWL_1, 2)
                     geo_data = self._cells_to_json(row, self._U_GEO_1, 2)
                     jsonld_data = self._cells_to_json(row, self._U_JSONLD_1, 2)
+                    master_json_val = ""
+                    if len(row) > self._U_MASTER_2:
+                        master_json_val = ((row[self._U_MASTER_1] or "") + (row[self._U_MASTER_2] or "")).strip()
+                    elif len(row) > self._U_MASTER_1:
+                        master_json_val = (row[self._U_MASTER_1] or "").strip()
                 else:
                     # Ancien format 9/13 colonnes (compressé)
                     if len(row) >= 12:
@@ -586,6 +604,7 @@ class AuditDatabase:
                         crawl_data = _decompress_blob(row[6] if len(row) > 6 else "")
                         geo_data = _decompress_blob(row[7] if len(row) > 7 else "")
                         jsonld_data = _decompress_blob(row[8] if len(row) > 8 else "")
+                    master_json_val = ""
                 return {
                     "site_url": row[3] if len(row) > 3 else "",
                     "nom_site": row[4] if len(row) > 4 else "Site",
@@ -594,8 +613,79 @@ class AuditDatabase:
                     "crawl_data": crawl_data,
                     "geo_data": geo_data,
                     "jsonld_data": jsonld_data,
+                    "master_json": master_json_val,
                 }
             return None
         except Exception as e:
             logger.error("Erreur load_unified: %s", e)
             return None
+
+    def update_master_for_unified(self, user_email: str, workspace: str, site_url: str, master_json: str) -> bool:
+        """
+        Met à jour ou crée une ligne unified_saves avec le master_json (MASTER DATA).
+        Cherche la dernière sauvegarde user_email + workspace + site_url et met à jour master_json_1/2.
+        Si aucune ligne ne correspond, en ajoute une (minimale) avec master uniquement.
+        """
+        ws = self._get_unified_worksheet()
+        if not ws:
+            return False
+        master_str = (master_json or "").strip() if isinstance(master_json, str) else ""
+        master_chunks = []
+        if master_str:
+            for i in range(0, len(master_str), self._UNIFIED_MAX_CELL):
+                master_chunks.append(master_str[i : i + self._UNIFIED_MAX_CELL])
+        try:
+            rows = ws.get_all_values()
+            if len(rows) < 2:
+                return self._append_unified_master_only(user_email, workspace, site_url, master_chunks, ws)
+            email_norm = (user_email or "").strip().lower()
+            ws_norm = (workspace or "").strip() or "Non classé"
+            site_norm = (site_url or "").strip()
+            candidates = []
+            for idx, row in enumerate(rows[1:], start=2):
+                if len(row) < 6:
+                    continue
+                if (row[1] or "").strip().lower() != email_norm:
+                    continue
+                if ((row[2] or "").strip() or "Non classé") != ws_norm:
+                    continue
+                if (row[3] or "").strip() != site_norm:
+                    continue
+                candidates.append((idx, row[5] if len(row) > 5 else ""))
+            if not candidates:
+                return self._append_unified_master_only(user_email, workspace, site_url, master_chunks, ws)
+            candidates.sort(key=lambda x: x[1], reverse=True)
+            row_idx = candidates[0][0]
+            col_m1, col_m2 = self._U_MASTER_1 + 1, self._U_MASTER_2 + 1
+            ws.update_cell(row_idx, col_m1, master_chunks[0] if len(master_chunks) > 0 else "")
+            ws.update_cell(row_idx, col_m2, master_chunks[1] if len(master_chunks) > 1 else "")
+            session = get_session()
+            session["audit_cache_version"] = session.get("audit_cache_version", 0) + 1
+            return True
+        except Exception as e:
+            logger.error("Erreur update_master_for_unified: %s", e)
+            return False
+
+    def _append_unified_master_only(self, user_email: str, workspace: str, site_url: str,
+                                    master_chunks: list, ws) -> bool:
+        """Append une ligne unified_saves avec uniquement master (pour MASTER sans audit préalable)."""
+        try:
+            save_id = str(int(time.time()))
+            created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+            final_ws = (workspace or "").strip() or "Non classé"
+            row = [
+                save_id, (user_email or "").strip(), final_ws, (site_url or "")[:500], "Site", created_at,
+                "", "", "", "",
+                "", "", "", "", "",
+                "", "", "", "",
+                "", "", "", "", "", "",
+                master_chunks[0] if len(master_chunks) > 0 else "",
+                master_chunks[1] if len(master_chunks) > 1 else "",
+            ]
+            ws.append_row(row, value_input_option="RAW")
+            session = get_session()
+            session["audit_cache_version"] = session.get("audit_cache_version", 0) + 1
+            return True
+        except Exception as e:
+            logger.error("Erreur _append_unified_master_only: %s", e)
+            return False

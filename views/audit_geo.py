@@ -1374,11 +1374,9 @@ def render_methodologie():
 def render_audit_geo():
     db = AuditDatabase()
     user_email = get_current_user_email()
-    all_audits = db.load_user_audits(user_email or "")
 
-    # Workspace géré dans le header (app.py), au niveau du LOGOUT
+    # Workspace géré dans le header (app.py) — source unique unified_saves
     selected_ws = st.session_state.get("audit_workspace_select", "Nouveau")
-    filtered_audits = [a for a in all_audits if (str(a.get('workspace', '')).strip() or "Non classé") == selected_ws]
     unified_saves = db.list_unified_saves(user_email or "", workspace=selected_ws) if getattr(db, 'sheet_file', None) else []
 
     tab1, tab2, tab3 = st.tabs(["Audit Site", "Audit Externe", "Méthodologie"])
@@ -1429,33 +1427,8 @@ def render_audit_geo():
                     })
                     st.rerun()
             st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-        elif filtered_audits:
-            st.markdown(
-                '<p class="section-title">CHARGER UN AUDIT (anciennes archives)</p>',
-                unsafe_allow_html=True,
-            )
-            audit_labels = {f"{a.get('nom_site') or 'Audit'} ({a.get('date')})": a for a in filtered_audits}
-            col1, col2 = st.columns([3, 1])
-            choice = col1.selectbox("Charger un audit", list(audit_labels.keys()), label_visibility="collapsed", key="geo_legacy_select")
-            if col2.button("VISUALISER", use_container_width=True, type="primary", key="geo_legacy_btn"):
-                r = audit_labels[choice]
-                raw_data = zlib.decompress(base64.b64decode(r['data_compressed'])).decode('utf-8')
-                data = json.loads(raw_data)
-                st.session_state.update({
-                    "results": data['results'],
-                    "clusters": data['clusters'],
-                    "target_url": r['site_url'],
-                    "geo_infra": data.get('geo_infra', {}),
-                    "geo_score": data.get('geo_score', 0),
-                    "current_ws": selected_ws,
-                    "crawl_stats": data.get('stats', {}),
-                    "filtered_log": data.get('filtered_log', []),
-                    "duplicate_log": data.get('duplicate_log', []),
-                    "ai_accessibility": data.get('ai_accessibility', {}),
-                    "start_urls": data.get("start_urls", [r['site_url']]),
-                })
-                st.rerun()
-            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
+        else:
+            st.caption("Aucune sauvegarde pour ce projet. Lancez une analyse puis enregistrez.")
 
         # =================================================================
         # ZONE DE SCAN (nouvelle analyse)

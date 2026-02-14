@@ -86,18 +86,21 @@ PROJET_HOTARU_V2/
 
 ---
 
-## Sauvegardes unifiées (unified_saves)
+## Sauvegardes unifiées (unified_saves) — source unique du dashboard
 
-Un **onglet Google Sheets** unique pour Audit GEO et Analyse JSON-LD :
+**Tout le dashboard** lit et écrit dans l'onglet **unified_saves** (workspaces, audits GEO, JSON-LD, MASTER).
 
-- **Onglet :** `unified_saves`
-- **Colonnes (25, décomposées, JSON brut sans compression) :**  
+- **Onglet GSheet :** `unified_saves`
+- **Colonnes (27) :**  
   `save_id`, `user_email`, `workspace`, `site_url`, `nom_site`, `created_at`,  
   `crawl_pages_count`, `geo_score`, `geo_clusters_count`, `jsonld_models_count`,  
-  `geo_stats_*`, `geo_infra_1`…`4`,  
-  `crawl_data_1`, `crawl_data_2`, `geo_data_1`, `geo_data_2`, `jsonld_data_1`, `jsonld_data_2`
-- **API DB :** `save_unified()`, `list_unified_saves(user_email, workspace=…)`, `load_unified(save_id, user_email)`.
-- **Flux UX :** Sur chaque module concerné, **charger en priorité** (liste filtrée par workspace), puis **nouvelle analyse / scrape**.
+  `geo_stats_pages_crawled`, `geo_stats_links_discovered`, `geo_stats_links_filtered`,  
+  `geo_stats_links_duplicate`, `geo_stats_errors`,  
+  `geo_infra_1`…`4`,  
+  `crawl_data_1`, `crawl_data_2`, `geo_data_1`, `geo_data_2`, `jsonld_data_1`, `jsonld_data_2`,  
+  **`master_json_1`, `master_json_2`** (MASTER DATA, blocs ≤ 45k car.).
+- **API DB :** `save_unified(…, master_json=)`, `list_unified_saves()`, `load_unified()`, `update_master_for_unified()`.
+- **À ajouter dans le GSheet** si l'onglet avait 25 colonnes : **`master_json_1`**, **`master_json_2`** à la fin.
 
 ---
 
@@ -119,18 +122,20 @@ Un **onglet Google Sheets** unique pour Audit GEO et Analyse JSON-LD :
 5. **Onglets résultats :** GRAPHE | TABLEAU | EXPORT | **FUSION** | Logs.
 6. **Fusion manuelle :** **Liste à choix multiples** (multiselect) — sélection de 2 clusters ou plus, bouton **FUSIONNER** → un seul cluster (Mistral renomme). Plus de dropdown source/cible.
 7. **Génération JSON-LD** : GÉNÉRER par cluster (Mistral), export ZIP, sauvegarde Google Sheets (unifié + onglet jsonld).
-8. **Sauvegarde :** `save_unified()` (crawl + geo + jsonld) + `save_jsonld_models()` (legacy onglet jsonld). Chargement via `list_unified_saves` + `load_unified` (workspace filtré).
+8. **Sauvegarde :** `save_unified()` uniquement (unified_saves). Chargement via `list_unified_saves` + `load_unified`.
 
 ---
 
 ## Base de données (Google Sheets)
 
-- **Onglet `users` :** email, password_hash, created_at, last_login, role.
-- **Onglet `audits` :** audit_id, user_email, workspace, date, site_url, nb_urls, data_compressed, nom_site, master_json. (Legacy ; préférer unified_saves.)
-- **Onglet `jsonld` :** site_url, model_id, model_name, page_count, url_pattern, sample_urls, dom_structure, existing_jsonld, recommended_schema, optimized_jsonld, created_at, workspace, user_email. (Legacy ; sauvegarde unifiée complète en plus.)
-- **Onglet `unified_saves` :** 25 colonnes (voir ci-dessus). Filtrage par `user_email` et optionnellement par `workspace` pour les listes.
+- **Onglet `users` / `USERS` :** email, password_hash, created_at, last_login, role.
+- **Onglet `audits` (legacy) :** audit_id, user_email, workspace, date, site_url, nb_urls, data_compressed, nom_site, master_json. (Legacy ; préférer unified_saves.)
+- **Onglet `jsonld` (legacy) :** site_url, model_id, model_name, page_count, url_pattern, sample_urls, dom_structure, existing_jsonld, recommended_schema, optimized_jsonld, created_at, workspace, user_email. (Legacy ; sauvegarde unifiée complète en plus.)
+- **Onglet `unified_saves` :** 27 colonnes (voir ci-dessus). **Source unique** : workspaces, audits, JSON-LD, MASTER.
+- **Onglets `audits` / `jsonld` :** plus utilisés par le dashboard (legacy).
 
-**Source de vérité du dashboard :** Le dash pointe vers **unified_saves** pour la liste des workspaces (header), le chargement/sauvegarde des audits (Audit GEO) et le chargement/sauvegarde JSON-LD (Analyse JSON-LD). L’onglet `audits` reste en lecture pour le fallback « anciennes archives » et pour l’onglet Master (liste + colonne master_json).
+**Source de vérité :** Tout le dashboard lit et écrit uniquement dans **unified_saves**.  
+ Le dash pointe vers **unified_saves** pour la liste des workspaces (header), le chargement/sauvegarde des audits (Audit GEO) et le chargement/sauvegarde JSON-LD (Analyse JSON-LD). L’onglet `audits` reste en lecture pour le fallback « anciennes archives » et pour l’onglet Master (liste + colonne master_json).
 
 ---
 
