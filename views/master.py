@@ -342,12 +342,6 @@ def render_master_tab():
     if "master_data" not in st.session_state:
         st.session_state.master_data = None
 
-    # Sélecteur de MASTER sauvegardés (depuis unified_saves)
-    db = AuditDatabase()
-    user_email = get_current_user_email() or ""
-    unified_list = db.list_unified_saves(user_email, workspace=None) if getattr(db, "sheet_file", None) else []
-    saved_masters = [u for u in unified_list if u.get("has_master")]
-
     # Header
     st.markdown('<h1 class="zen-title">MASTER DATA</h1>', unsafe_allow_html=True)
     st.markdown(
@@ -358,26 +352,7 @@ def render_master_tab():
     # Sous-onglets : Données / Méthodologie
     tab_donnees, tab_methodo = st.tabs(["Données", "Méthodologie"])
     with tab_donnees:
-        # Bandeau de sélection/chargement des MASTER existants (unified_saves)
-        if saved_masters:
-            options = {
-                f"{u.get('nom_site','Site')} // {u.get('site_url','')} ({u.get('created_at','')})": u
-                for u in saved_masters
-            }
-            c1, c2 = st.columns([3, 1])
-            choice = c1.selectbox(
-                "Charger un MASTER existant (sauvegardes unifiées)",
-                list(options.keys()),
-                index=0,
-                key="master_load_select",
-            )
-            if c2.button("CHARGER MASTER", use_container_width=True, key="load_master_btn"):
-                selected = options[choice]
-                loaded = db.load_unified(selected["save_id"], user_email)
-                master_json_val = (loaded or {}).get("master_json", "") or ""
-                st.session_state.jsonld_master = master_json_val
-                st.success("MASTER chargé depuis les sauvegardes unifiées. Vous pouvez l'utiliser pour l'AUDIT & GAP ANALYSIS.")
-
+        st.caption("Chargement / sauvegarde : barre en haut → Choix du workspace, Choix de la sauvegarde → VALIDER (charge audit + JSON-LD + MASTER) ou SAUVEGARDER.")
         _render_master_data_content()
     with tab_methodo:
         from views.methodologie_blocks import render_methodologie_for_module
@@ -827,24 +802,7 @@ def _render_master_data_content():
             st.metric("LIGNES", len(st.session_state.jsonld_master.split("\n")))
             st.metric("TAILLE", f"{len(st.session_state.jsonld_master)} chars")
 
-            # Sauvegarde dans unified_saves (colonnes master_json_1, master_json_2)
-            if st.button("ENREGISTRER DANS SAUVEGARDES UNIFIÉES", use_container_width=True, key="save_master_to_unified"):
-                db = AuditDatabase()
-                user_email = get_current_user_email() or ""
-                workspace = st.session_state.get("current_ws", "Non classé")
-                site_url = st.session_state.get("target_url", "").strip()
-                if not site_url:
-                    st.error("Impossible de sauvegarder : aucune URL de site (target_url) en mémoire.")
-                else:
-                    ok = db.update_master_for_unified(
-                        user_email=user_email,
-                        workspace=workspace,
-                        site_url=site_url,
-                        master_json=st.session_state.jsonld_master,
-                    )
-                    if ok:
-                        st.success("MASTER enregistré dans les sauvegardes unifiées (unified_saves).")
-
+            st.caption("Sauvegarde : utilisez le bouton **SAUVEGARDER** en haut de la page (enregistre audit + JSON-LD + MASTER).")
             if st.button("NOUVEAU", use_container_width=True, key="reset_btn"):
                 st.session_state.master_data = None
                 st.session_state.pop("jsonld_master", None)

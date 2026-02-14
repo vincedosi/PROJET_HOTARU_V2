@@ -148,6 +148,7 @@ def _do_global_save(session_state, db, user_email: str, workspace: str):
             })
         if models_data:
             jsonld_data = models_data
+    master_json = (session_state.get("jsonld_master") or "").strip() or None
     try:
         db.save_unified(
             user_email,
@@ -157,6 +158,7 @@ def _do_global_save(session_state, db, user_email: str, workspace: str):
             crawl_data=crawl_data,
             geo_data=geo_data,
             jsonld_data=jsonld_data,
+            master_json=master_json,
         )
         st.toast("Sauvegarde enregistrée dans unified_saves.")
         from core.runtime import get_session

@@ -1372,63 +1372,14 @@ def render_methodologie():
 # =============================================================================
 
 def render_audit_geo():
-    db = AuditDatabase()
-    user_email = get_current_user_email()
-
-    # Workspace géré dans le header (app.py) — source unique unified_saves
     selected_ws = st.session_state.get("audit_workspace_select", "Nouveau")
-    unified_saves = db.list_unified_saves(user_email or "", workspace=selected_ws) if getattr(db, 'sheet_file', None) else []
 
     tab1, tab2, tab3 = st.tabs(["Audit Site", "Audit Externe", "Méthodologie"])
 
     # ========================== TAB 1 : AUDIT SITE ==========================
     with tab1:
-        # =================================================================
-        # ARCHIVES (charger en priorité — logique UX)
-        # =================================================================
-        if unified_saves:
-            st.markdown(
-                '<p class="section-title">CHARGER UN AUDIT</p>',
-                unsafe_allow_html=True,
-            )
-            unified_labels = {f"{a.get('nom_site') or 'Audit'} ({a.get('created_at')})": a for a in unified_saves}
-            col1, col2 = st.columns([3, 1])
-            choice = col1.selectbox("Charger un audit", list(unified_labels.keys()), label_visibility="collapsed", key="geo_archive_select")
-            if col2.button("VISUALISER", use_container_width=True, type="primary", key="geo_archive_btn"):
-                r = unified_labels[choice]
-                save_id = r["save_id"]
-                loaded = db.load_unified(save_id, user_email or "")
-                if not loaded:
-                    st.error("Sauvegarde introuvable ou accès refusé.")
-                else:
-                    crawl_data = loaded.get("crawl_data") or []
-                    geo_data = loaded.get("geo_data") or {}
-                    st.session_state.update({
-                        "results": crawl_data,
-                        "clusters": geo_data.get("clusters", []),
-                        "target_url": loaded.get("site_url", ""),
-                        "geo_infra": geo_data.get("geo_infra", {}),
-                        "geo_score": geo_data.get("geo_score", 0),
-                        "current_ws": loaded.get("workspace", selected_ws),
-                        "crawl_stats": geo_data.get("stats", {}),
-                        "filtered_log": geo_data.get("filtered_log", []),
-                        "duplicate_log": geo_data.get("duplicate_log", []),
-                        "ai_accessibility": geo_data.get("ai_accessibility", {}),
-                        "start_urls": geo_data.get("start_urls", [loaded.get("site_url", "")]),
-                        "geo_graph_ai_toggle": geo_data.get("graph_show_ai_score", False),
-                        "geo_ai_report": geo_data.get("geo_ai_report", ""),
-                        "geo_robots_txt_raw": geo_data.get("mistral_robots_raw", ""),
-                        "geo_robots_txt_found": geo_data.get("mistral_robots_found", False),
-                        "mistral_robots_code": geo_data.get("mistral_robots_code", ""),
-                        "mistral_robots_analysis": geo_data.get("mistral_robots_analysis", ""),
-                        "geo_llms_txt_raw": geo_data.get("mistral_llms_raw", ""),
-                        "geo_llms_txt_found": geo_data.get("mistral_llms_found", False),
-                        "mistral_llms_code": geo_data.get("mistral_llms_code", ""),
-                    })
-                    st.rerun()
-            st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
-        else:
-            st.caption("Aucune sauvegarde pour ce projet. Lancez une analyse puis enregistrez.")
+        st.caption("Chargement / sauvegarde : barre en haut → Choix du workspace, Choix de la sauvegarde → VALIDER ou SAUVEGARDER.")
+        st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
 
         # =================================================================
         # ZONE DE SCAN (nouvelle analyse)
@@ -1817,98 +1768,17 @@ def render_audit_geo():
                 unsafe_allow_html=True
             )
 
-            c_expert, c_save_name, c_save_btn = st.columns([1, 2, 1])
+            c_expert, c_cap = st.columns([1, 3])
             expert_on = c_expert.toggle(
                 "Score AI-READABLE",
                 value=st.session_state.get("geo_graph_ai_toggle", False),
                 key="geo_graph_ai_toggle"
             )
 
+            with c_cap:
+                st.caption("Sauvegarde : utilisez le bouton SAUVEGARDER en haut de la page.")
+
             domain = urlparse(st.session_state.target_url).netloc
-            s_name = c_save_name.text_input("Nom sauvegarde", value=domain.split('.')[0], label_visibility="collapsed")
-
-            # Sauvegarde
-            if c_save_btn.button("SAUVEGARDER", use_container_width=True):
-                max_pages_to_save = 100
-                results_to_save = st.session_state.results[:max_pages_to_save]
-
-                clean_results = []
-                for r in results_to_save:
-                    clean_results.append({
-                        "url": r.get("url"),
-                        "title": r.get("title", "")[:50],
-                        "description": r.get("description", "")[:100],
-                        "h1": r.get("h1", "")[:50],
-                        "response_time": round(r.get("response_time", 0), 2),
-                        "has_structured_data": r.get("has_structured_data", False),
-                        "h2_count": r.get("h2_count", 0)
-                    })
-
-                compact_clusters = []
-                for cluster in st.session_state.clusters:
-                    samples = []
-                    for p in (cluster.get("samples") or [])[:40]:
-                        samples.append({
-                            "url": p.get("url"),
-                            "title": (p.get("title") or "")[:200],
-                            "description": (p.get("description") or "")[:300],
-                            "h1": (p.get("h1") or "")[:100],
-                            "has_structured_data": p.get("has_structured_data", False),
-                            "h2_count": p.get("h2_count", 0),
-                        })
-                    compact_clusters.append({
-                        "name": cluster["name"],
-                        "count": cluster["count"],
-                        "samples": samples
-                    })
-
-                geo_data = {
-                    "clusters": compact_clusters,
-                    "geo_infra": st.session_state.get('geo_infra', {}),
-                    "geo_score": st.session_state.get('geo_score', 0),
-                    "stats": {
-                        "pages_crawled": st.session_state.crawl_stats.get('pages_crawled', 0),
-                        "links_discovered": st.session_state.crawl_stats.get('links_discovered', 0),
-                        "links_filtered": st.session_state.crawl_stats.get('links_filtered', 0),
-                        "links_duplicate": st.session_state.crawl_stats.get('links_duplicate', 0),
-                        "pages_skipped": st.session_state.crawl_stats.get('pages_skipped', 0),
-                        "errors": st.session_state.crawl_stats.get('errors', 0),
-                        "start_urls_count": st.session_state.crawl_stats.get('start_urls_count', 1)
-                    },
-                    "start_urls": st.session_state.get('start_urls', [st.session_state.target_url])[:5],
-                    "ai_accessibility": st.session_state.get('ai_accessibility', {}),
-                    "filtered_log": st.session_state.get('filtered_log', []),
-                    "duplicate_log": st.session_state.get('duplicate_log', []),
-                    "graph_show_ai_score": st.session_state.get("geo_graph_ai_toggle", False),
-                    "geo_ai_report": st.session_state.get("geo_ai_report", ""),
-                    "mistral_robots_raw": st.session_state.get("geo_robots_txt_raw", ""),
-                    "mistral_robots_found": st.session_state.get("geo_robots_txt_found", False),
-                    "mistral_robots_code": st.session_state.get("mistral_robots_code", ""),
-                    "mistral_robots_analysis": st.session_state.get("mistral_robots_analysis", ""),
-                    "mistral_llms_raw": st.session_state.get("geo_llms_txt_raw", ""),
-                    "mistral_llms_found": st.session_state.get("geo_llms_txt_found", False),
-                    "mistral_llms_code": st.session_state.get("mistral_llms_code", ""),
-                }
-
-                if len(st.session_state.results) > max_pages_to_save:
-                    st.markdown(
-                        f'<p style="color:#FFA500;font-weight:700;font-size:0.8rem;">'
-                        f'Seules les {max_pages_to_save} premieres pages sur {len(st.session_state.results)} seront sauvegardees '
-                        f'(limite Google Sheets)</p>',
-                        unsafe_allow_html=True
-                    )
-
-                db.save_unified(
-                    user_email,
-                    st.session_state.current_ws,
-                    st.session_state.target_url,
-                    s_name,
-                    crawl_data=clean_results,
-                    geo_data=geo_data,
-                    jsonld_data=None
-                )
-                st.toast("Audit sauvegardé (sauvegardes unifiées)")
-
             # Construction du graphe
             G = nx.DiGraph()
             G.add_node(

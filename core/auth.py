@@ -42,19 +42,16 @@ class AuthManager:
             try:
                 self.users_sheet = self.sheet_file.worksheet("users")
             except Exception:
-                try:
-                    self.users_sheet = self.sheet_file.worksheet("USERS")
-                except Exception:
-                    self.users_sheet = self.sheet_file.add_worksheet(
-                        title="users", rows=100, cols=5
-                    )
-                    self.users_sheet.append_row(
-                        ["email", "password_hash", "created_at", "last_login", "role"]
-                    )
-                    admin_hash = self._hash_password("123")
-                    self.users_sheet.append_row([
-                        "admin@hotaru.app", admin_hash, "2025-02-02", "", "admin"
-                    ])
+                self.users_sheet = self.sheet_file.add_worksheet(
+                    title="users", rows=100, cols=5
+                )
+                self.users_sheet.append_row(
+                    ["email", "password_hash", "created_at", "last_login", "role"]
+                )
+                admin_hash = self._hash_password("123")
+                self.users_sheet.append_row([
+                    "admin@hotaru.app", admin_hash, "2025-02-02", "", "admin"
+                ])
         except Exception as e:
             logger.error("Erreur d'initialisation AuthManager : %s", e)
             self.sheet_file = None

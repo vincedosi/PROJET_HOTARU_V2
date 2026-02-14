@@ -10,8 +10,8 @@ HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority I
 
 ## Vision produit
 
-- **Audit** : **Audit GEO** (structure du site, graphe interactif, patterns d'URL, renommage IA Mistral ; **charger un audit en priorité** puis nouvelle analyse ; sauvegarde unifiée), **Authority Score** (AI Authority Index — 5 piliers), **Scraping** (diagnostic URL + logs JSON-LD / techno / Selenium).
-- **JSON-LD** : **Master** (données d'entité Wikidata + Mistral, JSON-LD Organization, audit & gap, sauvegarde audits), **Analyse JSON-LD** (clustering DOM, nommage Mistral, graphe, génération JSON-LD Schema.org par cluster, **fusion manuelle à choix multiples** : sélection de X clusters puis fusion en un seul ; **charger depuis Google Sheets en premier** puis nouvelle analyse ; sauvegarde/chargement unifié + onglet jsonld legacy).
+- **Audit** : **Audit GEO** (structure du site, graphe interactif, patterns d'URL, renommage IA Mistral ; **chargement et sauvegarde via la barre en haut** puis nouvelle analyse), **Authority Score** (AI Authority Index — 5 piliers), **Scraping** (diagnostic URL + logs JSON-LD / techno / Selenium).
+- **JSON-LD** : **Master** (données d'entité Wikidata + Mistral, JSON-LD Organization, audit & gap), **Analyse JSON-LD** (clustering DOM, nommage Mistral, graphe, génération JSON-LD par cluster, **fusion manuelle à choix multiples** ; chargement et sauvegarde **uniquement via la barre en haut**).
 - **Eco-Score** : **AIO Efficiency** — calculatrice d'impact carbone (tokens, kWh, gCO₂), paramètres site, Big Numbers, graphique Plotly 12 mois.
 - **Design :** Fond blanc, noir + rouge `rgb(168, 27, 35)`. Titres `XX / TITRE`, rouge souligné.
 
@@ -32,7 +32,7 @@ L'app affiche **V {VERSION} // {BUILD_DATE}** dans le header et le footer.
 
 ```
 PROJET_HOTARU_V2/
-├── app.py                      # Point d'entrée : auth, header (workspace + déconnexion), 4 tabs, footer
+├── app.py                      # Point d'entrée : auth, barre SaaS (workspace, sauvegarde, VALIDER, SAUVEGARDER, déconnexion), 4 tabs, footer
 ├── version.py                  # VERSION + BUILD_DATE (à mettre à jour à chaque push/PR)
 ├── packages.txt                # Streamlit Cloud : chromium, chromium-driver
 ├── requirements.txt
@@ -77,7 +77,7 @@ PROJET_HOTARU_V2/
 
 - **Login :** `core.auth.AuthManager` — email + mot de passe, hash en Google Sheets (onglet `users`).
 - **Session :** `core.session_keys` — `get_current_user_email()`, `is_authenticated()`. Stockage via `core.runtime.get_session()` (compatible Streamlit ou autre runtime).
-- **Workspace :** Sélecteur dans le header (`audit_workspace_select`). Toutes les listes de sauvegardes (Audit GEO, Analyse JSON-LD) filtrent par **workspace courant** pour une logique SaaS multi-projets.
+- **Barre SaaS (en haut, sur toutes les pages) :** Ligne 1 = **Choix du workspace** + DÉCONNEXION. Ligne 2 = **Choix de la sauvegarde** + **VALIDER** (charge la sauvegarde dans tout le dashboard) + **SAUVEGARDER** (enregistre l'état courant dans unified_saves). Aucun autre bouton de chargement ou sauvegarde dans les onglets — tout passe par cette barre.
 - **Isolation :**
   - `AuditDatabase.load_user_audits(user_email)` — audits filtrés par email.
   - `AuditDatabase.list_unified_saves(user_email, workspace=selected_ws)` — sauvegardes unifiées par email + workspace.
@@ -106,23 +106,24 @@ PROJET_HOTARU_V2/
 
 ## Navigation et flux UX
 
-- **Header :** Logo, version, **Projets (Workspace)**, déconnexion.
+- **Header :** Logo, version, **barre SaaS** (2 lignes), déconnexion.
 - **Onglets principaux :** Accueil | Audit | JSON-LD | Eco-Score.
-- **Audit GEO :** En tête d’onglet Audit Site → **CHARGER UN AUDIT** (unifié ou anciennes archives), puis **01 / NOUVELLE ANALYSE** (URLs, limite, Selenium, lancer le crawl).
-- **Analyse JSON-LD :** Premier onglet **Charger depuis Google Sheets** (sauvegardes unifiées filtrées par workspace + anciennes jsonld), second onglet **Nouvelle analyse**. Dans les résultats, **01 — Charger depuis Google Sheets** puis 02 Génération, 03 Export, 04 Enregistrer, 05 Télécharger.
+- **Audit GEO :** En tête d’onglet Audit Site → 01 / NOUVELLE ANALYSE (URLs, limite, Selenium).
+- **Analyse JSON-LD :** Chargement/sauvegarde via la barre en haut. Onglet Nouvelle analyse ; résultats : 02 Génération, 03 Export, 05 Télécharger.
+- **Master :** Chargement/sauvegarde via la barre en haut (VALIDER charge tout ; SAUVEGARDER enregistre tout).
 
 ---
 
 ## Analyse JSON-LD (détail)
 
 1. **Clustering** : Structure HTML, pattern URL, contenu sémantique — seuil configurable. Tolérances variables (h1, article, h2/h3…).
-2. **Interface :** Onglet **Charger depuis Google Sheets** en premier (liste à choix unique), puis **Nouvelle analyse** (URL, nombre de pages, seuil).
+2. **Interface :** Chargement/sauvegarde **uniquement via la barre en haut**. Dans l'onglet : **Nouvelle analyse** (URL, nombre de pages, seuil).
 3. **Nommage Mistral** : nom + type Schema.org par cluster.
 4. **Graphe interactif** : domaine → clusters → URLs (pyvis + networkx).
 5. **Onglets résultats :** GRAPHE | TABLEAU | EXPORT | **FUSION** | Logs.
 6. **Fusion manuelle :** **Liste à choix multiples** (multiselect) — sélection de 2 clusters ou plus, bouton **FUSIONNER** → un seul cluster (Mistral renomme). Plus de dropdown source/cible.
-7. **Génération JSON-LD** : GÉNÉRER par cluster (Mistral), export ZIP, sauvegarde Google Sheets (unifié + onglet jsonld).
-8. **Sauvegarde :** `save_unified()` uniquement (unified_saves). Chargement via `list_unified_saves` + `load_unified`.
+7. **Génération JSON-LD** : GÉNÉRER par cluster (Mistral), export ZIP. Sauvegarde : bouton **SAUVEGARDER** en haut (unified_saves).
+8. **Chargement / sauvegarde :** Uniquement via la **barre en haut** (Choix de la sauvegarde → VALIDER ; SAUVEGARDER).
 
 ---
 
@@ -135,7 +136,7 @@ PROJET_HOTARU_V2/
 - **Onglets `audits` / `jsonld` :** plus utilisés par le dashboard (legacy).
 
 **Source de vérité :** Tout le dashboard lit et écrit uniquement dans **unified_saves**.  
- Le dash pointe vers **unified_saves** pour la liste des workspaces (header), le chargement/sauvegarde des audits (Audit GEO) et le chargement/sauvegarde JSON-LD (Analyse JSON-LD). L’onglet `audits` reste en lecture pour le fallback « anciennes archives » et pour l’onglet Master (liste + colonne master_json).
+ Chargement/sauvegarde : **barre SaaS en haut** uniquement pour la liste des workspaces (header), le chargement/sauvegarde des audits (Audit GEO) et le chargement/sauvegarde JSON-LD (Analyse JSON-LD). L’onglet `audits` reste en lecture pour le fallback « anciennes archives » et pour l’onglet Master (liste + colonne master_json).
 
 ---
 
@@ -201,8 +202,9 @@ SERPAPI_KEY = "..."  # Optionnel, Audit Externe
 
 - [x] Navigation SaaS, isolation par user_email
 - [x] Workspace (header) et filtre workspace sur toutes les sauvegardes (Audit GEO, JSON-LD)
-- [x] Sauvegardes unifiées (onglet unified_saves, 25 colonnes décomposées, JSON brut)
-- [x] Flux UX : charger en priorité, puis nouvelle analyse / scrape (Audit GEO, JSON-LD)
+- [x] Sauvegardes unifiées (onglet unified_saves, 27 colonnes dont master_json_1/2)
+- [x] Barre SaaS unique en haut : Choix workspace, Choix sauvegarde, VALIDER, SAUVEGARDER (sur toutes les pages)
+- [x] Flux UX : chargement/sauvegarde uniquement via la barre en haut ; nouvelle analyse dans chaque onglet
 - [x] Analyse JSON-LD : fusion manuelle à choix multiples (multiselect)
 - [x] SmartScraper, Audit GEO, Authority Score, Master, Analyse JSON-LD, Eco-Score
 - [x] Analyse JSON-LD : génération JSON-LD optimisé Mistral, sauvegarde/chargement Sheets
