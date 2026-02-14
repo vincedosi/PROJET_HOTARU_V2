@@ -18,6 +18,14 @@ from core.session_keys import (
     get_current_user_email,
 )
 
+WORKSPACE_OPEN_FOLDER_LABEL = "Open Folder / Ouvrir un dossier"
+WORKSPACE_CREATE_LABEL = "+ Créer Nouveau"
+WORKSPACE_CREATE_SENTINELS = {
+    WORKSPACE_CREATE_LABEL,
+    "+ Creer Nouveau",
+    "+ Create New",
+}
+
 # VERSION et BUILD_DATE : définis dans version.py (mis à jour à chaque push/PR)
 
 # =============================================================================
@@ -190,16 +198,38 @@ def main():
         s = str(w or "").strip()
         return "Non classé" if not s or s in ("Non classé", "Uncategorized") else s
     ws_set = {_norm_ws(a.get("workspace")) for a in all_audits}
-    ws_list = ["Nouveau"] if not ws_set else sorted(ws_set) + ["+ Créer Nouveau"]
+
+    # Conserve le workspace courant même sans audits déjà enregistrés.
+    current_ws = str(st.session_state.get("audit_workspace_select", "") or "").strip()
+    if current_ws and current_ws not in WORKSPACE_CREATE_SENTINELS:
+        ws_set.add(_norm_ws(current_ws))
+
+    ws_list = ["Nouveau"] if not ws_set else sorted(ws_set)
+    if WORKSPACE_CREATE_LABEL not in ws_list:
+        ws_list.append(WORKSPACE_CREATE_LABEL)
+
     c_ws, c_user = st.columns([2, 1])
     with c_ws:
-        st.selectbox(
-            "Projets (Workspace)",
+        selected_workspace = st.selectbox(
+            WORKSPACE_OPEN_FOLDER_LABEL,
             ws_list,
             key="audit_workspace_select",
-            label_visibility="collapsed",
             help="Choisissez le projet / workspace pour filtrer les audits.",
         )
+
+        if selected_workspace in WORKSPACE_CREATE_SENTINELS:
+            new_workspace = st.text_input(
+                "Nom du dossier / workspace",
+                key="workspace_new_name",
+                placeholder="ex: client-acme",
+            ).strip()
+            if st.button("Ouvrir le dossier", key="open_workspace_folder_btn"):
+                if not new_workspace:
+                    st.warning("Saisissez un nom de dossier pour continuer.")
+                else:
+                    st.session_state["audit_workspace_select"] = new_workspace
+                    st.session_state["workspace_new_name"] = ""
+                    st.rerun()
     with c_user:
         if st.button("DÉCONNEXION", use_container_width=True):
             st.session_state.clear()
