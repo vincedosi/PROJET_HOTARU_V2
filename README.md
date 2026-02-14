@@ -17,12 +17,14 @@ HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority I
 
 ---
 
-## Versioning
+## Versioning (obligatoire)
 
-À **chaque push ou merge sur `main`** (pull request), mettre à jour **`version.py`** :
-- `VERSION` : incrémenter si besoin
-- `BUILD_DATE` : date/heure courantes (automatique au chargement)
-- `RELEASE_NOTE` : mini description (affichée sur la Home)
+**Toujours** mettre à jour **`version.py`** à chaque **merge** ou **pull request** (avant de merger ou de pousser sur `main`) :
+- `VERSION` : incrémenter (ex. 3.0.53 → 3.0.54)
+- `BUILD_DATE` : automatique au chargement (pas besoin de modifier)
+- `RELEASE_NOTE` : courte description des changements (affichée sur la Home)
+
+Règle : **pas de merge / pas de PR sans mise à jour de `version.py`.**
 
 L'app affiche **V {VERSION} // {BUILD_DATE}** dans le header et le footer.
 

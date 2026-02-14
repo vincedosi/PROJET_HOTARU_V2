@@ -1,0 +1,16 @@
+---
+description: Toujours mettre à jour version.py à chaque merge ou pull request
+alwaysApply: true
+---
+
+# Versioning obligatoire
+
+À **chaque merge** ou **pull request** (avant de pousser sur `main`) :
+
+1. **Mettre à jour `version.py`** :
+   - `VERSION` : incrémenter (ex. 3.0.54 → 3.0.55)
+   - `RELEASE_NOTE` : courte description des changements
+
+2. **Inclure `version.py`** dans le commit de merge ou dans le dernier commit de la PR.
+
+Règle projet : **pas de merge / pas de PR sans mise à jour de `version.py`.**
