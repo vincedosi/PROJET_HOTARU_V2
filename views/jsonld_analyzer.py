@@ -276,15 +276,15 @@ def render_jsonld_analyzer_tab():
         if num_clusters == 0:
             st.info("Lancez une nouvelle analyse avec une URL différente ou plus de pages.")
         else:
-            tab_names = ["GRAPHE", "TABLEAU", "EXPORT", "FUSION"] + (["Logs"] if logs else [])
+            tab_names = ["VUE ENSEMBLE", "TABLEAU", "EXPORT", "FUSION"] + (["Logs"] if logs else [])
             tabs = st.tabs(tab_names)
             tab_graphe, tab_tableau, tab_export, tab_fusion = tabs[0], tabs[1], tabs[2], tabs[3]
             tab_logs = tabs[4] if logs else None
 
         if num_clusters > 0:
             with tab_graphe:
-                st.markdown("<p style='color:#0f172a; font-weight:700; font-size:1rem; margin:0 0 0.5rem 0;'>Graphe interactif des clusters</p>", unsafe_allow_html=True)
-                st.caption("Cliquez sur un cluster (nœud coloré) pour afficher les détails dans le panneau. Cliquez sur une URL pour l'ouvrir. Sinon, utilisez le menu déroulant.")
+                st.markdown("<p style='color:#0f172a; font-weight:700; font-size:1rem; margin:0 0 0.5rem 0;'>Vue d'ensemble</p>", unsafe_allow_html=True)
+                st.caption("Cliquez sur un nœud (modèle/cluster) dans le graphe pour le sélectionner, ou utilisez le menu « Détails du cluster ». Vous verrez le JSON-LD actuel et le JSON-LD optimisé (si généré). Clic sur une URL = ouverture dans un nouvel onglet.")
 
                 # Déterminer le cluster à afficher : query param (clic graphe) > session_state > 0
                 selected_cluster_idx = None
@@ -341,10 +341,43 @@ def render_jsonld_analyzer_tab():
                             unsafe_allow_html=True,
                         )
                         st.markdown("---")
+
+                        # JSON-LD actuel (modèle/template) et JSON-LD optimisé — visibles au clic sur le nœud
+                        st.markdown("**JSON-LD actuel (modèle / template)**")
+                        jld = cluster_jsonld[idx] if idx < len(cluster_jsonld) else None
+                        if jld:
+                            st.json(jld)
+                        else:
+                            st.caption("Aucun JSON-LD détecté sur ces pages.")
+                        st.markdown("---")
+                        st.markdown("**JSON-LD optimisé** (si généré)")
+                        optimized_data = st.session_state.get(f"optimized_jsonld_{idx}")
+                        if optimized_data:
+                            st.json(optimized_data)
+                            validation_result = validate_jsonld_schema(optimized_data)
+                            if validation_result["valid"]:
+                                if validation_result["warnings"]:
+                                    st.caption(validation_result["message"])
+                                else:
+                                    st.success(validation_result["message"])
+                            else:
+                                st.error(validation_result["message"])
+                            st.download_button(
+                                "Télécharger JSON-LD",
+                                data=json.dumps(optimized_data, ensure_ascii=False, indent=2),
+                                file_name=f"jsonld_optimized_{name.lower().replace(' ', '_')[:30]}.json",
+                                mime="application/json",
+                                use_container_width=True,
+                                key=f"download_jsonld_{idx}",
+                            )
+                        else:
+                            st.caption("Cliquez sur GÉNÉRER ci-dessous pour créer le JSON-LD optimisé.")
+                        st.markdown("---")
+
                         col_btn1, col_btn2 = st.columns([3, 1])
                         with col_btn1:
                             st.markdown("**Génération automatique du JSON-LD optimisé :**")
-                            st.caption("Mistral AI analyse la structure et génère un JSON-LD Schema.org complet avec tous les champs recommandés.")
+                            st.caption("Mistral AI analyse la structure et génère un JSON-LD Schema.org complet.")
                         with col_btn2:
                             generate_btn = st.button(
                                 "GÉNÉRER",
@@ -403,45 +436,6 @@ def render_jsonld_analyzer_tab():
                                     st.warning("Résultats du crawl non disponibles (analyse chargée depuis Sheets). Lancez une nouvelle analyse.")
 
                         st.markdown("---")
-                        col_current, col_optimized = st.columns(2)
-                        with col_current:
-                            st.markdown("**JSON-LD actuel**")
-                            jld = cluster_jsonld[idx] if idx < len(cluster_jsonld) else None
-                            if jld:
-                                st.json(jld)
-                            else:
-                                st.warning(" Aucun JSON-LD détecté sur ces pages.")
-
-                        with col_optimized:
-                            st.markdown("**JSON-LD optimisé**")
-                            optimized_data = st.session_state.get(f"optimized_jsonld_{idx}")
-                            if optimized_data:
-                                st.json(optimized_data)
-                                validation_result = validate_jsonld_schema(optimized_data)
-                                if validation_result["valid"]:
-                                    if validation_result["warnings"]:
-                                        st.warning(validation_result["message"])
-                                        with st.expander("Voir les warnings"):
-                                            for w in validation_result["warnings"]:
-                                                st.markdown(f"- {w}")
-                                    else:
-                                        st.success(validation_result["message"])
-                                else:
-                                    st.error(validation_result["message"])
-                                    with st.expander("Voir les erreurs"):
-                                        for e in validation_result["errors"]:
-                                            st.markdown(f"- {e}")
-                                st.download_button(
-                                    "Télécharger JSON-LD",
-                                    data=json.dumps(optimized_data, ensure_ascii=False, indent=2),
-                                    file_name=f"jsonld_optimized_{name.lower().replace(' ', '_')[:30]}.json",
-                                    mime="application/json",
-                                    use_container_width=True,
-                                    key=f"download_jsonld_{idx}",
-                                )
-                            else:
-                                st.info("Cliquez sur 'GÉNÉRER' pour créer le JSON-LD optimisé.")
-
                         tab_dom, tab_jsonld, tab_urls = st.tabs(["DOM", "JSON-LD", "URLs"])
                         with tab_dom:
                             st.markdown("**Structure DOM**")

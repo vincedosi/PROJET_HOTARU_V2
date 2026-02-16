@@ -801,10 +801,11 @@ def validate_jsonld_schema(jsonld_data: dict, timeout: int = 10) -> dict:
 # Graphe interactif (pyvis + networkx)
 # =============================================================================
 
+# Nœuds clusters : dégradé de bleus (distincts par cluster)
 CLUSTER_NODE_COLORS = [
-    "#dc2626", "#ea580c", "#ca8a04", "#16a34a", "#2563eb",
-    "#7c3aed", "#db2777", "#0d9488", "#f59e0b", "#6366f1",
-    "#ef4444", "#84cc16", "#06b6d4", "#8b5cf6", "#ec4899",
+    "#1e40af", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd",
+    "#1e3a8a", "#1d4ed8", "#2563eb", "#3b82f6", "#0ea5e9",
+    "#0284c7", "#0c4a6e", "#0369a1", "#0e7490", "#155e75",
 ]
 
 
