@@ -359,15 +359,19 @@ def render_jsonld_analyzer_tab():
                             name = getattr(master_data, "brand_name", "") or getattr(master_data, "legal_name", "") or "—"
                             st.markdown(f'**Entité** {name}')
                             st.caption(f'URL Master : {master_url[:60]}{"…" if len(master_url) > 60 else ""}')
-                            if jsonld_master.strip():
-                                st.caption("Template JSON-LD généré.")
                             st.success("Master renseigné. Modifiez-le dans l’onglet **MASTER**.")
                         else:
                             st.warning("Aucun Master renseigné sur cette page.")
                             st.caption("Allez dans l’onglet **MASTER** pour identifier l’entité (nom, QID, SIREN), valider la page, puis générer le JSON-LD.")
 
+                        if jsonld_master.strip():
+                            st.markdown("**JSON-LD Master** (avec vos modifs)")
+                            st.code(jsonld_master, language="json")
+                        else:
+                            st.caption("Aucun JSON-LD Master généré. Onglet **MASTER** → Générer le JSON-LD avec Mistral.")
+
                         st.markdown("---")
-                        st.info("Pour valider cette URL comme page Master : onglet **MASTER** → **Valider cette page pour le Master**.")
+                        st.info("Valider cette URL comme page Master : onglet **MASTER** → **Valider cette page pour le Master**.")
                     else:
                         idx = selected_cluster_idx
                         label = cluster_labels[idx] if idx < len(cluster_labels) else {}
