@@ -337,19 +337,70 @@ def build_json_diff_blocks(client_json: str, hotaru_json: str) -> Tuple[str, str
 
 
 def render_master_tab():
-    """Onglet MASTER - Interface Brutaliste avec champs editables"""
+    """Onglet MASTER - Interface Brutaliste avec champs editables (standalone)."""
+    _render_master_tab_inner(with_page_selector=False)
 
+
+def render_master_tab_for_jsonld():
+    """Onglet MASTER sous JSON-LD : sélecteur de page (post-scrape) + reset + flux Master."""
+    _render_master_tab_inner(with_page_selector=True)
+
+
+def _render_master_tab_inner(with_page_selector: bool = False):
+    """Contenu commun : optionnellement sélecteur de page (après scrape) + reset, puis Données / Méthodologie."""
     if "master_data" not in st.session_state:
         st.session_state.master_data = None
 
-    # Header
     st.markdown('<h1 class="zen-title">MASTER DATA</h1>', unsafe_allow_html=True)
     st.markdown(
         '<p class="zen-subtitle">PERMANENT ENTITY DATA // JSON-LD FOUNDATION</p>',
         unsafe_allow_html=True,
     )
 
-    # Sous-onglets : Données / Méthodologie
+    if with_page_selector and "jsonld_analyzer_results" in st.session_state:
+        data = st.session_state["jsonld_analyzer_results"]
+        site_url = data.get("site_url") or ""
+        cluster_urls = data.get("cluster_urls") or []
+        cluster_labels = data.get("cluster_labels") or []
+        options = [site_url]
+        option_labels = ["URL du site (page de scrape)"]
+        for i, urls in enumerate(cluster_urls):
+            if urls:
+                label = (cluster_labels[i].get("model_name") or f"Cluster {i + 1}").strip()
+                option_labels.append(f"{label} — {urls[0][:50]}…" if len(urls[0]) > 50 else f"{label} — {urls[0]}")
+                options.append(urls[0])
+        idx = st.session_state.get("jsonld_master_page_idx", 0)
+        if idx >= len(options):
+            idx = 0
+        sel = st.selectbox(
+            "Sur quelle page appliquer le Master ?",
+            option_labels,
+            index=idx,
+            key="master_page_select",
+        )
+        if sel and options:
+            page_idx = option_labels.index(sel)
+            st.session_state["jsonld_master_page_idx"] = page_idx
+            st.session_state["target_url"] = options[page_idx]
+        else:
+            st.session_state["target_url"] = site_url
+        st.markdown("---")
+
+    # Bouton Reset (effacer et recommencer à 0)
+    if st.button("Effacer et recommencer à 0", type="secondary", key="master_reset_btn"):
+        st.session_state.master_data = None
+        st.session_state.pop("jsonld_master", None)
+        st.session_state.pop("jsonld_master_cluster_idx", None)
+        st.session_state.pop("jsonld_master_page_idx", None)
+        if "master_wiki_results" in st.session_state:
+            st.session_state.master_wiki_results = []
+        if "master_insee_results" in st.session_state:
+            st.session_state.master_insee_results = []
+        st.success("Master réinitialisé. Vous pouvez recommencer.")
+        st.rerun()
+
+    st.markdown("---")
+
     tab_donnees, tab_methodo = st.tabs(["Données", "Méthodologie"])
     with tab_donnees:
         st.caption("Chargement / sauvegarde : barre en haut → Choix du workspace, Choix de la sauvegarde → VALIDER (charge audit + JSON-LD + MASTER) ou SAUVEGARDER.")

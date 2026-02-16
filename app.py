@@ -75,6 +75,14 @@ def get_render_jsonld_analyzer_tab():
     from modules.jsonld import render_jsonld_analyzer_tab
     return render_jsonld_analyzer_tab
 
+def get_render_master_tab_for_jsonld():
+    from modules.jsonld import render_master_tab_for_jsonld
+    return render_master_tab_for_jsonld
+
+def get_render_jsonld_fusion_intelligente():
+    from modules.jsonld import render_jsonld_fusion_intelligente
+    return render_jsonld_fusion_intelligente
+
 def get_render_eco_tab():
     from modules.eco import render_eco_tab
     return render_eco_tab
@@ -410,9 +418,20 @@ def main():
             render_scraping_debug_tab()
 
     with tab_jsonld:
-        # Master est intégré dans Analyse JSON-LD (onglet MASTER après GRAPHE, avant TABLEAU)
-        render_jsonld_analyzer_tab = get_render_jsonld_analyzer_tab()
-        render_jsonld_analyzer_tab()
+        sub_transformer, sub_master, sub_leaf = st.tabs([
+            "JSON-LD TRANSFORMER",
+            "MASTER",
+            "LEAF",
+        ])
+        with sub_transformer:
+            render_jsonld_analyzer_tab = get_render_jsonld_analyzer_tab()
+            render_jsonld_analyzer_tab()
+        with sub_master:
+            render_master_tab_for_jsonld = get_render_master_tab_for_jsonld()
+            render_master_tab_for_jsonld()
+        with sub_leaf:
+            render_jsonld_fusion_intelligente = get_render_jsonld_fusion_intelligente()
+            render_jsonld_fusion_intelligente()
 
     with tab_eco:
         render_eco_tab = get_render_eco_tab()
