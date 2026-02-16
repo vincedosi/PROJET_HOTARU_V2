@@ -418,12 +418,12 @@ def main():
             render_scraping_debug_tab()
 
     with tab_jsonld:
-        sub_transformer, sub_master, sub_leaf = st.tabs([
-            "JSON-LD TRANSFORMER",
+        sub_vue_ensemble, sub_master, sub_leaf = st.tabs([
+            "VUE ENSEMBLE",
             "MASTER",
             "LEAF",
         ])
-        with sub_transformer:
+        with sub_vue_ensemble:
             render_jsonld_analyzer_tab = get_render_jsonld_analyzer_tab()
             render_jsonld_analyzer_tab()
         with sub_master:

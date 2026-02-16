@@ -358,6 +358,7 @@ def _render_master_tab_inner(with_page_selector: bool = False):
     )
 
     if with_page_selector and "jsonld_analyzer_results" in st.session_state:
+        st.caption("Les données (site, clusters) proviennent de l’onglet **Vue d’ensemble** après un scrape. Choisissez la page à utiliser pour le Master.")
         data = st.session_state["jsonld_analyzer_results"]
         site_url = data.get("site_url") or ""
         cluster_urls = data.get("cluster_urls") or []
@@ -384,6 +385,12 @@ def _render_master_tab_inner(with_page_selector: bool = False):
             st.session_state["target_url"] = options[page_idx]
         else:
             st.session_state["target_url"] = site_url
+
+        if st.button("Valider cette page pour le Master", type="primary", key="master_validate_page_btn"):
+            st.session_state["master_page_validated"] = True
+            st.success(f"Page Master enregistrée : {st.session_state.get('target_url', '')[:60]}…")
+            st.rerun()
+        st.caption("Choisissez la page puis cliquez sur **Valider** pour l’appliquer au Master (et à la sauvegarde).")
         st.markdown("---")
 
     # Bouton Reset (effacer et recommencer à 0)

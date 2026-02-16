@@ -3,12 +3,13 @@
 
 import datetime
 
-VERSION = "3.0.60"
+VERSION = "3.0.61"
 BUILD_DATE = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-RELEASE_NOTE = "VUE ENSEMBLE: onglet renommé, JSON-LD actuel/optimisé au clic sur nœud, nœuds en dégradé de bleus."
+RELEASE_NOTE = "Vue d'ensemble = onglet principal. Bouton Valider page Master. Clic nœud met à jour Détails du cluster. MASTER/LEAF liés aux données scrape."
 
 # Historique des notes de version (précédentes uniquement, plus récente en premier) — date/heure de release
 RELEASE_HISTORY = [
+    {"version": "3.0.60", "date": "2026-02-16 14:00", "note": "VUE ENSEMBLE: onglet renommé, JSON-LD actuel/optimisé au clic nœud, nœuds en dégradé de bleus."},
     {"version": "3.0.59", "date": "2026-02-16 12:00", "note": "JSON-LD: 3 onglets TRANSFORMER / MASTER / LEAF. Master: sélecteur page + reset. Fusion intelligente dans LEAF."},
     {"version": "3.0.58", "date": "2026-02-16 08:29", "note": "Home : affichage du README.md sur la page d'accueil."},
     {"version": "3.0.57", "date": "2026-02-16 08:15", "note": "JSON-LD: init master_data (fix ouverture onglet MASTER depuis Analyse). Revue modules."},

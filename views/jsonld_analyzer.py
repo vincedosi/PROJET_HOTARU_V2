@@ -77,7 +77,7 @@ def render_jsonld_analyzer_tab():
     from core.scraping import SmartScraper
 
     st.markdown(
-        "<p class='section-title'>JSON-LD TRANSFORMER — Analyse</p>",
+        "<p class='section-title'>VUE ENSEMBLE</p>",
         unsafe_allow_html=True,
     )
     st.markdown(
@@ -308,6 +308,9 @@ def render_jsonld_analyzer_tab():
                     for i in range(num_clusters)
                 ]
                 default_idx = selected_cluster_idx if selected_cluster_idx is not None and selected_cluster_idx < len(options) else 0
+                # Synchroniser le selectbox avec le cluster sélectionné (ex. clic sur le graphe) pour que "Détails du cluster" se mette à jour
+                if default_idx < len(options):
+                    st.session_state["jsonld_cluster_select"] = options[default_idx]
 
                 # Layout : graphe à gauche, panneau latéral à droite
                 col_graph, col_panel = st.columns([2, 1])
@@ -829,13 +832,13 @@ def render_jsonld_fusion_intelligente():
     st.markdown(
         "<p class='home-tagline' style='margin-bottom:1rem; color:#0f172a;'>"
         "Mistral analyse les noms des clusters et propose des fusions (même type de page). "
-        "Validez une à une. La fusion manuelle reste dans l'onglet FUSION du JSON-LD TRANSFORMER.</p>",
+        "Validez une à une. La fusion manuelle reste dans l'onglet FUSION de la Vue d'ensemble.</p>",
         unsafe_allow_html=True,
     )
     st.markdown("---")
 
     if "jsonld_analyzer_results" not in st.session_state:
-        st.info("Lancez d'abord une analyse dans **JSON-LD TRANSFORMER** (onglet Nouvelle analyse) pour afficher les suggestions de fusion.")
+        st.info("Lancez d'abord une analyse dans **Vue d'ensemble** (onglet Nouvelle analyse) pour afficher les suggestions de fusion.")
         return
 
     data = st.session_state["jsonld_analyzer_results"]
