@@ -907,7 +907,9 @@ def build_jsonld_graph_html(domain: str, cluster_labels: list, cluster_urls: lis
                     network.on("click", function(params) {
                         if (params.nodes.length > 0) {
                             var nodeId = params.nodes[0];
-                            if (String(nodeId).startsWith('cluster_')) {
+                            if (String(nodeId).startsWith('domain_')) {
+                                tryNavigate(-1);
+                            } else if (String(nodeId).startsWith('cluster_')) {
                                 var clusterIndex = parseInt(String(nodeId).replace('cluster_', ''), 10);
                                 tryNavigate(clusterIndex);
                             } else if (String(nodeId).startsWith('http')) {

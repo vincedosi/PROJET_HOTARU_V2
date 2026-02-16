@@ -284,31 +284,38 @@ def render_jsonld_analyzer_tab():
         if num_clusters > 0:
             with tab_graphe:
                 st.markdown("<p style='color:#0f172a; font-weight:700; font-size:1rem; margin:0 0 0.5rem 0;'>Vue d'ensemble</p>", unsafe_allow_html=True)
-                st.caption("Cliquez sur un nœud (modèle/cluster) dans le graphe pour le sélectionner, ou utilisez le menu « Détails du cluster ». Vous verrez le JSON-LD actuel et le JSON-LD optimisé (si généré). Clic sur une URL = ouverture dans un nouvel onglet.")
+                st.caption("**Nœud central** (domaine) = page du site (scrape), pas un cluster — c’est la page Master. Cliquez dessus ou sur un **cluster** (bleu) pour mettre à jour les Détails. Clic sur une URL = nouvel onglet.")
 
-                # Déterminer le cluster à afficher : query param (clic graphe) > session_state > 0
+                # Déterminer la sélection : -1 = nœud central (domaine, pas un cluster), 0..num_clusters-1 = cluster
+                # Query param (clic graphe) : jsonld_cluster=-1 pour le nœud central, 0,1,... pour les clusters
                 selected_cluster_idx = None
                 try:
                     qp = getattr(st, "query_params", None)
                     if qp is not None and "jsonld_cluster" in qp:
                         selected_cluster_idx = int(qp["jsonld_cluster"])
-                        if selected_cluster_idx >= num_clusters:
-                            selected_cluster_idx = 0
+                        if selected_cluster_idx < -1 or selected_cluster_idx >= num_clusters:
+                            selected_cluster_idx = -1
                         st.session_state["jsonld_selected_cluster"] = selected_cluster_idx
                 except (ValueError, TypeError, KeyError):
                     pass
                 if selected_cluster_idx is None:
                     if "jsonld_selected_cluster" in st.session_state:
                         selected_cluster_idx = st.session_state["jsonld_selected_cluster"]
+                        if selected_cluster_idx < -1 or selected_cluster_idx >= num_clusters:
+                            selected_cluster_idx = -1
                     else:
-                        selected_cluster_idx = 0
+                        selected_cluster_idx = -1
 
-                options = [
+                site_url = data.get("site_url") or f"https://{domain}"
+                options = ["Nœud central (URL du site) — pas un cluster"]
+                options += [
                     f"{i + 1}. {(cluster_labels[i].get('model_name') or '').strip() or f'Cluster {i + 1}'} ({len(cluster_urls[i])} p.)"
                     for i in range(num_clusters)
                 ]
-                default_idx = selected_cluster_idx if selected_cluster_idx is not None and selected_cluster_idx < len(options) else 0
-                # Synchroniser le selectbox avec le cluster sélectionné (ex. clic sur le graphe) pour que "Détails du cluster" se mette à jour
+                # index dans le menu : 0 = nœud central (selected_cluster_idx -1), 1 = cluster 0, 2 = cluster 1, ...
+                default_idx = selected_cluster_idx + 1 if selected_cluster_idx >= 0 else 0
+                if default_idx >= len(options):
+                    default_idx = 0
                 if default_idx < len(options):
                     st.session_state["jsonld_cluster_select"] = options[default_idx]
 
@@ -325,11 +332,21 @@ def render_jsonld_analyzer_tab():
                         unsafe_allow_html=True,
                     )
                     sel = st.selectbox(
-                        "Sélectionner un cluster", options, index=default_idx, key="jsonld_cluster_select"
+                        "Sélectionner le nœud central ou un cluster", options, index=default_idx, key="jsonld_cluster_select"
                     )
                     if sel:
-                        idx = options.index(sel)
-                        st.session_state["jsonld_selected_cluster"] = idx
+                        menu_idx = options.index(sel)
+                        selected_cluster_idx = -1 if menu_idx == 0 else menu_idx - 1
+                        st.session_state["jsonld_selected_cluster"] = selected_cluster_idx
+
+                    if selected_cluster_idx == -1:
+                        # Nœud central = domaine / page du site (pas un cluster) — c'est la page pour le Master
+                        st.markdown("**Nœud central** (pas un cluster)")
+                        st.caption("C'est la page du site utilisée pour le scrape. Elle porte le Master.")
+                        st.markdown(f'<p style="margin:0.5rem 0; font-size:0.85rem; word-break:break-all;"><strong>URL</strong> {site_url}</p>', unsafe_allow_html=True)
+                        st.info("Pour l'utiliser comme page Master : onglet **MASTER** → choisir « URL du site (page de scrape) » → **Valider cette page pour le Master**.")
+                    else:
+                        idx = selected_cluster_idx
                         label = cluster_labels[idx] if idx < len(cluster_labels) else {}
                         name = (label.get("model_name") or "").strip() or f"Cluster {idx + 1}"
                         schema_type = (label.get("schema_type") or "").strip() or "—"
