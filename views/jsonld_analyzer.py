@@ -344,7 +344,30 @@ def render_jsonld_analyzer_tab():
                         st.markdown("**Nœud central** (pas un cluster)")
                         st.caption("C'est la page du site utilisée pour le scrape. Elle porte le Master.")
                         st.markdown(f'<p style="margin:0.5rem 0; font-size:0.85rem; word-break:break-all;"><strong>URL</strong> {site_url}</p>', unsafe_allow_html=True)
-                        st.info("Pour l'utiliser comme page Master : onglet **MASTER** → choisir « URL du site (page de scrape) » → **Valider cette page pour le Master**.")
+
+                        # Récupérer / afficher le Master ici (données saisies dans l'onglet MASTER)
+                        st.markdown("---")
+                        st.markdown(
+                            '<div style="background:#0f172a; color:#fff; padding:8px 12px; font-weight:700; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.5rem;">Votre Master</div>',
+                            unsafe_allow_html=True,
+                        )
+                        master_data = st.session_state.get("master_data")
+                        master_url = st.session_state.get("target_url") or site_url
+                        jsonld_master = st.session_state.get("jsonld_master") or ""
+
+                        if master_data:
+                            name = getattr(master_data, "brand_name", "") or getattr(master_data, "legal_name", "") or "—"
+                            st.markdown(f'**Entité** {name}')
+                            st.caption(f'URL Master : {master_url[:60]}{"…" if len(master_url) > 60 else ""}')
+                            if jsonld_master.strip():
+                                st.caption("Template JSON-LD généré.")
+                            st.success("Master renseigné. Modifiez-le dans l’onglet **MASTER**.")
+                        else:
+                            st.warning("Aucun Master renseigné sur cette page.")
+                            st.caption("Allez dans l’onglet **MASTER** pour identifier l’entité (nom, QID, SIREN), valider la page, puis générer le JSON-LD.")
+
+                        st.markdown("---")
+                        st.info("Pour valider cette URL comme page Master : onglet **MASTER** → **Valider cette page pour le Master**.")
                     else:
                         idx = selected_cluster_idx
                         label = cluster_labels[idx] if idx < len(cluster_labels) else {}

@@ -3,12 +3,13 @@
 
 import datetime
 
-VERSION = "3.0.63"
+VERSION = "3.0.64"
 BUILD_DATE = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-RELEASE_NOTE = "MASTER : page = URL du site à analyser (nœud central noir) uniquement, plus de liste."
+RELEASE_NOTE = "Vue d'ensemble : bloc Votre Master visible (nœud central), entité + URL + template."
 
 # Historique des notes de version (précédentes uniquement, plus récente en premier) — date/heure de release
 RELEASE_HISTORY = [
+    {"version": "3.0.63", "date": "2026-02-16 17:00", "note": "MASTER : page = URL du site (nœud central noir) uniquement, plus de liste."},
     {"version": "3.0.62", "date": "2026-02-16 16:00", "note": "Vue d'ensemble : nœud central = page du site (Master), pas un cluster. Clic nœud central ou menu."},
     {"version": "3.0.61", "date": "2026-02-16 15:00", "note": "Vue d'ensemble = onglet principal. Bouton Valider page Master. Clic nœud met à jour Détails. MASTER/LEAF liés."},
     {"version": "3.0.60", "date": "2026-02-16 14:00", "note": "VUE ENSEMBLE: onglet renommé, JSON-LD actuel/optimisé au clic nœud, nœuds en dégradé de bleus."},
