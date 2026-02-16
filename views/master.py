@@ -358,39 +358,21 @@ def _render_master_tab_inner(with_page_selector: bool = False):
     )
 
     if with_page_selector and "jsonld_analyzer_results" in st.session_state:
-        st.caption("Les données (site, clusters) proviennent de l’onglet **Vue d’ensemble** après un scrape. Choisissez la page à utiliser pour le Master.")
         data = st.session_state["jsonld_analyzer_results"]
         site_url = data.get("site_url") or ""
-        cluster_urls = data.get("cluster_urls") or []
-        cluster_labels = data.get("cluster_labels") or []
-        options = [site_url]
-        option_labels = ["URL du site (page de scrape)"]
-        for i, urls in enumerate(cluster_urls):
-            if urls:
-                label = (cluster_labels[i].get("model_name") or f"Cluster {i + 1}").strip()
-                option_labels.append(f"{label} — {urls[0][:50]}…" if len(urls[0]) > 50 else f"{label} — {urls[0]}")
-                options.append(urls[0])
-        idx = st.session_state.get("jsonld_master_page_idx", 0)
-        if idx >= len(options):
-            idx = 0
-        sel = st.selectbox(
-            "Sur quelle page appliquer le Master ?",
-            option_labels,
-            index=idx,
-            key="master_page_select",
+        st.session_state["target_url"] = site_url
+
+        st.markdown("**Sur quelle page appliquer le Master ?**")
+        st.markdown(
+            "C’est **l’URL du site à analyser** — le **nœud central (noir)** dans la Vue d’ensemble. "
+            "Pas un cluster : la page avec laquelle vous avez lancé le scrape."
         )
-        if sel and options:
-            page_idx = option_labels.index(sel)
-            st.session_state["jsonld_master_page_idx"] = page_idx
-            st.session_state["target_url"] = options[page_idx]
-        else:
-            st.session_state["target_url"] = site_url
+        st.markdown(f'<p style="margin:0.5rem 0; padding:0.75rem; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; font-size:0.9rem; word-break:break-all;"><strong>{site_url}</strong></p>', unsafe_allow_html=True)
 
         if st.button("Valider cette page pour le Master", type="primary", key="master_validate_page_btn"):
             st.session_state["master_page_validated"] = True
-            st.success(f"Page Master enregistrée : {st.session_state.get('target_url', '')[:60]}…")
+            st.success(f"Page Master enregistrée : {site_url[:70]}{'…' if len(site_url) > 70 else ''}")
             st.rerun()
-        st.caption("Choisissez la page puis cliquez sur **Valider** pour l’appliquer au Master (et à la sauvegarde).")
         st.markdown("---")
 
     # Bouton Reset (effacer et recommencer à 0)
