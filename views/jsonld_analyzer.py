@@ -74,7 +74,7 @@ Généré le {time.strftime('%Y-%m-%d %H:%M:%S')}
 def render_jsonld_analyzer_tab():
     """Onglet Analyse JSON-LD : crawl + clustering, affichage résultats texte. Un seul scrape remplit aussi l'Audit GEO."""
     import streamlit as st
-    from views.audit_geo import run_unified_site_analysis
+    from views.audit_geo import run_unified_site_analysis, _format_crawl_error
 
     st.markdown(
         "<p class='section-title'>VUE ENSEMBLE</p>",
@@ -193,9 +193,8 @@ def render_jsonld_analyzer_tab():
                 )
             except Exception as e:
                 progress_placeholder.empty()
-                err_msg = str(e)[:300] if e else "Erreur inconnue"
-                st.error(f"Erreur : {err_msg}")
-                st.caption("Vérifiez l'URL, la connexion réseau et l'accessibilité du site.")
+                st.error(_format_crawl_error(e))
+                st.caption("Vérifiez l'URL, la connexion réseau et l'accessibilité du site. Si vous utilisez le moteur V2, exécutez « playwright install chromium ».")
                 return
 
             progress_placeholder.empty()

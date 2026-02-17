@@ -75,6 +75,29 @@ PROJET_HOTARU_V2/
 
 ---
 
+## Moteur de scraping V2 (Crawl4AI / Playwright)
+
+L’app propose deux moteurs : **V1 (Selenium)** et **V2 (Crawl4AI + Playwright)**. Par défaut V2 est sélectionné.
+
+**Pour utiliser le moteur V2**, les binaires Playwright (Chromium) doivent être installés **une fois** après l’installation des dépendances Python :
+
+```bash
+# Après : pip install -r requirements.txt
+playwright install chromium
+```
+
+- **En local / CI :** exécuter la commande ci‑dessus dans le même environnement que l’app.
+- **Docker / déploiement :** ajouter dans votre image ou script de build :
+  ```bash
+  RUN playwright install chromium
+  ```
+  (ou `playwright install-deps` si vous installez les dépendances système séparément.)
+- **Streamlit Community Cloud :** le build standard ne lance pas `playwright install`. Pour utiliser V2 en Cloud, déployer avec une image Docker qui exécute `playwright install chromium`, ou utiliser le moteur **V1** (Selenium) qui ne nécessite pas Playwright.
+
+Si l’erreur « Executable doesn't exist at …/ms-playwright/… » s’affiche, exécuter `playwright install chromium` puis relancer l’app, ou passer sur **V1 — Selenium** dans l’interface.
+
+---
+
 ## SaaS : authentification et isolation
 
 - **Login :** `core.auth.AuthManager` — email + mot de passe, hash en Google Sheets (onglet `users`).

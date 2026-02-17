@@ -404,6 +404,19 @@ def check_geo_infrastructure(base_url, crawl_results=None):
     return results, score
 
 
+def _format_crawl_error(e):
+    """Message d'erreur utilisateur ; détecte le cas Playwright (navigateurs non installés)."""
+    msg = str(e) if e else "Erreur inconnue"
+    if "Executable doesn't exist" in msg or "playwright install" in msg.lower() or "ms-playwright" in msg:
+        return (
+            "**Moteur V2 (Crawl4AI) : navigateur Playwright absent.**\n\n"
+            "Exécutez une fois dans votre environnement :\n\n"
+            "```\nplaywright install chromium\n```\n\n"
+            "Ou utilisez le moteur **V1 — Selenium** (sans Playwright) en attendant."
+        )
+    return msg[:400]
+
+
 def run_unified_site_analysis(
     session_state,
     urls,
@@ -1603,7 +1616,7 @@ def render_audit_geo():
                     st.session_state.pop(k, None)
                 st.rerun()
             except Exception as e:
-                st.error(f"Erreur lors du crawl : {e}")
+                st.error(_format_crawl_error(e))
                 for k in ("geo_pending_urls", "geo_pending_limit", "geo_pending_ws", "geo_pending_base_url", "geo_crawl_decision"):
                     st.session_state.pop(k, None)
             return
@@ -1748,7 +1761,7 @@ def render_audit_geo():
                         log_callback=add_crawl_log,
                     )
                 except Exception as e:
-                    st.error(f"Erreur lors du crawl : {e}")
+                    st.error(_format_crawl_error(e))
                     return
 
                 if crawl_logs:
