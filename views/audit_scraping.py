@@ -104,7 +104,7 @@ def render_scraping_debug_tab():
 
     st.markdown('<div class="section-container">', unsafe_allow_html=True)
 
-    col1, col2 = st.columns([3, 1])
+    col1, col2, col3 = st.columns([2.5, 1, 1])
     with col1:
         url = st.text_input(
             "URL À DIAGNOSTIQUER",
@@ -117,6 +117,18 @@ def render_scraping_debug_tab():
             value=False,
             help="Activer Selenium pour les sites SPA ou protégés (plus lent).",
         )
+    with col3:
+        if st.button(
+            "🔄 RESET COMPLET",
+            help="Nettoie tous les caches et session states pour un diagnostic frais.",
+            use_container_width=True,
+        ):
+            # Vider complètement le session state
+            keys_to_remove = [k for k in st.session_state.keys() if k.startswith("scraping_")]
+            for key in keys_to_remove:
+                del st.session_state[key]
+            st.success("✅ Reset complet effectué ! Actualise la page.")
+            st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
@@ -275,8 +287,9 @@ def render_scraping_debug_tab():
 
         has_structured = bool(data.get("has_structured_data"))
         jsonld_blocks = data.get("json_ld") or []
+        fallback_used = data.get("fallback_used", False)
 
-        col_ld1, col_ld2, col_ld3 = st.columns(3)
+        col_ld1, col_ld2, col_ld3, col_ld4 = st.columns(4)
         with col_ld1:
             status_ld = "OUI" if has_structured else "NON"
             st.metric("JSON-LD DÉTECTÉ", status_ld)
@@ -284,6 +297,9 @@ def render_scraping_debug_tab():
             st.metric("BLOCS JSON-LD", len(jsonld_blocks))
         with col_ld3:
             st.metric("H2", data.get("h2_count", 0))
+        with col_ld4:
+            fallback_label = "✅ FALLBACK" if fallback_used else "—"
+            st.metric("EXTRACTION", fallback_label)
 
         if jsonld_blocks:
             st.markdown("<br>", unsafe_allow_html=True)
