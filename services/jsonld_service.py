@@ -13,8 +13,19 @@ import requests
 from typing import Optional, Tuple
 from urllib.parse import urlparse
 from collections import defaultdict
+from functools import lru_cache
 
 from bs4 import BeautifulSoup
+
+# 🚀 OPTIMISATION: Regex compile cache (évite recompilation à chaque call)
+_REGEX_CACHE = {}
+
+def _get_compiled_regex(pattern: str, flags: int = 0):
+    """Get compiled regex from cache or compile and cache it."""
+    key = (pattern, flags)
+    if key not in _REGEX_CACHE:
+        _REGEX_CACHE[key] = re.compile(pattern, flags)
+    return _REGEX_CACHE[key]
 
 
 # Poids du score combiné (total 100)
@@ -108,11 +119,12 @@ def _segment_looks_dynamic(segment: str) -> bool:
         return True
     if segment.isdigit():
         return True
-    if re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", segment, re.I):
+    # 🚀 OPTIMISATION: Use regex cache
+    if _get_compiled_regex(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I).match(segment):
         return True
-    if re.match(r"^[a-z0-9-]+$", segment, re.I) and len(segment) >= 10:
+    if _get_compiled_regex(r"^[a-z0-9-]+$", re.I).match(segment) and len(segment) >= 10:
         return True
-    if len(segment) >= 8 and re.match(r"^[a-f0-9]+$", segment, re.I):
+    if len(segment) >= 8 and _get_compiled_regex(r"^[a-f0-9]+$", re.I).match(segment):
         return True
     return False
 
@@ -423,7 +435,9 @@ Réponds UNIQUEMENT avec un JSON valide, sans texte avant ou après :
         except requests.exceptions.Timeout:
             last_error = "timeout"
             if attempt < MISTRAL_RETRY:
-                time.sleep(1)
+                # 🚀 OPTIMISATION: Exponential backoff (1s, 2s, 4s, max 8s)
+                backoff_time = min(2 ** attempt, 8)
+                time.sleep(backoff_time)
         except requests.exceptions.RequestException as e:
             last_error = str(e)[:100] if e else "erreur réseau"
             break
@@ -783,7 +797,8 @@ def validate_jsonld_schema(jsonld_data: dict, timeout: int = 10) -> dict:
                 if not value.startswith(("http://", "https://", "/")):
                     warnings.append(f"URL potentiellement invalide dans {key} : {value[:50]}...")
             if "date" in key.lower() or key in ("validThrough", "expires", "datePublished", "dateModified"):
-                if not re.match(r"\d{4}-\d{2}-\d{2}", value):
+                # 🚀 OPTIMISATION: Use regex cache for date validation
+                if not _get_compiled_regex(r"\d{4}-\d{2}-\d{2}").match(value):
                     warnings.append(f"Format de date suspect dans {key} : {value[:30]} (attendu YYYY-MM-DD)")
 
     valid = len(errors) == 0
