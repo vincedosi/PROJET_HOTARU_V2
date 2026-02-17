@@ -18,7 +18,6 @@ import streamlit.components.v1 as components
 from bs4 import BeautifulSoup
 from core.database import AuditDatabase
 from core.session_keys import get_current_user_email
-from core.scraping import SmartScraper
 from modules.audit.geo_scoring import GEOScorer
 from views.off_page import render_off_page_audit
 from services.jsonld_service import (
@@ -412,6 +411,7 @@ def run_unified_site_analysis(
     use_selenium,
     selenium_mode,
     workspace_name,
+    engine="v2",
     cluster_threshold=0.85,
     progress_callback=None,
     log_callback=None,
@@ -429,8 +429,13 @@ def run_unified_site_analysis(
     base_url = base_url.rstrip("/")
     urls = [base_url] + [u for u in urls[1:] if u != base_url]
 
-    scr = SmartScraper(
-        urls,
+    if engine == "v2":
+        from core.scraping_v2 import HotaruScraperV2 as Scraper
+    else:
+        from core.scraping import SmartScraper as Scraper
+
+    scr = Scraper(
+        start_urls=urls,
         max_urls=max_pages,
         use_selenium=use_selenium,
         selenium_mode=selenium_mode,
@@ -1520,6 +1525,27 @@ def render_audit_geo():
         )
         st.caption("Un seul scrape remplit l'Audit GEO et la Vue d'ensemble JSON-LD. Sauvegardez via la barre en haut pour tout enregistrer.")
 
+        # ── Choix moteur (V1 / V2) ─────────────────────────────────────────
+        if "scraping_engine" not in st.session_state:
+            st.session_state["scraping_engine"] = "v2"
+        _engine_label = st.radio(
+            "⚙️ Moteur de scraping",
+            options=[
+                "🚀 V2 — Crawl4AI (rapide, Markdown LLM-ready)",
+                "🔧 V1 — Selenium (robuste, sites protégés)",
+            ],
+            index=0 if st.session_state.get("scraping_engine") == "v2" else 1,
+            horizontal=True,
+            key="scraping_engine_radio_audit_geo",
+            help=(
+                "V2 = Playwright async, x5 plus rapide, génère du Markdown propre pour l'IA. "
+                "V1 = cascade requests→Selenium, pour les sites qui bloquent (Cloudflare, anti-bot)."
+            ),
+        )
+        use_v2 = str(_engine_label).startswith("🚀")
+        st.session_state["scraping_engine"] = "v2" if use_v2 else "v1"
+        st.caption(f"Moteur actif : {'🚀 Crawl4AI V2' if use_v2 else '🔧 Selenium V1'}")
+
         c1, c2 = st.columns([3, 1])
 
         url_input = c1.text_area(
@@ -1568,6 +1594,7 @@ def render_audit_geo():
                     use_selenium=selenium_enabled,
                     selenium_mode=selenium_mode,
                     workspace_name=pending_ws,
+                    engine=st.session_state.get("scraping_engine", "v2"),
                     cluster_threshold=0.85,
                     progress_callback=lambda m, v: bar.progress(v, m),
                     log_callback=add_crawl_log,
@@ -1609,13 +1636,27 @@ def render_audit_geo():
                 # ========== ÉTAPE 1 : ANALYSE HOME (SmartScraper avec option Selenium si cochée) ==========
                 with st.spinner("Analyse de la page d'accueil..."):
                     try:
-                        scraper_home = SmartScraper(
-                            [base_url],
-                            max_urls=1,
-                            use_selenium=use_selenium_geo,
-                            log_callback=None,
-                        )
-                        data_home = scraper_home.get_page_details(base_url)
+                        engine = st.session_state.get("scraping_engine", "v2")
+                        if engine == "v2":
+                            from core.scraping_v2 import HotaruScraperV2 as ScraperHome
+                            scraper_home = ScraperHome(
+                                start_urls=[base_url],
+                                max_urls=1,
+                                use_selenium=use_selenium_geo,
+                                selenium_mode="light" if use_selenium_geo else None,
+                                log_callback=None,
+                            )
+                            home_results, _ = scraper_home.run_analysis()
+                            data_home = home_results[0] if home_results else None
+                        else:
+                            from core.scraping import SmartScraper as ScraperHome
+                            scraper_home = ScraperHome(
+                                start_urls=[base_url],
+                                max_urls=1,
+                                use_selenium=use_selenium_geo,
+                                log_callback=None,
+                            )
+                            data_home = scraper_home.get_page_details(base_url)
                         if data_home is None:
                             st.error("Impossible d'accéder au site (timeout ou erreur). Cochez « Utiliser Selenium » pour les sites protégés (ex. BMW).")
                             return
@@ -1701,6 +1742,7 @@ def render_audit_geo():
                         use_selenium=selenium_enabled,
                         selenium_mode=selenium_mode,
                         workspace_name=ws_in or "Non classé",
+                        engine=st.session_state.get("scraping_engine", "v2"),
                         cluster_threshold=0.85,
                         progress_callback=lambda m, v: bar.progress(v, m),
                         log_callback=add_crawl_log,

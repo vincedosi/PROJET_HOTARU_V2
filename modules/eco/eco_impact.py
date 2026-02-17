@@ -8,8 +8,6 @@ import json
 
 from bs4 import BeautifulSoup
 
-from core.scraping import fetch_page
-
 try:
     import tiktoken
     HAS_TIKTOKEN = True
@@ -36,9 +34,18 @@ class AIOImpactCalculator:
     entre une page "brute" (HTML complet) et une page optimisée HOTARU (signal pur).
     """
 
-    def __init__(self, timeout=15):
+    def __init__(self, timeout=15, engine: str = "v2"):
         self.timeout = timeout
+        self.engine = engine
         self._enc = None
+
+    def _fetch_page(self, url: str) -> str:
+        """Récupère le HTML via le moteur choisi (v1/v2)."""
+        if self.engine == "v2":
+            from core.scraping_v2 import fetch_page as _fetch
+        else:
+            from core.scraping import fetch_page as _fetch
+        return _fetch(url, timeout=self.timeout)
 
     def _get_encoding(self):
         if not HAS_TIKTOKEN:
@@ -59,7 +66,7 @@ class AIOImpactCalculator:
         et compte les tokens (poids cognitif "sale").
         """
         try:
-            html = fetch_page(url, timeout=self.timeout)
+            html = self._fetch_page(url)
         except Exception:
             return 0
         soup = BeautifulSoup(html, "html.parser")
@@ -102,7 +109,7 @@ class AIOImpactCalculator:
         Si pas de JSON-LD, on simule ~10% de la taille du texte brut comme "structure".
         """
         try:
-            html = fetch_page(url, timeout=self.timeout)
+            html = self._fetch_page(url)
         except Exception:
             return 0
         soup = BeautifulSoup(html, "html.parser")

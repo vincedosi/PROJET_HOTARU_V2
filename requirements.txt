@@ -20,3 +20,4 @@ tiktoken
 plotly
 googlesearch-python
 Pygments
+crawl4ai>=0.8.0

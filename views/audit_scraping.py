@@ -4,9 +4,6 @@ import re
 import streamlit as st
 from bs4 import BeautifulSoup
 
-from core.scraping import SmartScraper
-
-
 def _render_log_box(logs):
     """Affiche les logs techniques dans un bloc monospace."""
     if not logs:
@@ -77,6 +74,27 @@ def render_scraping_debug_tab():
         '<p class="section-title">DIAGNOSTIC SCRAPING & JSON-LD</p>',
         unsafe_allow_html=True,
     )
+
+    # ── Choix moteur (V1 / V2) ─────────────────────────────────────────
+    if "scraping_engine" not in st.session_state:
+        st.session_state["scraping_engine"] = "v2"
+    _engine_label = st.radio(
+        "⚙️ Moteur de scraping",
+        options=[
+            "🚀 V2 — Crawl4AI (rapide, Markdown LLM-ready)",
+            "🔧 V1 — Selenium (robuste, sites protégés)",
+        ],
+        index=0 if st.session_state.get("scraping_engine") == "v2" else 1,
+        horizontal=True,
+        key="scraping_engine_radio_audit_scraping",
+        help=(
+            "V2 = Playwright async, x5 plus rapide, génère du Markdown propre pour l'IA. "
+            "V1 = cascade requests→Selenium, pour les sites qui bloquent (Cloudflare, anti-bot)."
+        ),
+    )
+    use_v2 = str(_engine_label).startswith("🚀")
+    st.session_state["scraping_engine"] = "v2" if use_v2 else "v1"
+    st.caption(f"Moteur actif : {'🚀 Crawl4AI V2' if use_v2 else '🔧 Selenium V1'}")
     
     st.markdown(
         "<p style='color:#64748b;margin-bottom:20px;'>Analyse complète du scraping, "
@@ -141,24 +159,30 @@ def render_scraping_debug_tab():
         try:
             # CRITIQUE : On crée une classe temporaire pour passer le callback AVANT __init__
             add_log("Initialisation du scraper...")
-            
-            # On importe et on patche temporairement
-            scraper = SmartScraper(
-            [target_url], 
-            max_urls=1, 
-            use_selenium=force_selenium,
-            log_callback=add_log
-            )
-            
-            # HACK : On réassigne le callback et on rejoue les logs manquants
-            # (car __init__ a déjà eu lieu sans callback)
-            scraper.log_callback = add_log
-            
-            # On simule les logs d'init qui ont été perdus
-            add_log(f"Domaine : {scraper.domain}")
-            add_log(f"Selenium forcé : {'OUI' if force_selenium else 'NON'}")
-            add_log(f"Selenium activé : {'OUI' if scraper.use_selenium else 'NON'}")
-            add_log(f"Driver : {'Initialisé' if scraper.driver else 'Non initialisé'}")
+
+            engine = st.session_state.get("scraping_engine", "v2")
+            if engine == "v2":
+                from core.scraping_v2 import HotaruScraperV2 as Scraper
+                scraper = Scraper(
+                    start_urls=[target_url],
+                    max_urls=1,
+                    log_callback=add_log,
+                )
+                add_log(f"Domaine : {scraper.domain}")
+                add_log("Selenium : N/A (Playwright natif en V2)")
+                add_log("Driver : N/A (Playwright)")
+            else:
+                from core.scraping import SmartScraper as Scraper
+                scraper = Scraper(
+                    start_urls=[target_url],
+                    max_urls=1,
+                    use_selenium=force_selenium,
+                    log_callback=add_log,
+                )
+                add_log(f"Domaine : {scraper.domain}")
+                add_log(f"Selenium forcé : {'OUI' if force_selenium else 'NON'}")
+                add_log(f"Selenium activé : {'OUI' if getattr(scraper, 'use_selenium', False) else 'NON'}")
+                add_log(f"Driver : {'Initialisé' if getattr(scraper, 'driver', None) else 'Non initialisé'}")
             
         except Exception as e:
             st.error(f"Erreur d'initialisation : {e}")
@@ -171,11 +195,11 @@ def render_scraping_debug_tab():
         with col_init1:
             st.metric("Domaine", scraper.domain)
         with col_init2:
-            selenium_status = "ACTIVÉ" if scraper.use_selenium else "DÉSACTIVÉ"
+            selenium_status = "N/A (V2)" if st.session_state.get("scraping_engine") == "v2" else ("ACTIVÉ" if getattr(scraper, "use_selenium", False) else "DÉSACTIVÉ")
             st.metric("Mode Selenium", selenium_status)
         with col_init3:
             driver_type = "Non initialisé"
-            if scraper.driver:
+            if getattr(scraper, "driver", None):
                 driver_type = "Opérationnel"
             st.metric("Driver", driver_type)
 
@@ -211,7 +235,11 @@ def render_scraping_debug_tab():
         data = None
         try:
             with st.spinner("⏳ Scraping en cours..."):
-                data = scraper.get_page_details(target_url)
+                if st.session_state.get("scraping_engine") == "v2":
+                    results, _summary = scraper.run_analysis()
+                    data = results[0] if results else None
+                else:
+                    data = scraper.get_page_details(target_url)
         except Exception as e:
             st.error(f"Erreur scraping : {e}")
             import traceback

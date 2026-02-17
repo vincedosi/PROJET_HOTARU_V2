@@ -12,7 +12,6 @@ import requests
 import streamlit as st
 from bs4 import BeautifulSoup
 
-from core.scraping import fetch_page
 from core.database import AuditDatabase
 from core.session_keys import get_current_user_email
 from engine.master_handler import MasterDataHandler, MasterData, WikidataAPI
@@ -85,7 +84,7 @@ def _search_insee_candidates(query: str) -> List[Dict]:
         return []
 
 
-def extract_jsonld_from_url(url: str, timeout: int = 15) -> str:
+def extract_jsonld_from_url(url: str, timeout: int = 15, engine: str = "v2") -> str:
     """
     Récupère le JSON-LD d'une page web donnée.
 
@@ -99,6 +98,10 @@ def extract_jsonld_from_url(url: str, timeout: int = 15) -> str:
         raise ValueError("URL vide.")
 
     try:
+        if engine == "v2":
+            from core.scraping_v2 import fetch_page
+        else:
+            from core.scraping import fetch_page
         raw_html = fetch_page(url, timeout=timeout)
     except requests.RequestException as e:  # type: ignore[no-untyped-call]
         raise RuntimeError(f"Erreur réseau lors de la récupération de la page: {e}")
@@ -924,7 +927,10 @@ def _render_master_data_content():
         else:
             try:
                 with st.spinner("Extraction du JSON-LD du site client..."):
-                    client_json = extract_jsonld_from_url(url_client)
+                    client_json = extract_jsonld_from_url(
+                        url_client,
+                        engine=st.session_state.get("scraping_engine", "v2"),
+                    )
                 hotaru_json = st.session_state.jsonld_master
                 left_html, right_html = build_json_diff_blocks(client_json, hotaru_json)
                 st.session_state["audit_gap_client_html"] = left_html

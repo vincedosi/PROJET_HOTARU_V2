@@ -31,13 +31,6 @@ SOURCE_CONFIG = {
     "stackoverflow.com": {"label": "STACKOVERFLOW", "color": "#F58025", "priority": 3}
 }
 
-# ==========================================
-# SCRAPING : module universel core.scraping (cascade + Selenium)
-# ==========================================
-
-from core.scraping import SmartScraper as _SmartScraper
-
-
 def _clean_text(text: str) -> str:
     """Nettoie le texte extrait"""
     if not text:
@@ -47,13 +40,19 @@ def _clean_text(text: str) -> str:
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def get_internal_dna(url: str) -> Optional[Dict]:
-    """Extrait l'ADN interne du site officiel (SmartScraper universel = cascade si timeout)."""
+def get_internal_dna(url: str, engine: str = "v2") -> Optional[Dict]:
+    """Extrait l'ADN interne du site officiel (moteur V1 ou V2)."""
     try:
         if not url.startswith(("http://", "https://")):
             url = "https://" + url
-        scraper = _SmartScraper([url], max_urls=1, use_selenium=False)
-        data = scraper.get_page_details(url)
+        if engine == "v2":
+            from core.scraping_v2 import HotaruScraperV2 as Scraper
+        else:
+            from core.scraping import SmartScraper as Scraper
+
+        scraper = Scraper(start_urls=[url], max_urls=1, use_selenium=False)
+        results, _summary = scraper.run_analysis()
+        data = results[0] if results else None
         if not data:
             return None
         raw_text = " ".join(filter(None, [
@@ -774,6 +773,27 @@ def render_off_page_audit():
         label_visibility="collapsed",
         help="Active l'Audit Miroir si rempli"
     )
+
+    # ── Choix moteur (V1 / V2) ─────────────────────────────────────────
+    if "scraping_engine" not in st.session_state:
+        st.session_state["scraping_engine"] = "v2"
+    _engine_label = st.radio(
+        "⚙️ Moteur de scraping",
+        options=[
+            "🚀 V2 — Crawl4AI (rapide, Markdown LLM-ready)",
+            "🔧 V1 — Selenium (robuste, sites protégés)",
+        ],
+        index=0 if st.session_state.get("scraping_engine") == "v2" else 1,
+        horizontal=True,
+        key="scraping_engine_radio_offpage",
+        help=(
+            "V2 = Playwright async, x5 plus rapide, génère du Markdown propre pour l'IA. "
+            "V1 = cascade requests→Selenium, pour les sites qui bloquent (Cloudflare, anti-bot)."
+        ),
+    )
+    use_v2 = str(_engine_label).startswith("🚀")
+    st.session_state["scraping_engine"] = "v2" if use_v2 else "v1"
+    st.caption(f"Moteur actif : {'🚀 Crawl4AI V2' if use_v2 else '🔧 Selenium V1'}")
     
     col3, col4 = st.columns([1, 1])
     
@@ -815,7 +835,10 @@ def render_off_page_audit():
             # Audit Miroir si site officiel fourni
             if official_site and mistral_key:
                 with st.spinner(" Scraping du site officiel..."):
-                    internal_data = get_internal_dna(official_site)
+                    internal_data = get_internal_dna(
+                        official_site,
+                        engine=st.session_state.get("scraping_engine", "v2"),
+                    )
                 
                 if internal_data:
                     with st.spinner("Analyse sémantique avec Mistral..."):

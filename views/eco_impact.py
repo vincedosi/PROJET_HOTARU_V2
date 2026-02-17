@@ -57,6 +57,28 @@ def _render_calculatrice():
     with tab_simul:
         total_pages = st.session_state.get("eco_total_pages", 1_000)
         daily_views = st.session_state.get("eco_daily_views", 100)
+
+        # ── Choix moteur (V1 / V2) ─────────────────────────────────────────
+        if "scraping_engine" not in st.session_state:
+            st.session_state["scraping_engine"] = "v2"
+        _engine_label = st.radio(
+            "⚙️ Moteur de scraping",
+            options=[
+                "🚀 V2 — Crawl4AI (rapide, Markdown LLM-ready)",
+                "🔧 V1 — Selenium (robuste, sites protégés)",
+            ],
+            index=0 if st.session_state.get("scraping_engine") == "v2" else 1,
+            horizontal=True,
+            key="scraping_engine_radio_eco",
+            help=(
+                "V2 = Playwright async, x5 plus rapide, génère du Markdown propre pour l'IA. "
+                "V1 = cascade requests→Selenium, pour les sites qui bloquent (Cloudflare, anti-bot)."
+            ),
+        )
+        use_v2 = str(_engine_label).startswith("🚀")
+        st.session_state["scraping_engine"] = "v2" if use_v2 else "v1"
+        st.caption(f"Moteur actif : {'🚀 Crawl4AI V2' if use_v2 else '🔧 Selenium V1'}")
+
         url = st.text_input(
             "URL du site web",
             placeholder="https://www.example.com",
@@ -67,7 +89,7 @@ def _render_calculatrice():
                 st.warning("Veuillez saisir une URL.")
             else:
                 with st.spinner("Analyse du poids cognitif en cours..."):
-                    calc = AIOImpactCalculator()
+                    calc = AIOImpactCalculator(engine=st.session_state.get("scraping_engine", "v2"))
                     result = calc.calculate(url.strip(), total_pages=total_pages, daily_views_per_page=daily_views)
 
                 if result.get("error"):

@@ -1,0 +1,208 @@
+# HOTARU — Règle Cursor : Moteur de scraping V1 / V2
+
+## Fichiers de référence
+
+Quand tu travailles sur du scraping dans HOTARU, tu as **deux fichiers moteurs** :
+
+- `core/scraping.py` → **SmartScraper** (V1) — requests + Selenium
+- `core/scraping_v2.py` → **HotaruScraperV2** (V2) — Crawl4AI + Playwright async
+
+**Ces deux fichiers sont STABLES. Ne les modifie jamais.** Toute nouvelle feature de scraping passe par un module au-dessus.
+
+---
+
+## Ce que fait chaque moteur
+
+### V1 — `core/scraping.py` — `SmartScraper`
+- Cascade automatique : requests → requests-html → Selenium headless → Selenium non-headless
+- Spécialisé sites protégés (BMW, Cloudflare, anti-bot)
+- Extraction JSON-LD double (BeautifulSoup + DOM Selenium) avec déduplication
+- Synchrone, séquentiel (1 page à la fois)
+- Paramètres spécifiques : `use_selenium=True`, `selenium_mode="light"`
+
+### V2 — `core/scraping_v2.py` — `HotaruScraperV2`
+- Moteur : Crawl4AI v0.8 + Playwright async
+- Crawl parallèle : 10 pages simultanées par défaut (configurable)
+- x5 à x10 plus rapide que V1 sur sites normaux
+- Génère `markdown` et `fit_markdown` (contenu LLM-ready sans nav/footer/pub)
+- Cache persistant entre sessions (`cache=True`)
+- Anti-détection natif (simulate_user, magic mode)
+- Alias : `SmartScraper = HotaruScraperV2` pour import transparent
+
+---
+
+## Interface commune (identique V1 et V2)
+
+```python
+# Constructeur — mêmes paramètres dans les deux classes
+scraper = Scraper(
+    start_urls="https://example.com",  # str ou list[str]
+    max_urls=500,
+    log_callback=fn,                   # optionnel
+    proxy="http://ip:port",            # optionnel
+    # V2 uniquement (ignorés en V1) :
+    cache=True,
+    concurrency=10,
+)
+
+# Lancement — identique V1 et V2
+results, summary = scraper.run_analysis(
+    progress_callback=fn,  # optionnel
+    log_callback=fn,       # optionnel
+)
+
+# summary contient :
+# {
+#   "total_urls": int,
+#   "patterns": int,
+#   "stats": dict,
+#   "filtered_log": list,
+#   "duplicate_log": list,
+# }
+```
+
+---
+
+## Dict résultat par page
+
+```python
+# Clés communes V1 et V2
+page = {
+    "url": str,
+    "title": str,
+    "h1": str,
+    "description": str,
+    "links": list[str],          # URLs internes normalisées
+    "html_content": str,
+    "has_structured_data": bool,
+    "json_ld": list[dict],       # Blocs JSON-LD extraits et dédupliqués
+    "h2_count": int,
+    "lists_count": int,
+    "response_time": float,
+    "last_modified": str,
+}
+
+# Clés supplémentaires V2 uniquement
+page["markdown"]      # Page complète en Markdown propre
+page["fit_markdown"]  # Contenu core uniquement → à envoyer direct au LLM
+page["crawl4ai_success"] # bool
+```
+
+---
+
+## Règle : chaque fois qu'un module scrape un site
+
+### Dans Streamlit — ajouter un toggle utilisateur
+
+```python
+# ── Choix moteur ─────────────────────────────────────────────────────────────
+engine = st.radio(
+    "⚙️ Moteur de scraping",
+    options=[
+        "🚀 V2 — Crawl4AI (rapide, Markdown LLM-ready)",
+        "🔧 V1 — Selenium (robuste, sites protégés)",
+    ],
+    index=0,  # V2 par défaut
+    horizontal=True,
+    help=(
+        "V2 = Playwright async, x5 plus rapide, génère du Markdown propre pour l'IA. "
+        "V1 = cascade requests→Selenium, pour les sites qui bloquent (Cloudflare, anti-bot)."
+    ),
+)
+use_v2 = engine.startswith("🚀")
+
+# ── Import conditionnel ───────────────────────────────────────────────────────
+if use_v2:
+    from core.scraping_v2 import HotaruScraperV2 as Scraper
+else:
+    from core.scraping import SmartScraper as Scraper
+
+# ── Badge moteur dans les logs ────────────────────────────────────────────────
+engine_label = "🚀 Crawl4AI V2" if use_v2 else "🔧 Selenium V1"
+st.caption(f"Moteur actif : {engine_label}")
+
+# ── Instanciation et crawl ────────────────────────────────────────────────────
+scraper = Scraper(
+    start_urls=url,
+    max_urls=max_urls,
+    log_callback=log_callback,
+)
+results, summary = scraper.run_analysis(progress_callback=progress_callback)
+```
+
+### Dans un module Python pur (audit, GEO, pipeline...)
+
+```python
+def run_module(url: str, max_urls: int = 100, engine: str = "v2"):
+    """
+    Args:
+        engine: "v2" (défaut, Crawl4AI) ou "v1" (Selenium classique)
+    """
+    if engine == "v2":
+        from core.scraping_v2 import HotaruScraperV2 as Scraper
+    else:
+        from core.scraping import SmartScraper as Scraper
+
+    scraper = Scraper(start_urls=url, max_urls=max_urls)
+    return scraper.run_analysis()
+```
+
+---
+
+## Utiliser fit_markdown pour les analyses LLM (V2 uniquement)
+
+```python
+# Après un crawl V2, envoyer le contenu au LLM sans preprocessing
+for page in results:
+    content_for_llm = page.get("fit_markdown") or page.get("markdown") or page["html_content"]
+    # → content_for_llm est propre, sans nav/footer/pub
+```
+
+---
+
+## Ce qu'il ne faut JAMAIS faire
+
+```python
+# ❌ Import fixe sans laisser le choix à l'utilisateur
+from core.scraping import SmartScraper  # toujours V1, jamais de choix
+
+# ❌ Modifier scraping.py ou scraping_v2.py
+# Ces fichiers sont stables — toute évolution = nouveau fichier ou wrapper
+
+# ❌ Réécrire du code de scraping inline dans un module
+# Toujours passer par les classes SmartScraper / HotaruScraperV2
+
+# ❌ Utiliser fit_markdown en V1 (clé absente)
+page["fit_markdown"]  # KeyError si crawl V1 → utiliser .get("fit_markdown", "")
+```
+
+---
+
+## Décision rapide
+
+```
+L'utilisateur veut scraper un site
+        │
+        ├─ Interface Streamlit ?
+        │       └─ st.radio V1 / V2 (défaut V2)
+        │
+        └─ Code pur / pipeline ?
+                └─ paramètre engine="v2" (défaut V2)
+                        │
+                        ├─ "v2" → from core.scraping_v2 import HotaruScraperV2 as Scraper
+                        └─ "v1" → from core.scraping import SmartScraper as Scraper
+```
+
+## Quand recommander V1 à l'utilisateur
+
+- Site avec timeout systématique en V2
+- Site avec Cloudflare / anti-bot agressif
+- L'utilisateur mentionne un site "protégé" ou "qui bloque"
+- Résultats vides avec V2 sur un site JavaScript-heavy non standard
+
+## Quand recommander V2 à l'utilisateur (défaut)
+
+- Tout le reste
+- Besoin de Markdown pour alimenter un LLM
+- Crawl de plus de 50 pages (gain de vitesse significatif)
+- Besoin du cache entre sessions

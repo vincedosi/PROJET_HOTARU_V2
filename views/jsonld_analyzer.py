@@ -95,6 +95,28 @@ def render_jsonld_analyzer_tab():
 
     with tab_new:
         st.caption("Un seul scrape remplit l'Audit GEO et la Vue d'ensemble JSON-LD. Sauvegardez via la barre en haut pour tout enregistrer.")
+
+        # ── Choix moteur (V1 / V2) ─────────────────────────────────────────
+        if "scraping_engine" not in st.session_state:
+            st.session_state["scraping_engine"] = "v2"
+        _engine_label = st.radio(
+            "⚙️ Moteur de scraping",
+            options=[
+                "🚀 V2 — Crawl4AI (rapide, Markdown LLM-ready)",
+                "🔧 V1 — Selenium (robuste, sites protégés)",
+            ],
+            index=0 if st.session_state.get("scraping_engine") == "v2" else 1,
+            horizontal=True,
+            key="scraping_engine_radio_jsonld",
+            help=(
+                "V2 = Playwright async, x5 plus rapide, génère du Markdown propre pour l'IA. "
+                "V1 = cascade requests→Selenium, pour les sites qui bloquent (Cloudflare, anti-bot)."
+            ),
+        )
+        use_v2 = str(_engine_label).startswith("🚀")
+        st.session_state["scraping_engine"] = "v2" if use_v2 else "v1"
+        st.caption(f"Moteur actif : {'🚀 Crawl4AI V2' if use_v2 else '🔧 Selenium V1'}")
+
         url_input = st.text_input(
             "URL du site à analyser",
             placeholder="https://www.example.com",
@@ -164,6 +186,7 @@ def render_jsonld_analyzer_tab():
                     use_selenium=use_selenium_jsonld,
                     selenium_mode="light" if use_selenium_jsonld else None,
                     workspace_name=st.session_state.get("audit_workspace_select") or "Non classé",
+                    engine=st.session_state.get("scraping_engine", "v2"),
                     cluster_threshold=cluster_threshold,
                     progress_callback=lambda msg, val: bar.progress(min(val, 1.0), msg),
                     log_callback=add_log,
