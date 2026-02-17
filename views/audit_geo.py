@@ -1677,7 +1677,7 @@ def render_audit_geo():
                         has_jsonld = len(json_ld_list) > 0
                         jsonld_scripts = []  # pour affichage on utilise json_ld_list
                     except Exception as e:
-                        st.error(f"Impossible d'accéder au site : {e}")
+                        st.error(_format_crawl_error(e))
                         return
 
                 st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
