@@ -428,6 +428,7 @@ def run_unified_site_analysis(
     cluster_threshold=0.85,
     progress_callback=None,
     log_callback=None,
+    extra_domains=None,
 ):
     """
     Un seul scrape pour tout le dashboard : remplit Audit GEO (results, clusters, geo_infra, etc.)
@@ -449,10 +450,11 @@ def run_unified_site_analysis(
 
     scr = Scraper(
         start_urls=urls,
-        max_urls=max_pages,
+        max_urls=int(max_pages) if max_pages is not None else 500,
         use_selenium=use_selenium,
         selenium_mode=selenium_mode,
         log_callback=log_callback,
+        extra_domains=extra_domains,
     )
     res, crawl_meta = scr.run_analysis(progress_callback=progress_callback)
 
@@ -1537,7 +1539,8 @@ def render_audit_geo():
             selenium_enabled = pending_decision == "selenium"
             selenium_mode = "light" if selenium_enabled else None
             pending_ws = st.session_state.get("geo_pending_ws") or "Non classé"
-            pending_limit = st.session_state.get("geo_pending_limit", 100)
+            pending_limit = int(st.session_state.get("geo_pending_limit", 100) or 100)
+            pending_extra = st.session_state.get("geo_pending_extra_domains") or []
             try:
                 run_unified_site_analysis(
                     st.session_state,
@@ -1550,13 +1553,14 @@ def render_audit_geo():
                     cluster_threshold=0.85,
                     progress_callback=lambda m, v: bar.progress(v, m),
                     log_callback=add_crawl_log,
+                    extra_domains=pending_extra if pending_extra else None,
                 )
-                for k in ("geo_pending_urls", "geo_pending_limit", "geo_pending_ws", "geo_pending_base_url", "geo_crawl_decision"):
+                for k in ("geo_pending_urls", "geo_pending_limit", "geo_pending_ws", "geo_pending_base_url", "geo_crawl_decision", "geo_pending_extra_domains"):
                     st.session_state.pop(k, None)
                 st.rerun()
             except Exception as e:
                 st.error(_format_crawl_error(e))
-                for k in ("geo_pending_urls", "geo_pending_limit", "geo_pending_ws", "geo_pending_base_url", "geo_crawl_decision"):
+                for k in ("geo_pending_urls", "geo_pending_limit", "geo_pending_ws", "geo_pending_base_url", "geo_crawl_decision", "geo_pending_extra_domains"):
                     st.session_state.pop(k, None)
             return
 
@@ -1567,6 +1571,7 @@ def render_audit_geo():
             limit_s2 = step2.get("limit_in", 100)
             ws_s2 = step2.get("ws_in") or "Non classé"
             base_s2 = step2.get("base_url") or ""
+            extra_s2 = step2.get("extra_domains") or []
             st.warning("**Aucun JSON-LD détecté sur la page d'accueil**")
             st.info(
                 "Le JSON-LD peut être injecté dynamiquement par JavaScript (sites SPA : Nuxt, React, Vue). "
@@ -1580,6 +1585,7 @@ def render_audit_geo():
                     st.session_state["geo_pending_ws"] = ws_s2 or "Non classe"
                     st.session_state["geo_pending_base_url"] = base_s2
                     st.session_state["geo_crawl_decision"] = "flash"
+                    st.session_state["geo_pending_extra_domains"] = extra_s2
                     st.session_state.pop("geo_step2_pending", None)
                     st.rerun()
             with col2:
@@ -1589,6 +1595,7 @@ def render_audit_geo():
                     st.session_state["geo_pending_ws"] = ws_s2 or "Non classe"
                     st.session_state["geo_pending_base_url"] = base_s2
                     st.session_state["geo_crawl_decision"] = "selenium"
+                    st.session_state["geo_pending_extra_domains"] = extra_s2
                     st.session_state.pop("geo_step2_pending", None)
                     st.rerun()
             st.info("Choisissez une stratégie pour continuer")
@@ -1639,6 +1646,15 @@ def render_audit_geo():
         default_ws = "" if selected_ws == "+ Creer Nouveau" else selected_ws
         ws_in = c2.text_input("Nom du Projet", value=default_ws, label_visibility="collapsed",
                               placeholder="Nom du projet")
+
+        extra_domains_input = st.text_input(
+            "Domaine(s) rattaché(s) — optionnel",
+            placeholder="https://autre-domaine.com/  ou un domaine par ligne",
+            key="geo_extra_domains",
+            help="Site sous deux domaines : saisir l’URL ou le domaine du 2ᵉ site. Il sera crawlé avec le premier (liens internes des deux côtés).",
+        )
+        if extra_domains_input:
+            st.caption("Rattachement : 2ᵉ domaine inclus dans le crawl.")
 
         limit_in = st.select_slider(
             "Pages",
@@ -1739,11 +1755,13 @@ def render_audit_geo():
                 else:
                     # Pas de JSON-LD : on enregistre le contexte et on rerun pour afficher les boutons
                     # hors du bloc "LANCER L'ANALYSE", sinon le clic sur Flash/Selenium est perdu au rerun.
+                    extra_list = [line.strip() for line in (extra_domains_input or "").strip().splitlines() if line.strip()]
                     st.session_state["geo_step2_pending"] = {
                         "urls": urls,
                         "limit_in": limit_in,
                         "ws_in": ws_in or "Non classe",
                         "base_url": base_url,
+                        "extra_domains": extra_list,
                     }
                     st.rerun()
 
@@ -1763,6 +1781,7 @@ def render_audit_geo():
                 def add_crawl_log(msg):
                     crawl_logs.append(msg)
 
+                extra_list_direct = [line.strip() for line in (extra_domains_input or "").strip().splitlines() if line.strip()]
                 try:
                     run_unified_site_analysis(
                         st.session_state,
@@ -1775,6 +1794,7 @@ def render_audit_geo():
                         cluster_threshold=0.85,
                         progress_callback=lambda m, v: bar.progress(v, m),
                         log_callback=add_crawl_log,
+                        extra_domains=extra_list_direct if extra_list_direct else None,
                     )
                 except Exception as e:
                     st.error(_format_crawl_error(e))

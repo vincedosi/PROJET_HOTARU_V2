@@ -21,17 +21,32 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 class SmartScraper:
-    def __init__(self, start_urls, max_urls=500, use_selenium=False, selenium_mode=None, log_callback=None, proxy=None):
+    def __init__(self, start_urls, max_urls=500, use_selenium=False, selenium_mode=None, log_callback=None, proxy=None, extra_domains=None):
         """
         Args:
             selenium_mode: "light" pour eager loading + wait JSON-LD, None sinon
             proxy: "http://ip:port" ou "http://user:pass@ip:port" pour requests et Selenium
+            extra_domains: liste d'URLs ou domaines rattachés (site multi-domaines)
         """
         # Support ancien format (string unique) et nouveau (liste)
         if isinstance(start_urls, str):
             start_urls = [start_urls]
 
         self.domain = urlparse(start_urls[0]).netloc.lower()
+        def _netloc_variants(netloc):
+            n = netloc.lower()
+            b = n[4:] if n.startswith("www.") else n
+            return {n, b, f"www.{b}"}
+        self._domain_set = _netloc_variants(self.domain)
+        for raw in (extra_domains or []):
+            raw = (raw or "").strip()
+            if not raw:
+                continue
+            if "://" not in raw:
+                raw = "https://" + raw
+            netloc = urlparse(raw).netloc.lower()
+            if netloc:
+                self._domain_set |= _netloc_variants(netloc)
         self.start_urls = [self.normalize_url(url) for url in start_urls]
         self.base_url = self.start_urls[0]
         self.max_urls = max_urls
@@ -43,9 +58,9 @@ class SmartScraper:
         self.log_callback = log_callback
         self.proxy = proxy
 
-        # Vérifier que toutes les URLs sont du même domaine
+        # Vérifier que toutes les URLs de départ sont du même domaine
         for url in self.start_urls:
-            if urlparse(url).netloc != self.domain:
+            if urlparse(url).netloc.lower() != self.domain:
                 raise ValueError(
                     f"Toutes les URLs doivent être du même domaine. Trouvé: {urlparse(url).netloc} au lieu de {self.domain}"
                 )
@@ -303,8 +318,9 @@ class SmartScraper:
             if not href:
                 continue
             full_url = urljoin(url, href)
+            netloc = urlparse(full_url).netloc.lower()
             if (
-                urlparse(full_url).netloc.lower() == self.domain.lower()
+                netloc in self._domain_set
                 and self.is_valid_url(full_url)
             ):
                 clean_link = self.normalize_url(full_url)
@@ -667,8 +683,9 @@ class SmartScraper:
                 if not href:
                     continue
                 full_url = urljoin(url, href)
+                netloc = urlparse(full_url).netloc.lower()
                 if (
-                    urlparse(full_url).netloc.lower() == self.domain.lower()
+                    netloc in self._domain_set
                     and self.is_valid_url(full_url)
                 ):
                     clean_link = self.normalize_url(full_url)

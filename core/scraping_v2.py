@@ -56,12 +56,29 @@ class HotaruScraperV2:
         proxy: Optional[str] = None,
         cache: bool = True,               # NOUVEAU : cache entre sessions
         concurrency: int = 10,            # NOUVEAU : pages en parallèle
+        extra_domains: Optional[List[str]] = None,  # Domaines rattachés (site multi-domaines)
     ):
         # ── Normalisation des URLs d'entrée ──────────────────────────────────
         if isinstance(start_urls, str):
             start_urls = [start_urls]
 
         self.domain = urlparse(start_urls[0]).netloc.lower()
+        # Accepter www.example.com et example.com comme même domaine (évite 0 lien découvert)
+        def _netloc_variants(netloc: str) -> set:
+            n = netloc.lower()
+            b = n.removeprefix("www.") if n.startswith("www.") else n
+            return {n, b, f"www.{b}"}
+        self._domain_set = _netloc_variants(self.domain)
+        # Domaines rattachés (site sous deux domaines différents)
+        for raw in (extra_domains or []):
+            raw = (raw or "").strip()
+            if not raw:
+                continue
+            if "://" not in raw:
+                raw = "https://" + raw
+            netloc = urlparse(raw).netloc.lower()
+            if netloc:
+                self._domain_set |= _netloc_variants(netloc)
         self.start_urls = [self.normalize_url(url) for url in start_urls]
         self.base_url = self.start_urls[0]
         self.max_urls = max_urls
@@ -74,11 +91,11 @@ class HotaruScraperV2:
         self.results: List[Dict] = []
         self.visited: set = set()
 
-        # Vérification domaine unique
+        # Vérification : les URLs de départ sont du même domaine (première URL)
         for url in self.start_urls:
-            if urlparse(url).netloc != self.domain:
+            if urlparse(url).netloc.lower() != self.domain:
                 raise ValueError(
-                    f"Toutes les URLs doivent être du même domaine. "
+                    f"Toutes les URLs de départ doivent être du même domaine. "
                     f"Trouvé: {urlparse(url).netloc} au lieu de {self.domain}"
                 )
 
@@ -266,14 +283,16 @@ class HotaruScraperV2:
 
             # Priorité aux liens extraits par Crawl4AI (plus complets sur JS)
             raw_links = []
-            if crawl_result.links:
-                internal = crawl_result.links.get("internal", [])
+            if getattr(crawl_result, "links", None):
+                internal = (crawl_result.links or {}).get("internal", []) or []
                 for link_obj in internal:
-                    href = link_obj.get("href", "") if isinstance(link_obj, dict) else str(link_obj)
-                    if href:
+                    if isinstance(link_obj, dict):
+                        href = link_obj.get("href", "")
+                    else:
+                        href = str(link_obj)
+                    if href and href.startswith(("http", "/")):
                         raw_links.append(href)
-            
-            # Fallback soup si Crawl4AI n'a pas extrait de liens
+            # Fallback: tous les <a href> du HTML (même si Crawl4AI a rendu la page)
             if not raw_links:
                 raw_links = [a["href"] for a in soup.find_all("a", href=True)]
 
@@ -282,8 +301,9 @@ class HotaruScraperV2:
                     continue
                 full_url = urljoin(url, href)
                 parsed = urlparse(full_url)
+                netloc_lower = parsed.netloc.lower()
                 if (
-                    parsed.netloc.lower() == self.domain
+                    netloc_lower in self._domain_set
                     and self.is_valid_url(full_url)
                 ):
                     clean_link = self.normalize_url(full_url)
