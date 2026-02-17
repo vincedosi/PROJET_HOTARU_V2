@@ -3,12 +3,13 @@
 
 import datetime
 
-VERSION = "3.0.72"
+VERSION = "3.0.73"
 BUILD_DATE = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-RELEASE_NOTE = "Audit GEO : bloc « crawl en attente » exécuté en premier au rerun pour que « Continuer en Flash » lance bien le crawl."
+RELEASE_NOTE = "Audit GEO : étape 2 (Flash/Selenium) hors bloc Lancer — geo_step2_pending pour que le clic soit pris en compte."
 
 # Historique des notes de version (précédentes uniquement, plus récente en premier) — date/heure de release
 RELEASE_HISTORY = [
+    {"version": "3.0.72", "date": "2026-02-16", "note": "Audit GEO : bloc « crawl en attente » exécuté en premier au rerun pour que « Continuer en Flash » lance bien le crawl."},
     {"version": "3.0.71", "date": "2026-02-16", "note": "Sauvegarde audit : version allégée (crawl + clusters) + compression si > 2 cellules pour éviter JSON tronqué au rechargement."},
     {"version": "3.0.70", "date": "2026-02-16", "note": "Graphes : point (?) avec tableau comparatif Audit GEO vs JSON-LD au survol (section Maillage + Vue d'ensemble)."},
     {"version": "3.0.69", "date": "2026-02-16", "note": "Playwright V2 : auto-install Chromium au démarrage (app.py) pour faciliter les tests du moteur Crawl4AI."},

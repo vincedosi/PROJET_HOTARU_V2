@@ -1526,8 +1526,7 @@ def render_audit_geo():
 
     # ========================== TAB 1 : AUDIT SITE ==========================
     with tab1:
-        # ========== CRAWL EN ATTENTE (tout en premier, avant tout widget) ==========
-        # Après "Continuer en Flash" / "Activer Selenium", le rerun doit déclencher le crawl immédiatement.
+        # ========== CRAWL EN ATTENTE (tout en premier, après choix Flash/Selenium) ==========
         pending_urls = st.session_state.get("geo_pending_urls")
         pending_decision = st.session_state.get("geo_crawl_decision")
         if pending_urls and pending_decision:
@@ -1559,6 +1558,40 @@ def render_audit_geo():
                 st.error(_format_crawl_error(e))
                 for k in ("geo_pending_urls", "geo_pending_limit", "geo_pending_ws", "geo_pending_base_url", "geo_crawl_decision"):
                     st.session_state.pop(k, None)
+            return
+
+        # ========== ÉTAPE 2 EN ATTENTE (choix Flash / Selenium) — hors du bloc Lancer, pour que le clic soit pris en compte ==========
+        step2 = st.session_state.get("geo_step2_pending")
+        if step2 and isinstance(step2, dict):
+            urls_s2 = step2.get("urls") or []
+            limit_s2 = step2.get("limit_in", 100)
+            ws_s2 = step2.get("ws_in") or "Non classé"
+            base_s2 = step2.get("base_url") or ""
+            st.warning("**Aucun JSON-LD détecté sur la page d'accueil**")
+            st.info(
+                "Le JSON-LD peut être injecté dynamiquement par JavaScript (sites SPA : Nuxt, React, Vue). "
+                "Selenium peut résoudre ce problème mais ralentit le crawl (4-6s/page au lieu de 1-2s)."
+            )
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("**Continuer en Flash**", use_container_width=True, key="btn_flash"):
+                    st.session_state["geo_pending_urls"] = urls_s2
+                    st.session_state["geo_pending_limit"] = limit_s2
+                    st.session_state["geo_pending_ws"] = ws_s2 or "Non classe"
+                    st.session_state["geo_pending_base_url"] = base_s2
+                    st.session_state["geo_crawl_decision"] = "flash"
+                    st.session_state.pop("geo_step2_pending", None)
+                    st.rerun()
+            with col2:
+                if st.button("**Activer Selenium**", use_container_width=True, type="primary", key="btn_selenium"):
+                    st.session_state["geo_pending_urls"] = urls_s2
+                    st.session_state["geo_pending_limit"] = limit_s2
+                    st.session_state["geo_pending_ws"] = ws_s2 or "Non classe"
+                    st.session_state["geo_pending_base_url"] = base_s2
+                    st.session_state["geo_crawl_decision"] = "selenium"
+                    st.session_state.pop("geo_step2_pending", None)
+                    st.rerun()
+            st.info("Choisissez une stratégie pour continuer")
             return
 
         st.caption("Chargement / sauvegarde : barre en haut → Choix du workspace, Choix de la sauvegarde → VALIDER ou SAUVEGARDER.")
@@ -1704,33 +1737,15 @@ def render_audit_geo():
                     selenium_enabled = force_selenium
                     selenium_mode = "light" if force_selenium else None
                 else:
-                    st.warning("**Aucun JSON-LD détecté sur la page d'accueil**")
-                    st.info(
-                        "Le JSON-LD peut être injecté dynamiquement par JavaScript (sites SPA : Nuxt, React, Vue). "
-                        "Selenium peut résoudre ce problème mais ralentit le crawl (4-6s/page au lieu de 1-2s)."
-                    )
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if st.button("**Continuer en Flash**", use_container_width=True, key="btn_flash"):
-                            st.session_state["geo_pending_urls"] = urls
-                            st.session_state["geo_pending_limit"] = limit_in
-                            st.session_state["geo_pending_ws"] = ws_in or "Non classe"
-                            st.session_state["geo_pending_base_url"] = base_url
-                            st.session_state["geo_crawl_decision"] = "flash"
-                            st.rerun()
-                    with col2:
-                        if st.button("**Activer Selenium**", use_container_width=True, type="primary", key="btn_selenium"):
-                            st.session_state["geo_pending_urls"] = urls
-                            st.session_state["geo_pending_limit"] = limit_in
-                            st.session_state["geo_pending_ws"] = ws_in or "Non classe"
-                            st.session_state["geo_pending_base_url"] = base_url
-                            st.session_state["geo_crawl_decision"] = "selenium"
-                            st.rerun()
-                    if "geo_crawl_decision" not in st.session_state or st.session_state.get("geo_crawl_decision") not in ("flash", "selenium"):
-                        st.info("Choisissez une stratégie pour continuer")
-                        return
-                    selenium_enabled = st.session_state.get("geo_crawl_decision") == "selenium"
-                    selenium_mode = "light" if selenium_enabled else None
+                    # Pas de JSON-LD : on enregistre le contexte et on rerun pour afficher les boutons
+                    # hors du bloc "LANCER L'ANALYSE", sinon le clic sur Flash/Selenium est perdu au rerun.
+                    st.session_state["geo_step2_pending"] = {
+                        "urls": urls,
+                        "limit_in": limit_in,
+                        "ws_in": ws_in or "Non classe",
+                        "base_url": base_url,
+                    }
+                    st.rerun()
 
                 # ========== ÉTAPE 3 : CRAWL (unifié Audit + Vue d'ensemble JSON-LD) ==========
                 st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
