@@ -3,12 +3,13 @@
 
 import datetime
 
-VERSION = "3.0.75"
+VERSION = "3.0.76"
 BUILD_DATE = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-RELEASE_NOTE = "Scraping V1/V2 : constantes, logs domaines rattachés, champ 2e domaine en bleu (CSS)."
+RELEASE_NOTE = "Crawl V2 : delay 2s + extraction liens Markdown/data-href (sites sans JSON-LD, 1 seule page)."
 
 # Historique des notes de version (précédentes uniquement, plus récente en premier) — date/heure de release
 RELEASE_HISTORY = [
+    {"version": "3.0.75", "date": "2026-02-16", "note": "Scraping V1/V2 : constantes, logs domaines rattachés, champ 2e domaine en bleu (CSS)."},
     {"version": "3.0.74", "date": "2026-02-16", "note": "Audit GEO : domaine(s) rattaché(s) — site sous deux domaines, crawl des deux (V1 + V2)."},
     {"version": "3.0.73", "date": "2026-02-16", "note": "Audit GEO : étape 2 (Flash/Selenium) hors bloc Lancer — geo_step2_pending pour que le clic soit pris en compte."},
     {"version": "3.0.72", "date": "2026-02-16", "note": "Audit GEO : bloc « crawl en attente » exécuté en premier au rerun pour que « Continuer en Flash » lance bien le crawl."},

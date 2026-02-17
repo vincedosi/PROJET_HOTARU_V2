@@ -299,9 +299,29 @@ class HotaruScraperV2:
                         href = str(link_obj)
                     if href and href.startswith(("http", "/")):
                         raw_links.append(href)
-            # Fallback: tous les <a href> du HTML (même si Crawl4AI a rendu la page)
+            # Fallback 1: <a href> + data-href (SPA)
             if not raw_links:
                 raw_links = [a["href"] for a in soup.find_all("a", href=True)]
+            if not raw_links:
+                for tag in soup.find_all(attrs={"data-href": True}):
+                    h = tag.get("data-href", "").strip()
+                    if h and (h.startswith(("http", "/")) or not h.startswith("#")):
+                        raw_links.append(h)
+            # Fallback 2: liens dans le Markdown (sites SPA / sans JSON-LD)
+            if not raw_links and getattr(crawl_result, "markdown", None):
+                md_obj = crawl_result.markdown
+                md_text = ""
+                if hasattr(md_obj, "raw_markdown") and md_obj.raw_markdown:
+                    md_text = md_obj.raw_markdown
+                elif isinstance(md_obj, str):
+                    md_text = md_obj
+                if md_text:
+                    # [texte](url) et URLs absolues du même domaine
+                    for m in re.findall(r'\]\s*\(\s*([^)\s]+)\s*\)', md_text):
+                        if m.startswith(("http", "/")):
+                            raw_links.append(m)
+                    for m in re.findall(r'https?://[^\s\]\)"\'>]+', md_text):
+                        raw_links.append(m.split(")")[0].split("]")[0])
 
             for href in raw_links:
                 if not href:
@@ -391,13 +411,12 @@ class HotaruScraperV2:
         return CrawlerRunConfig(
             cache_mode=cache_mode,
             page_timeout=PAGE_TIMEOUT_MS,
-            # Anti-détection
+            # Attendre le rendu JS (sites sans JSON-LD / SPA) pour découvrir les liens
+            delay_before_return_html=2.0,
             simulate_user=True,
-            magic=True,               # Mode stealth Playwright
-            # Contenu
-            word_count_threshold=10,  # Ignore pages quasi-vides
-            remove_overlay_elements=True,  # Supprime popups/cookies
-            # Markdown
+            magic=True,
+            word_count_threshold=10,
+            remove_overlay_elements=True,
             exclude_external_links=True,
         )
 
