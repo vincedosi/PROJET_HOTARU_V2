@@ -456,49 +456,72 @@ def run_unified_site_analysis(
         "geo_score": score,
     })
 
-    # JSON-LD : clustering + nommage Mistral
-    clusters = cluster_pages(res, threshold=cluster_threshold)
-    try:
-        mistral_key = st.secrets["mistral"]["api_key"]
-    except Exception:
-        mistral_key = None
-
-    cluster_labels = []
-    if mistral_key:
-        for i, cluster_indices in enumerate(clusters):
-            out = name_cluster_with_mistral(mistral_key, res, cluster_indices)
-            if out:
-                cluster_labels.append(out)
-            else:
-                cluster_labels.append({"model_name": f"Cluster {i + 1}", "schema_type": "WebPage"})
-    else:
-        cluster_labels = [
-            {"model_name": f"Cluster {i + 1}", "schema_type": "WebPage"}
-            for i in range(len(clusters))
-        ]
-
+    # JSON-LD : clustering + nommage Mistral — toujours remplir la Vue d'ensemble (fallback si erreur)
     domain = urlparse(base_url).netloc or "site"
-    cluster_urls = [[res[idx]["url"] for idx in indices] for indices in clusters]
-    cluster_dom_structures = []
-    cluster_jsonld = []
-    for indices in clusters:
-        page = res[indices[0]]
-        dom = page.get("dom_structure") or extract_dom_structure(page.get("html_content") or "")
-        cluster_dom_structures.append(dom)
-        jld = page.get("json_ld") or []
-        cluster_jsonld.append(jld[0] if jld else None)
-
     session_state["jsonld_analyzer_crawl_results"] = res
-    session_state["jsonld_analyzer_results"] = {
-        "site_url": base_url,
-        "domain": domain,
-        "total_pages": len(res),
-        "cluster_labels": cluster_labels,
-        "cluster_urls": cluster_urls,
-        "cluster_dom_structures": cluster_dom_structures,
-        "cluster_jsonld": cluster_jsonld,
-        "logs": [],
-    }
+
+    try:
+        clusters = cluster_pages(res, threshold=cluster_threshold)
+        try:
+            mistral_key = st.secrets["mistral"]["api_key"]
+        except Exception:
+            mistral_key = None
+
+        cluster_labels = []
+        if mistral_key:
+            for i, cluster_indices in enumerate(clusters):
+                out = name_cluster_with_mistral(mistral_key, res, cluster_indices)
+                if out:
+                    cluster_labels.append(out)
+                else:
+                    cluster_labels.append({"model_name": f"Cluster {i + 1}", "schema_type": "WebPage"})
+        else:
+            cluster_labels = [
+                {"model_name": f"Cluster {i + 1}", "schema_type": "WebPage"}
+                for i in range(len(clusters))
+            ]
+
+        cluster_urls = [[res[idx]["url"] for idx in indices] for indices in clusters]
+        cluster_dom_structures = []
+        cluster_jsonld = []
+        for indices in clusters:
+            page = res[indices[0]]
+            dom = page.get("dom_structure") or extract_dom_structure(page.get("html_content") or "")
+            cluster_dom_structures.append(dom)
+            jld = page.get("json_ld") or []
+            cluster_jsonld.append(jld[0] if jld else None)
+
+        session_state["jsonld_analyzer_results"] = {
+            "site_url": base_url,
+            "domain": domain,
+            "total_pages": len(res),
+            "cluster_labels": cluster_labels,
+            "cluster_urls": cluster_urls,
+            "cluster_dom_structures": cluster_dom_structures,
+            "cluster_jsonld": cluster_jsonld,
+            "logs": [],
+        }
+    except Exception as jsonld_err:
+        # Fallback : un seul cluster "Toutes les pages" pour que la Vue d'ensemble affiche au moins les données
+        import traceback
+        traceback.print_exc()
+        first_dom = {}
+        first_jld = None
+        if res:
+            first_dom = res[0].get("dom_structure") or extract_dom_structure(res[0].get("html_content") or "")
+            jld_list = res[0].get("json_ld") or []
+            first_jld = jld_list[0] if jld_list else None
+        session_state["jsonld_analyzer_results"] = {
+            "site_url": base_url,
+            "domain": domain,
+            "total_pages": len(res),
+            "cluster_labels": [{"model_name": "Toutes les pages", "schema_type": "WebPage"}],
+            "cluster_urls": [[p.get("url", "") for p in res]] if res else [],
+            "cluster_dom_structures": [first_dom],
+            "cluster_jsonld": [first_jld],
+            "logs": [],
+        }
+
     if getattr(scr, "driver", None):
         try:
             scr.driver.quit()
