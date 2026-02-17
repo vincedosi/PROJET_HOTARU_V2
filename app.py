@@ -3,6 +3,16 @@ HOTARU v2 - Main Application Router
 The AI-Readable Web - GEO Audit & JSON-LD Generator
 """
 
+import subprocess
+import sys
+
+# Auto-install Playwright Chromium si absent (ex. Streamlit Cloud)
+subprocess.run(
+    [sys.executable, "-m", "playwright", "install", "chromium"],
+    capture_output=True,
+    check=False,
+)
+
 import base64
 import os
 

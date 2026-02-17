@@ -3,12 +3,13 @@
 
 import datetime
 
-VERSION = "3.0.68"
+VERSION = "3.0.69"
 BUILD_DATE = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-RELEASE_NOTE = "Scraping : toggle V1 Selenium / V2 Crawl4AI dans les écrans de scrape (Audit, JSON-LD, debug, off-page, eco, master)."
+RELEASE_NOTE = "Playwright V2 : auto-install Chromium au démarrage (app.py) pour faciliter les tests du moteur Crawl4AI."
 
 # Historique des notes de version (précédentes uniquement, plus récente en premier) — date/heure de release
 RELEASE_HISTORY = [
+    {"version": "3.0.68", "date": "2026-02-16", "note": "Scraping : toggle V1 Selenium / V2 Crawl4AI dans les écrans de scrape (Audit, JSON-LD, debug, off-page, eco, master)."},
     {"version": "3.0.67", "date": "2026-02-16", "note": "Scrape unifié : fallback Vue d'ensemble si erreur clustering/Mistral (toujours remplir JSON-LD)."},
     {"version": "3.0.66", "date": "2026-02-16", "note": "Un seul scrape (Audit ou JSON-LD) remplit Audit GEO + Vue d'ensemble. Une sauvegarde enregistre les deux."},
     {"version": "3.0.65", "date": "2026-02-16 18:00", "note": "Vue d'ensemble : affichage du JSON-LD Master (avec modifs) sur le nœud central."},
