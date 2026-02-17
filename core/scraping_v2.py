@@ -322,6 +322,23 @@ class HotaruScraperV2:
                             raw_links.append(m)
                     for m in re.findall(r'https?://[^\s\]\)"\'>]+', md_text):
                         raw_links.append(m.split(")")[0].split("]")[0])
+            # Fallback 3: liens retournés par le JS injecté (DOM rendu après scroll)
+            if not raw_links:
+                js_res = getattr(crawl_result, "js_execution_result", None)
+                if js_res is not None:
+                    if isinstance(js_res, list):
+                        raw_links = [
+                            u for u in js_res
+                            if isinstance(u, str) and u.startswith(("http", "/"))
+                        ]
+                    elif isinstance(js_res, dict):
+                        for v in js_res.values():
+                            if isinstance(v, list):
+                                raw_links = [
+                                    u for u in v
+                                    if isinstance(u, str) and u.startswith(("http", "/"))
+                                ]
+                                break
 
             for href in raw_links:
                 if not href:
@@ -408,11 +425,26 @@ class HotaruScraperV2:
         if cache_mode is None:
             cache_mode = CacheMode.ENABLED if self.cache else CacheMode.BYPASS
 
+        # JS : forcer l'extraction des liens depuis le DOM rendu (sites SPA / sans JSON-LD)
+        js_collect_links = (
+            "(() => { "
+            "var out = []; "
+            "try { "
+            "document.querySelectorAll('a[href]').forEach(a => { "
+            "var h = a.href; "
+            "if (h && !h.startsWith('javascript:') && !h.startsWith('mailto:') && !h.startsWith('tel:')) out.push(h); "
+            "}); "
+            "} catch(e) {} "
+            "return out; "
+            "})()"
+        )
         return CrawlerRunConfig(
             cache_mode=cache_mode,
             page_timeout=PAGE_TIMEOUT_MS,
-            # Attendre le rendu JS (sites sans JSON-LD / SPA) pour découvrir les liens
-            delay_before_return_html=2.0,
+            delay_before_return_html=4.0,
+            scan_full_page=True,
+            scroll_delay=0.3,
+            js_code=js_collect_links,
             simulate_user=True,
             magic=True,
             word_count_threshold=10,
