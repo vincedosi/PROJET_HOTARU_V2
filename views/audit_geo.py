@@ -1526,6 +1526,41 @@ def render_audit_geo():
 
     # ========================== TAB 1 : AUDIT SITE ==========================
     with tab1:
+        # ========== CRAWL EN ATTENTE (tout en premier, avant tout widget) ==========
+        # Après "Continuer en Flash" / "Activer Selenium", le rerun doit déclencher le crawl immédiatement.
+        pending_urls = st.session_state.get("geo_pending_urls")
+        pending_decision = st.session_state.get("geo_crawl_decision")
+        if pending_urls and pending_decision:
+            bar = st.progress(0, "Crawl en cours...")
+            crawl_logs = []
+            def add_crawl_log(msg):
+                crawl_logs.append(msg)
+            selenium_enabled = pending_decision == "selenium"
+            selenium_mode = "light" if selenium_enabled else None
+            pending_ws = st.session_state.get("geo_pending_ws") or "Non classé"
+            pending_limit = st.session_state.get("geo_pending_limit", 100)
+            try:
+                run_unified_site_analysis(
+                    st.session_state,
+                    urls=pending_urls,
+                    max_pages=pending_limit,
+                    use_selenium=selenium_enabled,
+                    selenium_mode=selenium_mode,
+                    workspace_name=pending_ws,
+                    engine=st.session_state.get("scraping_engine", "v2"),
+                    cluster_threshold=0.85,
+                    progress_callback=lambda m, v: bar.progress(v, m),
+                    log_callback=add_crawl_log,
+                )
+                for k in ("geo_pending_urls", "geo_pending_limit", "geo_pending_ws", "geo_pending_base_url", "geo_crawl_decision"):
+                    st.session_state.pop(k, None)
+                st.rerun()
+            except Exception as e:
+                st.error(_format_crawl_error(e))
+                for k in ("geo_pending_urls", "geo_pending_limit", "geo_pending_ws", "geo_pending_base_url", "geo_crawl_decision"):
+                    st.session_state.pop(k, None)
+            return
+
         st.caption("Chargement / sauvegarde : barre en haut → Choix du workspace, Choix de la sauvegarde → VALIDER ou SAUVEGARDER.")
         st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
 
@@ -1586,40 +1621,6 @@ def render_audit_geo():
         )
 
         st.markdown("<br>", unsafe_allow_html=True)
-
-        # ========== CRAWL EN ATTENTE (après choix Flash / Selenium) ==========
-        pending_urls = st.session_state.get("geo_pending_urls")
-        pending_decision = st.session_state.get("geo_crawl_decision")
-        if pending_urls and pending_decision:
-            bar = st.progress(0, "Crawl en cours...")
-            crawl_logs = []
-            def add_crawl_log(msg):
-                crawl_logs.append(msg)
-            selenium_enabled = pending_decision == "selenium"
-            selenium_mode = "light" if selenium_enabled else None
-            pending_ws = st.session_state.get("geo_pending_ws") or "Non classé"
-            pending_limit = st.session_state.get("geo_pending_limit", 100)
-            try:
-                run_unified_site_analysis(
-                    st.session_state,
-                    urls=pending_urls,
-                    max_pages=pending_limit,
-                    use_selenium=selenium_enabled,
-                    selenium_mode=selenium_mode,
-                    workspace_name=pending_ws,
-                    engine=st.session_state.get("scraping_engine", "v2"),
-                    cluster_threshold=0.85,
-                    progress_callback=lambda m, v: bar.progress(v, m),
-                    log_callback=add_crawl_log,
-                )
-                for k in ("geo_pending_urls", "geo_pending_limit", "geo_pending_ws", "geo_pending_base_url", "geo_crawl_decision"):
-                    st.session_state.pop(k, None)
-                st.rerun()
-            except Exception as e:
-                st.error(_format_crawl_error(e))
-                for k in ("geo_pending_urls", "geo_pending_limit", "geo_pending_ws", "geo_pending_base_url", "geo_crawl_decision"):
-                    st.session_state.pop(k, None)
-            return
 
         if st.button("LANCER L'ANALYSE", use_container_width=True, type="primary"):
             if url_input:
