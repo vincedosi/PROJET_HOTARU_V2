@@ -35,6 +35,14 @@ from crawl4ai.deep_crawling import BFSDeepCrawlStrategy
 from bs4 import BeautifulSoup
 import requests
 
+# Constantes partagées (évite listes recréées à chaque instance)
+EXCLUDE_PATTERNS = (
+    ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".zip",
+    ".doc", ".docx", "tel:", "mailto:", "javascript:", "void(0)",
+)
+PAGE_TIMEOUT_MS = 30000
+MAX_QUEUE_LINKS = 5000
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  HOTARU SCRAPER V2
@@ -99,11 +107,8 @@ class HotaruScraperV2:
                     f"Trouvé: {urlparse(url).netloc} au lieu de {self.domain}"
                 )
 
-        # Filtres (identiques à V1)
-        self.exclude_patterns = [
-            ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".zip",
-            ".doc", ".docx", "tel:", "mailto:", "javascript:", "void(0)",
-        ]
+        # Filtres (identiques à V1, référence constante)
+        self.exclude_patterns = list(EXCLUDE_PATTERNS)
 
         # Compteurs (compatibles V1 + nouveaux)
         self.stats = {
@@ -123,8 +128,10 @@ class HotaruScraperV2:
         self.filtered_log = []
         self.duplicate_log = []
 
-        self._log(f"🚀 HotaruScraperV2 initialisé")
+        self._log("🚀 HotaruScraperV2 initialisé")
         self._log(f"   Domaine : {self.domain}")
+        if extra_domains:
+            self._log(f"   Domaines rattachés : {len(extra_domains)}")
         self._log(f"   Max URLs : {max_urls}")
         self._log(f"   Concurrence : {concurrency} pages en parallèle")
         self._log(f"   Cache : {'activé' if cache else 'désactivé'}")
@@ -383,8 +390,7 @@ class HotaruScraperV2:
 
         return CrawlerRunConfig(
             cache_mode=cache_mode,
-            # Timeout généreux pour sites lents
-            page_timeout=30000,       # 30s max par page
+            page_timeout=PAGE_TIMEOUT_MS,
             # Anti-détection
             simulate_user=True,
             magic=True,               # Mode stealth Playwright
@@ -473,7 +479,7 @@ class HotaruScraperV2:
                         for link in page_data["links"]:
                             if link in self.visited:
                                 self.stats["links_duplicate"] += 1
-                            elif len(queue) < 5000:
+                            elif len(queue) < MAX_QUEUE_LINKS:
                                 self.visited.add(link)
                                 queue.append(link)
                     else:

@@ -1458,3 +1458,23 @@ pre, code {
     margin-bottom: 6px;
     text-align: left;
 }
+
+/* Champ domaine(s) rattaché(s) — encadré bleu */
+.extra-domain-field-wrap {
+    border: 2px solid #2563eb;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    padding: 10px 14px;
+    margin: 8px 0 4px 0;
+}
+.extra-domain-field-wrap .stTextInput > div > div input {
+    background: #fff !important;
+    border-color: #93c5fd !important;
+}
+.extra-domain-label-blue {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #1d4ed8;
+    margin-bottom: 6px;
+    display: block;
+}

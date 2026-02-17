@@ -7,6 +7,13 @@ SMART SCRAPER UNIVERSEL (core/scraping.py)
 - Utilisé par audit, GEO, et tous les modules.
 """
 import requests
+
+# Constantes (timeout requests, filtres URL)
+REQUEST_TIMEOUT = 15
+EXCLUDE_PATTERNS_V1 = (
+    ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".zip",
+    ".doc", ".docx", "tel:", "mailto:", "javascript:", "void(0)",
+)
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse, urljoin, urlunparse
 import time
@@ -93,13 +100,12 @@ class SmartScraper:
         self.filtered_log = []
         self.duplicate_log = []
 
-        # Filtres
-        self.exclude_patterns = [
-            ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".zip",
-            ".doc", ".docx", "tel:", "mailto:", "javascript:", "void(0)",
-        ]
+        # Filtres URL (fichiers, mailto, etc.)
+        self.exclude_patterns = list(EXCLUDE_PATTERNS_V1)
 
         self._log(f"Initialisation : {len(self.start_urls)} URL(s)")
+        if extra_domains:
+            self._log(f"   Domaines rattachés : {len(extra_domains)}")
         for i, url in enumerate(self.start_urls, 1):
             self._log(f"   {i}. {url}")
         self._log(f"Proxy : {self.proxy if self.proxy else 'Aucun'}")
@@ -354,7 +360,7 @@ class SmartScraper:
         if self.proxy:
             request_proxies = {"http": self.proxy, "https": self.proxy}
             self._log(f"   Proxy : {self.proxy}")
-        resp = self.session.get(url, timeout=15, proxies=request_proxies)
+        resp = self.session.get(url, timeout=REQUEST_TIMEOUT, proxies=request_proxies)
         response_time = time.time() - start_time
         if resp.status_code != 200:
             self._log(f"   HTTP {resp.status_code}")
@@ -379,7 +385,7 @@ class SmartScraper:
 
         start_time = time.time()
         session = HTMLSession()
-        resp = session.get(url, timeout=15)
+        resp = session.get(url, timeout=REQUEST_TIMEOUT)
         resp.html.render()
         response_time = time.time() - start_time
         html = resp.html.html

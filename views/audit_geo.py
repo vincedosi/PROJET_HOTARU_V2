@@ -1647,10 +1647,16 @@ def render_audit_geo():
         ws_in = c2.text_input("Nom du Projet", value=default_ws, label_visibility="collapsed",
                               placeholder="Nom du projet")
 
+        st.markdown(
+            '<div class="extra-domain-field-wrap">'
+            '<span class="extra-domain-label-blue">Domaine(s) rattaché(s) — optionnel (2e domaine)</span></div>',
+            unsafe_allow_html=True,
+        )
         extra_domains_input = st.text_input(
-            "Domaine(s) rattaché(s) — optionnel",
+            "Domaine(s) rattaché(s)",
             placeholder="https://autre-domaine.com/  ou un domaine par ligne",
             key="geo_extra_domains",
+            label_visibility="collapsed",
             help="Site sous deux domaines : saisir l’URL ou le domaine du 2ᵉ site. Il sera crawlé avec le premier (liens internes des deux côtés).",
         )
         if extra_domains_input:
