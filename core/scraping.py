@@ -25,6 +25,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from core.selenium_utils import create_chrome_driver, get_chrome_options
 
 
 class SmartScraper:
@@ -143,79 +144,22 @@ class SmartScraper:
     def _init_selenium(self):
         """Initialise Selenium - Compatible Streamlit Cloud."""
         try:
-            self._log("   → Configuration pour Streamlit Cloud...")
+            self._log("   → Configuration Selenium...")
+            self._log(f"    Mode Light: {getattr(self, 'selenium_mode', None) == 'light'}")
 
-            chrome_options = Options()
-            chrome_options.add_argument("--headless=new")
-            chrome_options.add_argument("--no-sandbox")
-            chrome_options.add_argument("--disable-dev-shm-usage")
-            chrome_options.add_argument("--disable-gpu")
-            chrome_options.add_argument("--disable-software-rasterizer")
-            # Accélération : ne pas charger les images (HTML/JSON-LD suffisent)
-            prefs = {"profile.managed_default_content_settings.images": 2}
-            chrome_options.add_experimental_option("prefs", prefs)
-            # Eager = page prête dès DOM interactif (pas d'attente images/CSS)
-            chrome_options.page_load_strategy = "eager"
-            if getattr(self, "selenium_mode", None) == "light":
-                self._log("    Mode Selenium Light activé (eager + sans images)")
+            # Utiliser la factory centralisée
+            self.driver = create_chrome_driver(
+                headless=True,
+                proxy=self.proxy,
+                no_images=True,
+                log_callback=self._log,
+            )
 
-            if getattr(self, "proxy", None):
-                self._log(f"   Proxy Selenium : {self.proxy}")
-                chrome_options.add_argument(f"--proxy-server={self.proxy}")
-
-            # Recherche chromium installé via packages.txt
-            import shutil
-
-            chromium_paths = [
-                shutil.which("chromium"),
-                shutil.which("chromium-browser"),
-                "/usr/bin/chromium",
-                "/usr/bin/chromium-browser",
-            ]
-
-            chromium_binary = None
-            for path in chromium_paths:
-                if path:
-                    chromium_binary = path
-                    self._log(f"   Chromium trouvé : {path}")
-                    break
-
-            if not chromium_binary:
-                self._log("    Chromium NON trouvé - Vérifie packages.txt")
-            else:
-                chrome_options.binary_location = chromium_binary
-
-            # Recherche chromedriver
-            chromedriver_paths = [
-                shutil.which("chromedriver"),
-                "/usr/bin/chromedriver",
-            ]
-
-            chromedriver_binary = None
-            for path in chromedriver_paths:
-                if path:
-                    chromedriver_binary = path
-                    self._log(f"   ChromeDriver trouvé : {path}")
-                    break
-
-            if not chromedriver_binary:
-                self._log("    ChromeDriver NON trouvé - Vérifie packages.txt")
-
-            # Démarrage
-            if chromedriver_binary:
-                from selenium.webdriver.chrome.service import Service
-                service = Service(chromedriver_binary)
-                self._log("   → Démarrage Chromium avec service...")
-                self.driver = webdriver.Chrome(service=service, options=chrome_options)
-            else:
-                self._log("   → Démarrage Chromium sans service...")
-                self.driver = webdriver.Chrome(options=chrome_options)
-
-            self._log("   Selenium OK !")
+            self._log("   ✅ Selenium OK !")
             return
 
         except Exception as e:
-            self._log(f"    ÉCHEC : {str(e)[:300]}")
+            self._log(f"    ❌ ÉCHEC : {str(e)[:300]}")
             self.use_selenium = False
             self.driver = None
 
@@ -399,30 +343,13 @@ class SmartScraper:
         }
 
     def _create_headless_driver(self):
-        """Crée un driver Chrome headless (même config que _init_selenium, pour cascade / Streamlit Cloud)."""
-        import shutil
-        chrome_options = Options()
-        chrome_options.add_argument("--headless=new")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--disable-software-rasterizer")
-        prefs = {"profile.managed_default_content_settings.images": 2}
-        chrome_options.add_experimental_option("prefs", prefs)
-        chrome_options.page_load_strategy = "eager"
-        if getattr(self, "proxy", None):
-            chrome_options.add_argument(f"--proxy-server={self.proxy}")
-        chromium_paths = [shutil.which("chromium"), shutil.which("chromium-browser"), "/usr/bin/chromium", "/usr/bin/chromium-browser"]
-        for path in chromium_paths:
-            if path:
-                chrome_options.binary_location = path
-                break
-        chromedriver_paths = [shutil.which("chromedriver"), "/usr/bin/chromedriver"]
-        chromedriver_binary = next((p for p in chromedriver_paths if p), None)
-        if chromedriver_binary:
-            from selenium.webdriver.chrome.service import Service
-            return webdriver.Chrome(service=Service(chromedriver_binary), options=chrome_options)
-        return webdriver.Chrome(options=chrome_options)
+        """Crée un driver Chrome headless (utilise la factory centralisée)."""
+        return create_chrome_driver(
+            headless=True,
+            proxy=self.proxy,
+            no_images=True,
+            log_callback=None,  # Pas de logs pour cascade
+        )
 
     def _get_with_selenium_headless(self, url):
         """

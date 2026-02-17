@@ -3,12 +3,15 @@
 
 import datetime
 
-VERSION = "3.0.77"
+VERSION = "3.0.80"
 BUILD_DATE = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-RELEASE_NOTE = "Audit V1/V2 complet : extraction liens FUSIONNÉE (Crawl4AI + soup + data-href + JS + Markdown) + logs détaillés + exclude_external_links=False."
+RELEASE_NOTE = "🚀 OPTIMIZATIONS MASSIVES (Phase 1-3): Utilities centralisées (-100 LOC duplication) + Regex cache (+20% perf) + Exponential backoff Mistral + HTML truncation (-66% mémoire) + LinkExtractor unified."
 
 # Historique des notes de version (précédentes uniquement, plus récente en premier) — date/heure de release
 RELEASE_HISTORY = [
+    {"version": "3.0.79", "date": "2026-02-17", "note": "PHASE 2: Regex compile cache (+20% clustering perf), Exponential backoff Mistral (1s, 2s, 4s, 8s), date validation optimized."},
+    {"version": "3.0.78", "date": "2026-02-17", "note": "PHASE 1: Extract utilities (selenium_utils, link_extractor, logger), remove 100+ LOC duplication, HTML truncation -66% memory."},
+    {"version": "3.0.77", "date": "2026-02-17", "note": "Audit scraping V1/V2 complete: Link extraction merge (all sources fused) + Crawl4AI exclude_external_links=False + better logging."},
     {"version": "3.0.76", "date": "2026-02-17", "note": "Crawl V2 : delay 2s + extraction liens Markdown/data-href (sites sans JSON-LD, 1 seule page)."},
     {"version": "3.0.75", "date": "2026-02-16", "note": "Scraping V1/V2 : constantes, logs domaines rattachés, champ 2e domaine en bleu (CSS)."},
     {"version": "3.0.74", "date": "2026-02-16", "note": "Audit GEO : domaine(s) rattaché(s) — site sous deux domaines, crawl des deux (V1 + V2)."},

@@ -26,6 +26,7 @@ import time
 import re
 from urllib.parse import urlparse, urljoin, urlunparse
 from typing import Optional, List, Dict, Any, Callable
+from core.link_extractor import LinkExtractor
 
 # ── Crawl4AI ────────────────────────────────────────────────────────────────
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, BrowserConfig, CacheMode
@@ -286,118 +287,83 @@ class HotaruScraperV2:
             if meta_tag and meta_tag.get("content"):
                 meta_desc = meta_tag["content"].strip()
 
-            # ── Liens internes ───────────────────────────────────────────────
-            links = []
+            # ── Liens internes (utiliser LinkExtractor centralisé) ───────────────
             normalized_current = self.normalize_url(url)
 
-            # *** FUSION COMPLÈTE de tous les fallbacks (au lieu de if/elif) ***
-            # Cela garantit qu'on collecte ALL liens, d'TOUTES les sources
-            raw_links_set = set()  # Évite les doublons entre sources
-
-            # 1. Liens extraits par Crawl4AI (priorité haute)
+            # Extraire liens de TOUS les fallbacks en parallèle
+            crawl4ai_links = []
             if getattr(crawl_result, "links", None):
                 internal = (crawl_result.links or {}).get("internal", []) or []
                 for link_obj in internal:
-                    if isinstance(link_obj, dict):
-                        href = link_obj.get("href", "")
-                    else:
-                        href = str(link_obj)
+                    href = link_obj.get("href", "") if isinstance(link_obj, dict) else str(link_obj)
                     if href and href.startswith(("http", "/")):
-                        raw_links_set.add(href)
-                        self._log(f"    [Crawl4AI] Lien trouvé: {href[:60]}")
+                        crawl4ai_links.append(href)
 
-            # 2. Liens <a href> depuis soup (TOUJOURS exécuter, même si Crawl4AI trouve des liens)
-            soup_links = [a["href"] for a in soup.find_all("a", href=True)]
-            if soup_links:
-                for href in soup_links:
-                    if href and href.startswith(("http", "/")):
-                        raw_links_set.add(href)
-                self._log(f"    [Soup <a>] {len(soup_links)} lien(s) trouvé(s)")
+            soup_links = LinkExtractor.extract_from_soup(soup)
+            data_href_links = LinkExtractor.extract_from_data_href(soup)
 
-            # 3. Liens data-href (SPA / frameworks modernes)
-            data_href_links = []
-            for tag in soup.find_all(attrs={"data-href": True}):
-                h = tag.get("data-href", "").strip()
-                if h and (h.startswith(("http", "/")) or not h.startswith("#")):
-                    data_href_links.append(h)
-                    raw_links_set.add(h)
-            if data_href_links:
-                self._log(f"    [data-href] {len(data_href_links)} lien(s) trouvé(s)")
+            markdown_text = ""
+            if getattr(crawl_result, "markdown", None):
+                md_obj = crawl_result.markdown
+                if hasattr(md_obj, "raw_markdown"):
+                    markdown_text = md_obj.raw_markdown or ""
+                elif isinstance(md_obj, str):
+                    markdown_text = md_obj
+            markdown_links = LinkExtractor.extract_from_markdown(markdown_text)
 
-            # 4. Liens retournés par le JS injecté (DOM rendu après scroll)
             js_res = getattr(crawl_result, "js_execution_result", None)
-            if js_res is not None:
-                js_links = []
-                if isinstance(js_res, list):
-                    js_links = [
-                        u for u in js_res
-                        if isinstance(u, str) and u.startswith(("http", "/"))
-                    ]
-                elif isinstance(js_res, dict):
-                    for v in js_res.values():
-                        if isinstance(v, list):
-                            js_links = [
-                                u for u in v
-                                if isinstance(u, str) and u.startswith(("http", "/"))
-                            ]
-                            break
-                if js_links:
-                    for link in js_links:
-                        raw_links_set.add(link)
-                    self._log(f"    [JS DOM] {len(js_links)} lien(s) collecté(s)")
+            js_links = LinkExtractor.extract_from_js_result(js_res)
 
-            # 5. Liens dans le Markdown (sites SPA / sans JSON-LD) - DERNIER fallback
-            markdown_obj = crawl_result.markdown
-            if markdown_obj:
-                md_text = ""
-                if hasattr(markdown_obj, "raw_markdown") and markdown_obj.raw_markdown:
-                    md_text = markdown_obj.raw_markdown
-                elif isinstance(markdown_obj, str):
-                    md_text = markdown_obj
-                if md_text and len(md_text) > 100:  # Markdown pas vide
-                    md_links = []
-                    # [texte](url)
-                    for m in re.findall(r'\]\s*\(\s*([^)\s]+)\s*\)', md_text):
-                        if m.startswith(("http", "/")):
-                            md_links.append(m)
-                            raw_links_set.add(m)
-                    # URLs absolues https?://...
-                    for m in re.findall(r'https?://[^\s\]\)"\'>]+', md_text):
-                        clean = m.split(")")[0].split("]")[0]
-                        md_links.append(clean)
-                        raw_links_set.add(clean)
-                    if md_links:
-                        self._log(f"    [Markdown] {len(md_links)} lien(s) détecté(s)")
+            # Fusion COMPLÈTE avec déduplication automatique
+            raw_links_set = LinkExtractor.merge_sources(
+                crawl4ai_links=crawl4ai_links,
+                soup_links=soup_links,
+                data_href_links=data_href_links,
+                js_links=js_links,
+                markdown_links=markdown_links,
+            )
 
-            # Conversion en liste pour traitement
-            raw_links = list(raw_links_set)
+            # Log sources trovées
+            sources_found = []
+            if crawl4ai_links:
+                sources_found.append(f"Crawl4AI({len(crawl4ai_links)})")
+            if soup_links:
+                sources_found.append(f"Soup({len(soup_links)})")
+            if data_href_links:
+                sources_found.append(f"data-href({len(data_href_links)})")
+            if js_links:
+                sources_found.append(f"JS({len(js_links)})")
+            if markdown_links:
+                sources_found.append(f"Markdown({len(markdown_links)})")
 
-            # Filtrage des liens : garder seulement ceux du domaine
-            for href in raw_links:
-                if not href:
-                    continue
-                full_url = urljoin(url, href)
-                parsed = urlparse(full_url)
-                netloc_lower = parsed.netloc.lower()
-                if (
-                    netloc_lower in self._domain_set
-                    and self.is_valid_url(full_url)
-                ):
-                    clean_link = self.normalize_url(full_url)
-                    if clean_link != normalized_current:
-                        links.append(clean_link)
-                else:
-                    self.stats["links_filtered"] += 1
+            if sources_found:
+                self._log(f"    Sources: {', '.join(sources_found)}")
 
-            unique_links = list(set(links))
+            # Filtrer par domaine
+            valid_links, filtered_count = LinkExtractor.filter_by_domain(
+                list(raw_links_set),
+                self._domain_set,
+                url,
+                self.exclude_patterns,
+            )
+            self.stats["links_filtered"] += filtered_count
+
+            # Nettoyer les doublons (self-link)
+            unique_links = []
+            for link in valid_links:
+                clean_link = self.normalize_url(link)
+                if clean_link != normalized_current:
+                    unique_links.append(clean_link)
+
+            unique_links = list(set(unique_links))
             self.stats["links_discovered"] += len(unique_links)
 
-            # ⚠️ DEBUG: Avertir si aucun lien découvert sur cette page
-            if not unique_links:
-                self._log(f"⚠️  AUCUN lien découvert sur {url}")
-                self._log(f"    Total raw_links trouvés: {len(raw_links)}")
-                self._log(f"    HTML size: {len(html_content)} bytes")
-                self._log(f"    Domaine actuel: {self.domain}, domains acceptés: {self._domain_set}")
+            # ⚠️ DEBUG: Avertir si aucun lien découvert
+            if not unique_links and raw_links_set:
+                self._log(f"⚠️  {len(raw_links_set)} lien(s) trouvé(s) mais aucun du domaine!")
+            elif not unique_links:
+                self._log(f"⚠️  AUCUN lien découvert")
+                self._log(f"    HTML: {len(html_content)} bytes, Domaine: {self.domain}")
 
             # ── JSON-LD (double extraction fusionnée) ────────────────────────
             json_ld_soup = self._extract_jsonld_from_soup(soup)
@@ -421,6 +387,10 @@ class HotaruScraperV2:
             # Crawl4AI ne donne pas de response_time direct, on estime 0
             response_time = 0.0
 
+            # 🚀 OPTIMISATION: Tronquer HTML pour réduire la mémoire
+            # (Garder 5KB max, suffisant pour structure + liens)
+            html_truncated = html_content[:5120] if len(html_content) > 5120 else html_content
+
             return {
                 # ── Clés V1 (100% compatibles) ────────────────────────────
                 "url": url,
@@ -429,7 +399,8 @@ class HotaruScraperV2:
                 "description": meta_desc,
                 "h1": h1,
                 "response_time": response_time,
-                "html_content": html_content,
+                "html_content": html_truncated,       # ← TRUNCATED to 5KB
+                "html_full_size": len(html_content),  # ← Track original size
                 "last_modified": "",
                 "has_structured_data": bool(json_ld_data),
                 "json_ld": json_ld_data,
