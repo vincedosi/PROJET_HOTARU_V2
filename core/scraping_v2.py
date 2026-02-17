@@ -370,6 +370,14 @@ class HotaruScraperV2:
             json_ld_raw = self._extract_jsonld_from_html(html_content)
             json_ld_data = self._merge_jsonld_no_duplicates(json_ld_soup, json_ld_raw)
 
+            # ── FALLBACK pour sites SANS JSON-LD ──────────────────────────────
+            fallback_used = False
+            if not json_ld_data:
+                fallback_struct = self._extract_html_fallback(soup, url)
+                json_ld_data = [fallback_struct]  # Enrober dans liste pour compatibilité
+                fallback_used = True
+                self._log(f"  💡 Fallback HTML activé (pas de JSON-LD trouvé)")
+
             # ── Markdown (NOUVEAU — LLM-ready) ───────────────────────────────
             markdown_obj = crawl_result.markdown
             raw_md = ""
@@ -404,6 +412,7 @@ class HotaruScraperV2:
                 "last_modified": "",
                 "has_structured_data": bool(json_ld_data),
                 "json_ld": json_ld_data,
+                "fallback_used": fallback_used,        # ← NOUVEAU: indique si fallback
                 "h2_count": len(soup.find_all("h2")),
                 "lists_count": len(soup.find_all(["ul", "ol"])),
                 # ── Clés NOUVELLES V2 ─────────────────────────────────────
@@ -672,6 +681,94 @@ class HotaruScraperV2:
             "filtered_log": self.filtered_log,
             "duplicate_log": self.duplicate_log,
         }
+
+    # ══════════════════════════════════════════════════════════════════════════
+    #  EXTRACTION FALLBACK (HTML structuré sans JSON-LD)
+    # ══════════════════════════════════════════════════════════════════════════
+
+    def _extract_html_fallback(self, soup: BeautifulSoup, url: str) -> Dict:
+        """
+        Fallback pour sites SANS JSON-LD.
+        Extrait une structure généralisée depuis HTML : headings, listes, éléments clés.
+        Retourne un dict compatible avec JSON-LD pour uniformité.
+        """
+        fallback = {
+            "@context": "https://schema.org",
+            "@type": "WebPage",
+            "url": url,
+            "mainEntity": {}
+        }
+
+        # ─ H1 (main title)
+        h1 = soup.find("h1")
+        if h1:
+            fallback["mainEntity"]["name"] = h1.get_text(strip=True)[:150]
+
+        # ─ Description (meta + premiers paragraphes)
+        meta_desc = soup.find("meta", attrs={"name": "description"})
+        if meta_desc:
+            fallback["description"] = meta_desc.get("content", "")[:300]
+        else:
+            p_tags = soup.find_all("p", limit=2)
+            if p_tags:
+                fallback["description"] = " ".join(p.get_text(strip=True) for p in p_tags)[:300]
+
+        # ─ H2s (sections principales)
+        h2_tags = soup.find_all("h2", limit=5)
+        if h2_tags:
+            fallback["mainEntity"]["sections"] = [
+                h2.get_text(strip=True)[:100] for h2 in h2_tags
+            ]
+
+        # ─ Listes (ul/ol → items)
+        lists = soup.find_all(["ul", "ol"], limit=3)
+        if lists:
+            all_items = []
+            for lst in lists:
+                items = lst.find_all("li", limit=10)
+                all_items.extend([li.get_text(strip=True)[:100] for li in items])
+            if all_items:
+                fallback["mainEntity"]["items"] = all_items[:10]
+
+        # ─ Images principales (alt text)
+        imgs = soup.find_all("img", limit=5)
+        if imgs:
+            fallback["image"] = []
+            for img in imgs:
+                alt = img.get("alt", "")
+                src = img.get("src", "")
+                if alt or src:
+                    fallback["image"].append({
+                        "url": src,
+                        "description": alt[:150] if alt else None
+                    })
+
+        return fallback
+
+    def cleanup(self):
+        """
+        Nettoie complètement les ressources.
+        À appeler entre deux diagnostics pour éviter les fuites mémoire.
+        """
+        self._log("🧹 Nettoyage des ressources...")
+        self.results.clear()
+        self.visited.clear()
+        self.filtered_log.clear()
+        self.duplicate_log.clear()
+        self.stats = {
+            "pages_crawled": 0,
+            "pages_skipped": 0,
+            "links_discovered": 0,
+            "links_filtered": 0,
+            "links_duplicate": 0,
+            "errors": 0,
+            "start_urls_count": len(self.start_urls),
+            "cache_hits": 0,
+            "engine": "Crawl4AI v0.8 (Playwright)",
+            "concurrency": self.concurrency,
+            "proxy_used": self.proxy or "Aucun",
+        }
+        self._log("✅ Ressources nettoyées")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
