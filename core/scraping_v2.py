@@ -269,6 +269,8 @@ class HotaruScraperV2:
         Clés identiques à V1 + 'markdown' et 'fit_markdown' en bonus.
         """
         try:
+            # DEBUG: Log au début pour tracer l'exécution
+            self._log(f"  🔍 Traitement: {url}")
             html_content = crawl_result.html or ""
             soup = BeautifulSoup(html_content, "html.parser")
 
@@ -288,8 +290,11 @@ class HotaruScraperV2:
             links = []
             normalized_current = self.normalize_url(url)
 
-            # Priorité aux liens extraits par Crawl4AI (plus complets sur JS)
-            raw_links = []
+            # *** FUSION COMPLÈTE de tous les fallbacks (au lieu de if/elif) ***
+            # Cela garantit qu'on collecte ALL liens, d'TOUTES les sources
+            raw_links_set = set()  # Évite les doublons entre sources
+
+            # 1. Liens extraits par Crawl4AI (priorité haute)
             if getattr(crawl_result, "links", None):
                 internal = (crawl_result.links or {}).get("internal", []) or []
                 for link_obj in internal:
@@ -298,48 +303,76 @@ class HotaruScraperV2:
                     else:
                         href = str(link_obj)
                     if href and href.startswith(("http", "/")):
-                        raw_links.append(href)
-            # Fallback 1: <a href> + data-href (SPA)
-            if not raw_links:
-                raw_links = [a["href"] for a in soup.find_all("a", href=True)]
-            if not raw_links:
-                for tag in soup.find_all(attrs={"data-href": True}):
-                    h = tag.get("data-href", "").strip()
-                    if h and (h.startswith(("http", "/")) or not h.startswith("#")):
-                        raw_links.append(h)
-            # Fallback 2: liens dans le Markdown (sites SPA / sans JSON-LD)
-            if not raw_links and getattr(crawl_result, "markdown", None):
-                md_obj = crawl_result.markdown
+                        raw_links_set.add(href)
+                        self._log(f"    [Crawl4AI] Lien trouvé: {href[:60]}")
+
+            # 2. Liens <a href> depuis soup (TOUJOURS exécuter, même si Crawl4AI trouve des liens)
+            soup_links = [a["href"] for a in soup.find_all("a", href=True)]
+            if soup_links:
+                for href in soup_links:
+                    if href and href.startswith(("http", "/")):
+                        raw_links_set.add(href)
+                self._log(f"    [Soup <a>] {len(soup_links)} lien(s) trouvé(s)")
+
+            # 3. Liens data-href (SPA / frameworks modernes)
+            data_href_links = []
+            for tag in soup.find_all(attrs={"data-href": True}):
+                h = tag.get("data-href", "").strip()
+                if h and (h.startswith(("http", "/")) or not h.startswith("#")):
+                    data_href_links.append(h)
+                    raw_links_set.add(h)
+            if data_href_links:
+                self._log(f"    [data-href] {len(data_href_links)} lien(s) trouvé(s)")
+
+            # 4. Liens retournés par le JS injecté (DOM rendu après scroll)
+            js_res = getattr(crawl_result, "js_execution_result", None)
+            if js_res is not None:
+                js_links = []
+                if isinstance(js_res, list):
+                    js_links = [
+                        u for u in js_res
+                        if isinstance(u, str) and u.startswith(("http", "/"))
+                    ]
+                elif isinstance(js_res, dict):
+                    for v in js_res.values():
+                        if isinstance(v, list):
+                            js_links = [
+                                u for u in v
+                                if isinstance(u, str) and u.startswith(("http", "/"))
+                            ]
+                            break
+                if js_links:
+                    for link in js_links:
+                        raw_links_set.add(link)
+                    self._log(f"    [JS DOM] {len(js_links)} lien(s) collecté(s)")
+
+            # 5. Liens dans le Markdown (sites SPA / sans JSON-LD) - DERNIER fallback
+            markdown_obj = crawl_result.markdown
+            if markdown_obj:
                 md_text = ""
-                if hasattr(md_obj, "raw_markdown") and md_obj.raw_markdown:
-                    md_text = md_obj.raw_markdown
-                elif isinstance(md_obj, str):
-                    md_text = md_obj
-                if md_text:
-                    # [texte](url) et URLs absolues du même domaine
+                if hasattr(markdown_obj, "raw_markdown") and markdown_obj.raw_markdown:
+                    md_text = markdown_obj.raw_markdown
+                elif isinstance(markdown_obj, str):
+                    md_text = markdown_obj
+                if md_text and len(md_text) > 100:  # Markdown pas vide
+                    md_links = []
+                    # [texte](url)
                     for m in re.findall(r'\]\s*\(\s*([^)\s]+)\s*\)', md_text):
                         if m.startswith(("http", "/")):
-                            raw_links.append(m)
+                            md_links.append(m)
+                            raw_links_set.add(m)
+                    # URLs absolues https?://...
                     for m in re.findall(r'https?://[^\s\]\)"\'>]+', md_text):
-                        raw_links.append(m.split(")")[0].split("]")[0])
-            # Fallback 3: liens retournés par le JS injecté (DOM rendu après scroll)
-            if not raw_links:
-                js_res = getattr(crawl_result, "js_execution_result", None)
-                if js_res is not None:
-                    if isinstance(js_res, list):
-                        raw_links = [
-                            u for u in js_res
-                            if isinstance(u, str) and u.startswith(("http", "/"))
-                        ]
-                    elif isinstance(js_res, dict):
-                        for v in js_res.values():
-                            if isinstance(v, list):
-                                raw_links = [
-                                    u for u in v
-                                    if isinstance(u, str) and u.startswith(("http", "/"))
-                                ]
-                                break
+                        clean = m.split(")")[0].split("]")[0]
+                        md_links.append(clean)
+                        raw_links_set.add(clean)
+                    if md_links:
+                        self._log(f"    [Markdown] {len(md_links)} lien(s) détecté(s)")
 
+            # Conversion en liste pour traitement
+            raw_links = list(raw_links_set)
+
+            # Filtrage des liens : garder seulement ceux du domaine
             for href in raw_links:
                 if not href:
                     continue
@@ -358,6 +391,13 @@ class HotaruScraperV2:
 
             unique_links = list(set(links))
             self.stats["links_discovered"] += len(unique_links)
+
+            # ⚠️ DEBUG: Avertir si aucun lien découvert sur cette page
+            if not unique_links:
+                self._log(f"⚠️  AUCUN lien découvert sur {url}")
+                self._log(f"    Total raw_links trouvés: {len(raw_links)}")
+                self._log(f"    HTML size: {len(html_content)} bytes")
+                self._log(f"    Domaine actuel: {self.domain}, domains acceptés: {self._domain_set}")
 
             # ── JSON-LD (double extraction fusionnée) ────────────────────────
             json_ld_soup = self._extract_jsonld_from_soup(soup)
@@ -426,6 +466,7 @@ class HotaruScraperV2:
             cache_mode = CacheMode.ENABLED if self.cache else CacheMode.BYPASS
 
         # JS : forcer l'extraction des liens depuis le DOM rendu (sites SPA / sans JSON-LD)
+        # ✅ Collecte TOUS les liens <a> pour fallback en cas où Crawl4AI n'en extrait pas
         js_collect_links = (
             "(() => { "
             "var out = []; "
@@ -441,15 +482,25 @@ class HotaruScraperV2:
         return CrawlerRunConfig(
             cache_mode=cache_mode,
             page_timeout=PAGE_TIMEOUT_MS,
+            # ⏱️ Délai pour laisser le JS se charger (4s pour SPA, 2s pour sites statiques)
             delay_before_return_html=4.0,
+            # 📄 Scanner la page complète (hauteur complète) pour découvrir les liens au scroll
             scan_full_page=True,
+            # 🔄 Délai entre chaque scroll pour laisser le contenu se charger
             scroll_delay=0.3,
+            # ✅ JS pour collecter les liens du DOM rendu
             js_code=js_collect_links,
+            # 🎭 Simuler un utilisateur pour éviter les anti-bots
             simulate_user=True,
+            # ✨ Magic mode pour meilleure détection du contenu
             magic=True,
+            # 📊 Seuil minimum de mots pour considérer le contenu valide
             word_count_threshold=10,
+            # 🗑️ Supprimer les éléments overlay (popups, modals, etc)
             remove_overlay_elements=True,
-            exclude_external_links=True,
+            # ⚠️ FIXE: exclude_external_links=False pour voir TOUS les liens
+            # (On va filtrer par domaine manuellement après)
+            exclude_external_links=False,
         )
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -520,19 +571,29 @@ class HotaruScraperV2:
                         self.stats["pages_crawled"] += 1
 
                         json_ld_count = len(page_data.get("json_ld", []))
+                        discovered_links = len(page_data["links"])
+
                         self._log(
                             f"  ✅ {page_data['title'][:40]} "
                             f"| {json_ld_count} JSON-LD "
-                            f"| {len(page_data['links'])} liens"
+                            f"| {discovered_links} liens découverts"
                         )
 
                         # Ajoute les nouveaux liens à la queue
+                        new_links_added = 0
                         for link in page_data["links"]:
                             if link in self.visited:
                                 self.stats["links_duplicate"] += 1
                             elif len(queue) < MAX_QUEUE_LINKS:
                                 self.visited.add(link)
                                 queue.append(link)
+                                new_links_added += 1
+
+                        # Log si des liens ont été ajoutés à la queue
+                        if new_links_added > 0:
+                            self._log(f"     → {new_links_added} lien(s) ajouté(s) à la queue (queue size: {len(queue)})")
+                        elif discovered_links > 0:
+                            self._log(f"     ⚠️  {discovered_links} lien(s) découvert(s) mais aucun ajouté (tous en doublons)")
                     else:
                         self.stats["pages_skipped"] += 1
 
