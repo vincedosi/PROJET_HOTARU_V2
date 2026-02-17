@@ -3,12 +3,13 @@
 
 import datetime
 
-VERSION = "3.0.65"
+VERSION = "3.0.66"
 BUILD_DATE = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-RELEASE_NOTE = "Vue d'ensemble : affichage du JSON-LD Master (avec modifs) sur le nœud central."
+RELEASE_NOTE = "Un seul scrape (Audit ou JSON-LD) remplit Audit GEO + Vue d'ensemble. Une sauvegarde enregistre les deux."
 
 # Historique des notes de version (précédentes uniquement, plus récente en premier) — date/heure de release
 RELEASE_HISTORY = [
+    {"version": "3.0.65", "date": "2026-02-16 18:00", "note": "Vue d'ensemble : affichage du JSON-LD Master (avec modifs) sur le nœud central."},
     {"version": "3.0.64", "date": "2026-02-16 18:00", "note": "Vue d'ensemble : bloc Votre Master visible (nœud central), entité + URL + template."},
     {"version": "3.0.63", "date": "2026-02-16 17:00", "note": "MASTER : page = URL du site (nœud central noir) uniquement, plus de liste."},
     {"version": "3.0.62", "date": "2026-02-16 16:00", "note": "Vue d'ensemble : nœud central = page du site (Master), pas un cluster. Clic nœud central ou menu."},

@@ -21,6 +21,11 @@ from core.session_keys import get_current_user_email
 from core.scraping import SmartScraper
 from modules.audit.geo_scoring import GEOScorer
 from views.off_page import render_off_page_audit
+from services.jsonld_service import (
+    cluster_pages,
+    name_cluster_with_mistral,
+    extract_dom_structure,
+)
 
 # =============================================================================
 # CONSTANTE API MISTRAL
@@ -398,6 +403,108 @@ def check_geo_infrastructure(base_url, crawl_results=None):
         score += 25
     
     return results, score
+
+
+def run_unified_site_analysis(
+    session_state,
+    urls,
+    max_pages,
+    use_selenium,
+    selenium_mode,
+    workspace_name,
+    cluster_threshold=0.85,
+    progress_callback=None,
+    log_callback=None,
+):
+    """
+    Un seul scrape pour tout le dashboard : remplit Audit GEO (results, clusters, geo_infra, etc.)
+    ET Vue d'ensemble JSON-LD (jsonld_analyzer_crawl_results, jsonld_analyzer_results).
+    Utilisé depuis l'onglet Audit GEO et depuis l'onglet JSON-LD.
+    """
+    if not urls:
+        raise ValueError("Au moins une URL requise")
+    base_url = urls[0]
+    if not base_url.startswith(("http://", "https://")):
+        base_url = "https://" + base_url
+    base_url = base_url.rstrip("/")
+    urls = [base_url] + [u for u in urls[1:] if u != base_url]
+
+    scr = SmartScraper(
+        urls,
+        max_urls=max_pages,
+        use_selenium=use_selenium,
+        selenium_mode=selenium_mode,
+        log_callback=log_callback,
+    )
+    res, crawl_meta = scr.run_analysis(progress_callback=progress_callback)
+
+    infra, score = check_geo_infrastructure(base_url, crawl_results=res)
+    ai_access = check_ai_accessibility(base_url, res)
+    pattern_summary = scr.get_pattern_summary()
+
+    session_state.update({
+        "results": res,
+        "clusters": pattern_summary,
+        "target_url": base_url,
+        "start_urls": urls,
+        "current_ws": workspace_name or "Non classé",
+        "crawl_stats": crawl_meta.get("stats", {}),
+        "filtered_log": crawl_meta.get("filtered_log", []),
+        "duplicate_log": crawl_meta.get("duplicate_log", []),
+        "ai_accessibility": ai_access,
+        "geo_infra": infra,
+        "geo_score": score,
+    })
+
+    # JSON-LD : clustering + nommage Mistral
+    clusters = cluster_pages(res, threshold=cluster_threshold)
+    try:
+        mistral_key = st.secrets["mistral"]["api_key"]
+    except Exception:
+        mistral_key = None
+
+    cluster_labels = []
+    if mistral_key:
+        for i, cluster_indices in enumerate(clusters):
+            out = name_cluster_with_mistral(mistral_key, res, cluster_indices)
+            if out:
+                cluster_labels.append(out)
+            else:
+                cluster_labels.append({"model_name": f"Cluster {i + 1}", "schema_type": "WebPage"})
+    else:
+        cluster_labels = [
+            {"model_name": f"Cluster {i + 1}", "schema_type": "WebPage"}
+            for i in range(len(clusters))
+        ]
+
+    domain = urlparse(base_url).netloc or "site"
+    cluster_urls = [[res[idx]["url"] for idx in indices] for indices in clusters]
+    cluster_dom_structures = []
+    cluster_jsonld = []
+    for indices in clusters:
+        page = res[indices[0]]
+        dom = page.get("dom_structure") or extract_dom_structure(page.get("html_content") or "")
+        cluster_dom_structures.append(dom)
+        jld = page.get("json_ld") or []
+        cluster_jsonld.append(jld[0] if jld else None)
+
+    session_state["jsonld_analyzer_crawl_results"] = res
+    session_state["jsonld_analyzer_results"] = {
+        "site_url": base_url,
+        "domain": domain,
+        "total_pages": len(res),
+        "cluster_labels": cluster_labels,
+        "cluster_urls": cluster_urls,
+        "cluster_dom_structures": cluster_dom_structures,
+        "cluster_jsonld": cluster_jsonld,
+        "logs": [],
+    }
+    if getattr(scr, "driver", None):
+        try:
+            scr.driver.quit()
+        except Exception:
+            pass
+    return res, crawl_meta
 
 
 def _is_html_response(content, content_type_header=""):
@@ -1382,12 +1489,13 @@ def render_audit_geo():
         st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
 
         # =================================================================
-        # ZONE DE SCAN (nouvelle analyse)
+        # ZONE DE SCAN (nouvelle analyse) — un seul scrape remplit Audit + Vue d'ensemble JSON-LD
         # =================================================================
         st.markdown(
             '<p class="section-title">01 / NOUVELLE ANALYSE</p>',
             unsafe_allow_html=True,
         )
+        st.caption("Un seul scrape remplit l'Audit GEO et la Vue d'ensemble JSON-LD. Sauvegardez via la barre en haut pour tout enregistrer.")
 
         c1, c2 = st.columns([3, 1])
 
@@ -1427,36 +1535,22 @@ def render_audit_geo():
                 crawl_logs.append(msg)
             selenium_enabled = pending_decision == "selenium"
             selenium_mode = "light" if selenium_enabled else None
+            pending_ws = st.session_state.get("geo_pending_ws") or "Non classé"
+            pending_limit = st.session_state.get("geo_pending_limit", 100)
             try:
-                scr = SmartScraper(
-                    pending_urls,
-                    max_urls=st.session_state.get("geo_pending_limit", 100),
+                run_unified_site_analysis(
+                    st.session_state,
+                    urls=pending_urls,
+                    max_pages=pending_limit,
                     use_selenium=selenium_enabled,
                     selenium_mode=selenium_mode,
+                    workspace_name=pending_ws,
+                    cluster_threshold=0.85,
+                    progress_callback=lambda m, v: bar.progress(v, m),
                     log_callback=add_crawl_log,
                 )
-                res, crawl_meta = scr.run_analysis(
-                    progress_callback=lambda m, v: bar.progress(v, m)
-                )
-                base_url = pending_urls[0]
-                pending_ws = st.session_state.get("geo_pending_ws") or "Non classe"
-                infra, score = check_geo_infrastructure(base_url, crawl_results=res)
-                ai_access = check_ai_accessibility(base_url, res)
                 for k in ("geo_pending_urls", "geo_pending_limit", "geo_pending_ws", "geo_pending_base_url", "geo_crawl_decision"):
                     st.session_state.pop(k, None)
-                st.session_state.update({
-                    "results": res,
-                    "clusters": scr.get_pattern_summary(),
-                    "target_url": base_url,
-                    "start_urls": pending_urls,
-                    "current_ws": pending_ws,
-                    "crawl_stats": crawl_meta.get("stats", {}),
-                    "filtered_log": crawl_meta.get("filtered_log", []),
-                    "duplicate_log": crawl_meta.get("duplicate_log", []),
-                    "ai_accessibility": ai_access,
-                    "geo_infra": infra,
-                    "geo_score": score,
-                })
                 st.rerun()
             except Exception as e:
                 st.error(f"Erreur lors du crawl : {e}")
@@ -1560,7 +1654,7 @@ def render_audit_geo():
                     selenium_enabled = st.session_state.get("geo_crawl_decision") == "selenium"
                     selenium_mode = "light" if selenium_enabled else None
 
-                # ========== ÉTAPE 3 : CRAWL ==========
+                # ========== ÉTAPE 3 : CRAWL (unifié Audit + Vue d'ensemble JSON-LD) ==========
                 st.markdown('<div class="zen-divider"></div>', unsafe_allow_html=True)
                 strategy_label = "Selenium Light" if selenium_enabled else "Flash (Requests)"
                 st.info(f"**Mode de crawl** : {strategy_label}")
@@ -1577,15 +1671,16 @@ def render_audit_geo():
                     crawl_logs.append(msg)
 
                 try:
-                    scr = SmartScraper(
-                        urls,
-                        max_urls=limit_in,
+                    run_unified_site_analysis(
+                        st.session_state,
+                        urls=urls,
+                        max_pages=limit_in,
                         use_selenium=selenium_enabled,
                         selenium_mode=selenium_mode,
+                        workspace_name=ws_in or "Non classé",
+                        cluster_threshold=0.85,
+                        progress_callback=lambda m, v: bar.progress(v, m),
                         log_callback=add_crawl_log,
-                    )
-                    res, crawl_meta = scr.run_analysis(
-                        progress_callback=lambda m, v: bar.progress(v, m)
                     )
                 except Exception as e:
                     st.error(f"Erreur lors du crawl : {e}")
@@ -1595,26 +1690,6 @@ def render_audit_geo():
                     st.markdown("**Logs du crawl**")
                     st.code("\n".join(crawl_logs[-50:]))
 
-                bar.progress(0.90, "Analyse infrastructure...")
-                infra, score = check_geo_infrastructure(base_url, crawl_results=res)
-                bar.progress(0.95, "Vérification accessibilité IA...")
-                ai_access = check_ai_accessibility(base_url, res)
-
-                st.session_state.geo_infra = infra
-                st.session_state.geo_score = score
-                st.session_state.update(
-                    {
-                        "results": res,
-                        "clusters": scr.get_pattern_summary(),
-                        "target_url": base_url,
-                        "start_urls": urls,
-                        "current_ws": ws_in if ws_in else "Non classe",
-                        "crawl_stats": crawl_meta.get("stats", {}),
-                        "filtered_log": crawl_meta.get("filtered_log", []),
-                        "duplicate_log": crawl_meta.get("duplicate_log", []),
-                        "ai_accessibility": ai_access,
-                    }
-                )
                 st.rerun()
 
         # =================================================================

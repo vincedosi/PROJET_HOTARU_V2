@@ -72,9 +72,9 @@ Généré le {time.strftime('%Y-%m-%d %H:%M:%S')}
 
 
 def render_jsonld_analyzer_tab():
-    """Onglet Analyse JSON-LD : crawl + clustering, affichage résultats texte."""
+    """Onglet Analyse JSON-LD : crawl + clustering, affichage résultats texte. Un seul scrape remplit aussi l'Audit GEO."""
     import streamlit as st
-    from core.scraping import SmartScraper
+    from views.audit_geo import run_unified_site_analysis
 
     st.markdown(
         "<p class='section-title'>VUE ENSEMBLE</p>",
@@ -94,6 +94,7 @@ def render_jsonld_analyzer_tab():
         st.info("Utilisez la barre en haut de l'application : **Choix de la sauvegarde** puis **VALIDER** pour charger une sauvegarde. La sauvegarde s'applique à tout le dashboard (Audit GEO + JSON-LD).")
 
     with tab_new:
+        st.caption("Un seul scrape remplit l'Audit GEO et la Vue d'ensemble JSON-LD. Sauvegardez via la barre en haut pour tout enregistrer.")
         url_input = st.text_input(
             "URL du site à analyser",
             placeholder="https://www.example.com",
@@ -118,6 +119,12 @@ def render_jsonld_analyzer_tab():
             key="jsonld_analyzer_threshold",
             help="Plus le seuil est élevé, plus les pages doivent être similaires pour être regroupées. 85 % = par défaut. 70 % = plus de regroupement (moins de clusters). 95 % = plus strict (plus de clusters).",
         ) / 100.0
+        use_selenium_jsonld = st.checkbox(
+            "Utiliser Selenium (sites protégés / SPA)",
+            value=False,
+            key="jsonld_use_selenium",
+            help="Même option que dans l'onglet Audit GEO. Remplit aussi les données d'audit.",
+        )
 
         col_btn1, col_btn2 = st.columns(2)
         with col_btn1:
@@ -146,90 +153,29 @@ def render_jsonld_analyzer_tab():
                 logs.append(msg)
 
             progress_placeholder = st.empty()
-            log_placeholder = st.container()
-
             with progress_placeholder:
-                bar = st.progress(0.0, "Initialisation...")
+                bar = st.progress(0.0, "Crawl et analyse unifiés (Audit + Vue d'ensemble)...")
 
             try:
-                scr = SmartScraper(
-                    [url],
-                    max_urls=max_pages,
-                    use_selenium=False,
-                    log_callback=add_log,
-                )
-                res, crawl_meta = scr.run_analysis(
+                run_unified_site_analysis(
+                    st.session_state,
+                    urls=[url],
+                    max_pages=max_pages,
+                    use_selenium=use_selenium_jsonld,
+                    selenium_mode="light" if use_selenium_jsonld else None,
+                    workspace_name=st.session_state.get("audit_workspace_select") or "Non classé",
+                    cluster_threshold=cluster_threshold,
                     progress_callback=lambda msg, val: bar.progress(min(val, 1.0), msg),
+                    log_callback=add_log,
                 )
             except Exception as e:
                 progress_placeholder.empty()
                 err_msg = str(e)[:300] if e else "Erreur inconnue"
-                st.error(f"Erreur crawl : {err_msg}")
+                st.error(f"Erreur : {err_msg}")
                 st.caption("Vérifiez l'URL, la connexion réseau et l'accessibilité du site.")
                 return
 
             progress_placeholder.empty()
-
-            if not res:
-                st.warning("Aucune page récupérée. Vérifiez l'URL et réessayez.")
-                if logs:
-                    st.markdown("**Logs du crawl**")
-                    st.text("\n".join(logs[-100:]))
-                return
-
-            # Clustering
-            with st.spinner("Clustering des pages..."):
-                clusters = cluster_pages(res, threshold=cluster_threshold)
-
-            # Nommage Mistral (étape 3)
-            cluster_labels = []
-            try:
-                mistral_key = st.secrets["mistral"]["api_key"]
-            except Exception:
-                mistral_key = None
-
-            if mistral_key:
-                mistral_fail_count = 0
-                for i, cluster_indices in enumerate(clusters):
-                    with st.spinner(f"Nommage Mistral — cluster {i + 1}/{len(clusters)}..."):
-                        out = name_cluster_with_mistral(mistral_key, res, cluster_indices)
-                    if out:
-                        cluster_labels.append(out)
-                    else:
-                        cluster_labels.append({"model_name": f"Cluster {i + 1}", "schema_type": "WebPage"})
-                        mistral_fail_count += 1
-                if mistral_fail_count > 0:
-                    st.warning(f"Mistral : {mistral_fail_count} cluster(s) sans nom (timeout ou API occupée). Réessayez.")
-            else:
-                cluster_labels = [
-                    {"model_name": f"Cluster {i + 1}", "schema_type": "—"}
-                    for i in range(len(clusters))
-                ]
-                st.info("Clé API Mistral manquante. Configurez st.secrets['mistral']['api_key'] pour activer.")
-
-            domain = urlparse(url).netloc or "site"
-            site_url = url
-            cluster_urls = [[res[idx]["url"] for idx in indices] for indices in clusters]
-            # DOM + JSON-LD par cluster (première page) pour le graphe et le panneau
-            cluster_dom_structures = []
-            cluster_jsonld = []
-            for indices in clusters:
-                page = res[indices[0]]
-                dom = page.get("dom_structure") or extract_dom_structure(page.get("html_content") or "")
-                cluster_dom_structures.append(dom)
-                jld = page.get("json_ld") or []
-                cluster_jsonld.append(jld[0] if jld else None)
-            st.session_state["jsonld_analyzer_results"] = {
-                "site_url": site_url,
-                "domain": domain,
-                "total_pages": len(res),
-                "cluster_labels": cluster_labels,
-                "cluster_urls": cluster_urls,
-                "cluster_dom_structures": cluster_dom_structures,
-                "cluster_jsonld": cluster_jsonld,
-                "logs": logs,
-            }
-            st.session_state["jsonld_analyzer_crawl_results"] = res
             st.rerun()
 
     # Affichage des résultats (depuis session_state, persistant après rerun)
