@@ -111,6 +111,30 @@ def get_cached_database():
 # =============================================================================
 # GLOBAL SAVE (barre SaaS — bouton SAUVEGARDER)
 # =============================================================================
+# Clés conservées pour l'audit (sans html_content) afin de tenir dans les cellules GSheet (~90k).
+_LIGHT_PAGE_KEYS = (
+    "url", "title", "description", "h1", "h2_count", "has_structured_data",
+    "response_time", "last_modified",
+)
+
+
+def _light_page(p):
+    """Une page allégée pour la sauvegarde (graphe + journal + score partiel)."""
+    if not isinstance(p, dict):
+        return p
+    out = {}
+    for k in _LIGHT_PAGE_KEYS:
+        if k not in p:
+            continue
+        v = p[k]
+        if k in ("description", "h1") and isinstance(v, str) and len(v) > 400:
+            v = v[:400]
+        if k == "title" and isinstance(v, str) and len(v) > 300:
+            v = v[:300]
+        out[k] = v
+    return out
+
+
 def _do_global_save(session_state, db, user_email: str, workspace: str):
     """Sauvegarde l'état courant (audit GEO et/ou JSON-LD) dans unified_saves."""
     if not getattr(db, "sheet_file", None):
@@ -123,10 +147,22 @@ def _do_global_save(session_state, db, user_email: str, workspace: str):
     if not target_url:
         st.warning("Aucune URL de site en mémoire. Lancez un audit ou chargez une sauvegarde puis VALIDER.")
         return
-    max_pages = 800
-    crawl_data = results[:max_pages] if results else []
+    # Version allégée pour tenir dans les cellules GSheet (~90k) — sinon JSON tronqué au rechargement.
+    max_saved = 180
+    crawl_data = [_light_page(p) for p in (results[:max_saved] if results else [])]
+    clusters_light = []
+    for c in clusters:
+        if isinstance(c, dict):
+            samples = (c.get("samples") or [])[:50]
+            clusters_light.append({
+                "name": (c.get("name") or "")[:80],
+                "count": c.get("count", len(samples)),
+                "samples": [_light_page(p) for p in samples],
+            })
+        else:
+            clusters_light.append(c)
     geo_data = {
-        "clusters": clusters,
+        "clusters": clusters_light,
         "geo_infra": session_state.get("geo_infra", {}),
         "geo_score": session_state.get("geo_score", 0),
         "stats": session_state.get("crawl_stats", {}),

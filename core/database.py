@@ -393,7 +393,8 @@ class AuditDatabase:
                 return None
 
     def _json_to_cells(self, data, max_chars=None):
-        """Sérialise en JSON et découpe en morceaux pour cellules (max_chars par cellule)."""
+        """Sérialise en JSON et découpe en morceaux pour cellules (max_chars par cellule).
+        Si le JSON dépasse 2 cellules, on compresse (zlib+base64) pour tenir."""
         if data is None:
             return []
         max_chars = max_chars or self._UNIFIED_MAX_CELL
@@ -401,13 +402,24 @@ class AuditDatabase:
         if not raw:
             return []
         chunks = []
-        while raw:
-            chunks.append(raw[:max_chars])
-            raw = raw[max_chars:]
-        return chunks
+        s = raw
+        while s:
+            chunks.append(s[:max_chars])
+            s = s[max_chars:]
+        if len(chunks) > 2:
+            try:
+                compressed = base64.b64encode(zlib.compress(raw.encode("utf-8"))).decode("ascii")
+            except Exception:
+                compressed = raw
+            chunks = []
+            s = compressed
+            while s:
+                chunks.append(s[:max_chars])
+                s = s[max_chars:]
+        return chunks[:2]
 
     def _cells_to_json(self, row, start_idx, max_cols=2):
-        """Reconstruit un objet JSON à partir de plusieurs cellules (concat puis json.loads)."""
+        """Reconstruit un objet JSON à partir de plusieurs cellules (concat puis json.loads, ou décompression si format compressé)."""
         parts = []
         for i in range(max_cols):
             idx = start_idx + i
@@ -418,6 +430,12 @@ class AuditDatabase:
             return None
         try:
             return json.loads(joined)
+        except Exception:
+            pass
+        try:
+            decoded = base64.b64decode(joined)
+            decompressed = zlib.decompress(decoded).decode("utf-8")
+            return json.loads(decompressed)
         except Exception:
             return None
 
