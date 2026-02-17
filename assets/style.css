@@ -1389,3 +1389,72 @@ pre, code {
     padding: 16px !important;
     border-radius: 0 !important;
 }
+
+/* Comparatif graphe Audit vs JSON-LD — tooltip au survol du (?) */
+.graph-comparison-wrap {
+    display: inline-block;
+    position: relative;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+.graph-comparison-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #64748b;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    cursor: help;
+    border-radius: 50%;
+}
+.graph-comparison-trigger:hover {
+    color: #0f172a;
+    background: #e2e8f0;
+}
+.graph-comparison-tooltip {
+    display: none;
+    position: absolute;
+    left: 24px;
+    top: 0;
+    z-index: 9999;
+    min-width: 420px;
+    max-width: 520px;
+    padding: 12px;
+    background: #fff;
+    border: 1px solid #0f172a;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    font-size: 0.75rem;
+    line-height: 1.4;
+    text-align: left;
+}
+.graph-comparison-wrap:hover .graph-comparison-tooltip {
+    display: block;
+}
+.graph-comparison-tooltip table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.graph-comparison-tooltip th,
+.graph-comparison-tooltip td {
+    border: 1px solid #e2e8f0;
+    padding: 6px 8px;
+    vertical-align: top;
+}
+.graph-comparison-tooltip th {
+    background: #0f172a;
+    color: #fff;
+    font-weight: 700;
+}
+.graph-comparison-tooltip td:first-child {
+    font-weight: 600;
+    color: #475569;
+}
+.graph-comparison-tooltip caption {
+    font-weight: 800;
+    margin-bottom: 6px;
+    text-align: left;
+}

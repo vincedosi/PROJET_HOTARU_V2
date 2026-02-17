@@ -251,7 +251,22 @@ def render_jsonld_analyzer_tab():
 
         if num_clusters > 0:
             with tab_graphe:
-                st.markdown("<p style='color:#0f172a; font-weight:700; font-size:1rem; margin:0 0 0.5rem 0;'>Vue d'ensemble</p>", unsafe_allow_html=True)
+                _comparatif_table = (
+                    '<div class="graph-comparison-wrap">'
+                    '<span class="graph-comparison-trigger" aria-label="Comparatif">?</span>'
+                    '<div class="graph-comparison-tooltip">'
+                    '<table><caption>Comparatif : Audit GEO vs Graphe JSON-LD</caption>'
+                    '<tr><th>Critères</th><th>Graphe d\'Audit (Audit GEO)</th><th>Graphe JSON-LD (Typologie)</th></tr>'
+                    '<tr><td>Objectif Principal</td><td>Visualiser la navigation et le parcours des robots d\'indexation (Crawl).</td><td>Identifier les modèles de pages (templates) pour générer le balisage Schema.org.</td></tr>'
+                    '<tr><td>Ce qu\'on voit (Nœuds)</td><td>Des URLs individuelles (pages A, B, C...) ou des regroupements par dossiers.</td><td>Des Clusters (types de pages détectés : Produit, Article...) et des exemples.</td></tr>'
+                    '<tr><td>Type de connexions</td><td>Liens hypertextes réels (maillage interne) présents dans le code HTML.</td><td>Relations logiques de classification (Site → Type → Exemple). Pas de navigation réelle.</td></tr>'
+                    '<tr><td>Question à résoudre</td><td>Comment mon site est-il connecté et organisé pour le SEO ?</td><td>Quels sont mes types de pages et comment automatiser leur JSON-LD ?</td></tr>'
+                    '</table></div></div>'
+                )
+                st.markdown(
+                    "<p style='color:#0f172a; font-weight:700; font-size:1rem; margin:0 0 0.5rem 0;'>Vue d'ensemble</p>" + _comparatif_table,
+                    unsafe_allow_html=True
+                )
                 st.caption("**Nœud central** (domaine) = page du site (scrape), pas un cluster — c’est la page Master. Cliquez dessus ou sur un **cluster** (bleu) pour mettre à jour les Détails. Clic sur une URL = nouvel onglet.")
 
                 # Déterminer la sélection : -1 = nœud central (domaine, pas un cluster), 0..num_clusters-1 = cluster
