@@ -20,8 +20,6 @@ import streamlit as st
 
 from version import BUILD_DATE, VERSION
 from core.runtime import init as core_init
-from core.auth import AuthManager
-from core.database import AuditDatabase
 from core.session_keys import (
     SESSION_AUTHENTICATED,
     SESSION_USER_EMAIL,
@@ -102,9 +100,15 @@ def get_render_eco_tab():
 # CACHED DATABASE ACCESS
 # =============================================================================
 def get_cached_database():
-    """Retourne AuditDatabase cachée dans session_state."""
-    if "db_instance" not in st.session_state:
+    """Retourne AuditDatabase selon le choix fait à la connexion (Google Sheets ou Supabase)."""
+    backend = st.session_state.get("auth_backend", "sheets")
+    if "db_instance" not in st.session_state or st.session_state.get("db_backend") != backend:
+        if backend == "supabase":
+            from core.database_supabase import AuditDatabase
+        else:
+            from core.database import AuditDatabase
         st.session_state.db_instance = AuditDatabase()
+        st.session_state.db_backend = backend
     return st.session_state.db_instance
 
 
@@ -271,16 +275,31 @@ def main():
                 )
 
             with st.form("login_form"):
+                # Choix du mode de connexion (Google Sheets ou Supabase)
+                connexion_avec = st.radio(
+                    "Connexion avec",
+                    options=["Google Sheets", "Supabase"],
+                    index=0,
+                    key="login_backend",
+                    horizontal=True,
+                    label_visibility="visible",
+                )
+                backend = "supabase" if connexion_avec == "Supabase" else "sheets"
                 email = st.text_input("EMAIL", placeholder="admin@hotaru.com")
                 password = st.text_input("PASSWORD", type="password")
                 submit = st.form_submit_button("CONNEXION", use_container_width=True)
 
                 if submit:
                     try:
+                        if backend == "supabase":
+                            from core.auth_supabase import AuthManager
+                        else:
+                            from core.auth import AuthManager
                         auth = AuthManager()
                         if auth.login(email, password):
                             st.session_state[SESSION_AUTHENTICATED] = True
                             st.session_state[SESSION_USER_EMAIL] = email
+                            st.session_state["auth_backend"] = backend  # pour get_cached_database()
                             st.rerun()
                         else:
                             st.error("Identifiants invalides.")
@@ -309,7 +328,7 @@ def main():
     user_email = get_current_user_email() or ""
     db = get_cached_database()
     unified_list = []
-    if getattr(db, "sheet_file", None):
+    if getattr(db, "sheet_file", None) or getattr(db, "client", None):
         unified_list = db.list_unified_saves(user_email, workspace=None) or []
     def _norm_ws(w):
         s = str(w or "").strip()

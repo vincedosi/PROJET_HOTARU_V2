@@ -163,6 +163,10 @@ Si l’erreur « Executable doesn't exist at …/ms-playwright/… » s’affich
 **Source de vérité :** Tout le dashboard lit et écrit uniquement dans **unified_saves**.  
  Chargement/sauvegarde : **barre SaaS en haut** uniquement pour la liste des workspaces (header), le chargement/sauvegarde des audits (Audit GEO) et le chargement/sauvegarde JSON-LD (Analyse JSON-LD). L’onglet `audits` reste en lecture pour le fallback « anciennes archives » et pour l’onglet Master (liste + colonne master_json).
 
+### Backend Supabase (optionnel)
+
+Sur la **page de connexion**, deux options : **Google Sheets** (par défaut) ou **Supabase**. Choisir Supabase utilise PostgreSQL pour l’auth et les sauvegardes. Voir **`docs/SUPABASE_SECRETS.md`** (schéma SQL + secrets). Quand Supabase est OK, tu pourras supprimer l’option Google Sheets.
+
 ---
 
 ## Structure SaaS et préparation API
