@@ -140,9 +140,9 @@ def _light_page(p):
 
 
 def _do_global_save(session_state, db, user_email: str, workspace: str):
-    """Sauvegarde l'état courant (audit GEO et/ou JSON-LD) dans unified_saves."""
-    if not getattr(db, "sheet_file", None):
-        st.error("Connexion Google Sheet indisponible.")
+    """Sauvegarde l'état courant (audit GEO et/ou JSON-LD) dans unified_saves (Sheets ou Supabase)."""
+    if not getattr(db, "sheet_file", None) and not getattr(db, "client", None):
+        st.error("Connexion indisponible (vérifiez Google Sheet ou Supabase).")
         return
     target_url = (session_state.get("target_url") or "").strip()
     results = session_state.get("results") or []
