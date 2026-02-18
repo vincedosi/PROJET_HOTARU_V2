@@ -11,7 +11,7 @@ HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority I
 ## Vision produit
 
 - **Audit** : **Audit GEO** (structure du site, graphe interactif, patterns d'URL, renommage IA Mistral ; **chargement et sauvegarde via la barre en haut** puis nouvelle analyse), **Authority Score** (AI Authority Index — 5 piliers), **Scraping** (diagnostic URL + logs JSON-LD / techno / Selenium).
-- **JSON-LD** : **Master** (données d'entité Wikidata + Mistral, JSON-LD Organization, audit & gap), **Analyse JSON-LD** (clustering DOM, nommage Mistral, graphe, génération JSON-LD par cluster, **fusion manuelle à choix multiples** ; chargement et sauvegarde **uniquement via la barre en haut**).
+- **JSON-LD** : **Master** (données d'entité Wikidata + Mistral, JSON-LD Organization, audit & gap), **Analyse JSON-LD** (clustering DOM, nommage Mistral, graphe, génération JSON-LD par cluster, **comparaison visuelle gris/vert/rouge**, affichage du prompt Mistral, **traitement en masse avec validation nœud par nœud**, **fusion manuelle à choix multiples** ; chargement et sauvegarde **uniquement via la barre en haut**).
 - **Eco-Score** : **AIO Efficiency** — calculatrice d'impact carbone (tokens, kWh, gCO₂), paramètres site, Big Numbers, graphique Plotly 12 mois.
 - **Design :** Fond blanc, noir + rouge `rgb(168, 27, 35)`. Titres `XX / TITRE`, rouge souligné.
 
@@ -54,13 +54,14 @@ PROJET_HOTARU_V2/
 │   ├── dynamic_handler.py      # Prédictions Mistral (LEAF)
 │   └── template_builder.py     # Génération JSON-LD
 ├── services/                   # Logique métier réutilisable (Streamlit + API)
-│   └── jsonld_service.py       # cluster_pages, generate_optimized_jsonld, extract_dom_structure (sans st)
+│   ├── jsonld_service.py       # cluster_pages, generate_optimized_jsonld, extract_dom_structure (sans st)
+│   └── jsonld_diff.py          # compute_jsonld_diff, extract_modified_fields, render_comparison_html
 ├── views/                      # UI Streamlit (découplée des modules)
 │   ├── audit_geo.py            # Audit GEO (charger en priorité, puis 01 Nouvelle analyse)
 │   ├── audit_scraping.py
 │   ├── authority_score.py
-│   ├── jsonld_analyzer.py      # Analyse JSON-LD (onglet Charger d'abord, fusion multi-select)
-│   ├── backoffice.py           # Backoffice admin : utilisateurs, rôles, accès workspaces (visible si is_admin())
+│   ├── jsonld_analyzer.py      # Analyse JSON-LD (graphe, comparaison visuelle, batch processing, fusion)
+│   ├── backoffice.py           # Backoffice admin (tabs) : Utilisateurs, Workspaces (CRUD), Accès
 │   ├── master.py
 │   ├── eco_impact.py
 │   ├── off_page.py
@@ -258,6 +259,13 @@ SERPAPI_KEY = "..."  # Optionnel, Audit Externe
 - [x] Analyse JSON-LD : génération JSON-LD optimisé Mistral, sauvegarde/chargement Sheets
 - [x] Backend Supabase (auth + unified_saves + chargement liste)
 - [x] Backoffice admin : gestion utilisateurs, rôles, accès par workspace (onglet visible si admin)
+- [x] Backoffice tabs : CRUD workspaces Supabase (créer, renommer, déplacer saves)
+- [x] Fix scraping premier clic (on_click callback)
+- [x] Comparaison JSON-LD visuelle (gris identique / vert ajouté-enrichi / rouge supprimé)
+- [x] Affichage du prompt Mistral (transparence + debug)
+- [x] Traitement en masse : batch generation + validation nœud par nœud (rollback)
+- [x] Sauvegarde delta Supabase (champs modifiés uniquement)
+- [x] Détail cluster sous le schéma des nœuds (layout pleine largeur)
 - [ ] Onglet Paramètres (profil, préférences)
 - [ ] Vault : clés API chiffrées par utilisateur
 - [ ] API REST étendue (user_email/workspace en entrée, routes analyse/crawl)

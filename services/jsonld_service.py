@@ -586,9 +586,11 @@ def generate_optimized_jsonld(
     existing_jsonld: Optional[dict],
     url_pattern: str,
     timeout: int = 30,
+    prompt_output: dict = None,
 ) -> Tuple[Optional[dict], Optional[str]]:
     """
     Génère un JSON-LD Schema.org optimisé complet via Mistral AI.
+    If prompt_output dict is provided, fills it with system_prompt/user_prompt.
     Returns:
         tuple (dict|None, str|None) : (JSON-LD optimisé, ou None) et (message d'erreur, ou None)
     """
@@ -673,6 +675,10 @@ Extrait HTML (5000 premiers chars) :
 
 Réponds UNIQUEMENT avec le JSON-LD valide, sans aucun texte, sans balises markdown, sans commentaires.
 """
+
+    if prompt_output is not None:
+        prompt_output["system_prompt"] = system_prompt
+        prompt_output["user_prompt"] = user_prompt
 
     headers = {
         "Authorization": f"Bearer {api_key}",

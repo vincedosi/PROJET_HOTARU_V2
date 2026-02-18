@@ -776,22 +776,125 @@ class AuditDatabase:
             raise
 
     def list_all_workspaces(self) -> list:
-        """Liste tous les noms de workspaces distincts (unified_saves) pour le backoffice."""
+        """Liste tous les noms de workspaces distincts (unified_saves + user_workspace_access)."""
+        seen = set()
+        out = []
+        ws = self._get_unified_worksheet()
+        if ws:
+            try:
+                rows = ws.get_all_values()
+                for row in rows[1:]:
+                    w = (row[2] if len(row) > 2 else "").strip() or "Non classé"
+                    if w not in seen:
+                        seen.add(w)
+                        out.append(w)
+            except Exception as e:
+                logger.error("Erreur list_all_workspaces (unified): %s", e)
+        wa = self._get_workspace_access_worksheet()
+        if wa:
+            try:
+                rows = wa.get_all_values()
+                for row in rows[1:]:
+                    w = (row[1] if len(row) > 1 else "").strip()
+                    if w and w not in seen:
+                        seen.add(w)
+                        out.append(w)
+            except Exception:
+                pass
+        return sorted(out)
+
+    # ─── Workspace CRUD (backoffice) ─────────────────────────────────────────
+
+    def create_workspace(self, name: str) -> bool:
+        """Register a new workspace (adds to user_workspace_access)."""
+        wa = self._get_workspace_access_worksheet()
+        if not wa:
+            return False
+        try:
+            name = (name or "").strip()
+            if not name:
+                return False
+            wa.append_row(["__workspace_registry__", name], value_input_option="RAW")
+            return True
+        except Exception as e:
+            logger.error("Erreur create_workspace: %s", e)
+            return False
+
+    def rename_workspace(self, old_name: str, new_name: str) -> bool:
+        """Rename workspace across all worksheets."""
+        old = (old_name or "").strip()
+        new = (new_name or "").strip()
+        if not old or not new or old == new:
+            return False
+        ok = True
+        for get_ws, col_idx in [
+            (self._get_unified_worksheet, 2),
+            (self._get_workspace_access_worksheet, 1),
+        ]:
+            ws = get_ws()
+            if not ws:
+                continue
+            try:
+                rows = ws.get_all_values()
+                cells_to_update = []
+                for r_idx, row in enumerate(rows):
+                    if r_idx == 0:
+                        continue
+                    if col_idx < len(row) and (row[col_idx] or "").strip() == old:
+                        cells_to_update.append((r_idx + 1, col_idx + 1))
+                for (r, c) in cells_to_update:
+                    ws.update_cell(r, c, new)
+            except Exception as e:
+                logger.error("Erreur rename_workspace sheet: %s", e)
+                ok = False
+        return ok
+
+    def move_saves_to_workspace(self, save_ids: list, target_workspace: str) -> int:
+        """Move saves to target workspace. Returns count."""
+        ws = self._get_unified_worksheet()
+        if not ws:
+            return 0
+        try:
+            target = (target_workspace or "").strip() or "Non classé"
+            rows = ws.get_all_values()
+            moved = 0
+            for r_idx, row in enumerate(rows):
+                if r_idx == 0:
+                    continue
+                sid = (row[0] if len(row) > 0 else "").strip()
+                if sid in [str(s).strip() for s in (save_ids or [])]:
+                    ws.update_cell(r_idx + 1, 3, target)
+                    moved += 1
+            return moved
+        except Exception as e:
+            logger.error("Erreur move_saves_to_workspace: %s", e)
+            return 0
+
+    def list_workspace_saves_admin(self, workspace: str) -> list:
+        """List all saves in a workspace (admin, no user filter)."""
         ws = self._get_unified_worksheet()
         if not ws:
             return []
         try:
-            rows = ws.get_all_values()
-            if len(rows) < 2:
+            target = (workspace or "").strip()
+            if not target:
                 return []
-            seen = set()
+            rows = ws.get_all_values()
             out = []
             for row in rows[1:]:
-                w = (row[2] if len(row) > 2 else "").strip() or "Non classé"
-                if w not in seen:
-                    seen.add(w)
-                    out.append(w)
-            return sorted(out)
+                if len(row) < 6:
+                    continue
+                row_ws = (row[2] or "").strip() or "Non classé"
+                if row_ws == target:
+                    out.append({
+                        "save_id": (row[0] or "").strip(),
+                        "user_email": (row[1] or "").strip(),
+                        "site_url": (row[3] or "").strip() if len(row) > 3 else "",
+                        "nom_site": (row[4] or "").strip() if len(row) > 4 else "Site",
+                        "created_at": (row[5] or "").strip() if len(row) > 5 else "",
+                        "workspace": row_ws,
+                    })
+            return sorted(out, key=lambda x: x.get("created_at", ""), reverse=True)
         except Exception as e:
-            logger.error("Erreur list_all_workspaces: %s", e)
+            logger.error("Erreur list_workspace_saves_admin: %s", e)
             return []

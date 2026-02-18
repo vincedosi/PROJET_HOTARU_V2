@@ -197,6 +197,7 @@ def _do_global_save(session_state, db, user_email: str, workspace: str):
     }
     jsonld_data = None
     if session_state.get("jsonld_analyzer_results"):
+        from services.jsonld_diff import extract_modified_fields
         num_clusters = len(session_state["jsonld_analyzer_results"].get("cluster_labels", []))
         models_data = []
         for i in range(num_clusters):
@@ -206,14 +207,17 @@ def _do_global_save(session_state, db, user_email: str, workspace: str):
             dom = session_state["jsonld_analyzer_results"].get("cluster_dom_structures", [])
             jld = session_state["jsonld_analyzer_results"].get("cluster_jsonld", [])
             label = labels[i] if i < len(labels) else {}
+            existing = jld[i] if i < len(jld) else None
+            delta = extract_modified_fields(existing, opt) if opt else None
             models_data.append({
                 "model_name": label.get("model_name", "Cluster"),
                 "schema_type": label.get("schema_type", "WebPage"),
                 "page_count": len(urls[i]) if i < len(urls) else 0,
                 "sample_urls": urls[i] if i < len(urls) else [],
                 "dom_structure": dom[i] if i < len(dom) else {},
-                "existing_jsonld": jld[i] if i < len(jld) else None,
+                "existing_jsonld": existing,
                 "optimized_jsonld": opt,
+                "optimized_jsonld_delta": delta,
             })
         if models_data:
             jsonld_data = models_data

@@ -504,19 +504,103 @@ class AuditDatabase:
             raise
 
     def list_all_workspaces(self) -> list:
-        """Liste tous les noms de workspaces distincts (unified_saves) pour le backoffice."""
+        """Liste tous les noms de workspaces distincts (unified_saves + user_workspace_access)."""
         if not self.client:
             return []
         try:
-            r = self.client.table("unified_saves").select("workspace").execute()
             seen = set()
             out = []
+            r = self.client.table("unified_saves").select("workspace").execute()
             for row in (r.data or []):
                 w = (row.get("workspace") or "").strip() or "Non classé"
                 if w not in seen:
                     seen.add(w)
                     out.append(w)
+            r2 = self.client.table("user_workspace_access").select("workspace_name").execute()
+            for row in (r2.data or []):
+                w = (row.get("workspace_name") or "").strip()
+                if w and w not in seen:
+                    seen.add(w)
+                    out.append(w)
             return sorted(out)
         except Exception as e:
             logger.error("Erreur list_all_workspaces: %s", e)
+            return []
+
+    # ─── Workspace CRUD (backoffice) ─────────────────────────────────────────
+
+    def create_workspace(self, name: str) -> bool:
+        """Register a new workspace (adds to user_workspace_access)."""
+        if not self.client:
+            return False
+        try:
+            name = (name or "").strip()
+            if not name:
+                return False
+            self.client.table("user_workspace_access").upsert({
+                "user_email": "__workspace_registry__",
+                "workspace_name": name,
+            }).execute()
+            return True
+        except Exception as e:
+            logger.error("Erreur create_workspace: %s", e)
+            return False
+
+    def rename_workspace(self, old_name: str, new_name: str) -> bool:
+        """Rename workspace across all tables."""
+        if not self.client:
+            return False
+        try:
+            old = (old_name or "").strip()
+            new = (new_name or "").strip()
+            if not old or not new or old == new:
+                return False
+            self.client.table("unified_saves").update({"workspace": new}).eq("workspace", old).execute()
+            self.client.table("jsonld").update({"workspace": new}).eq("workspace", old).execute()
+            self.client.table("audits").update({"workspace": new}).eq("workspace", old).execute()
+            self.client.table("user_workspace_access").update({"workspace_name": new}).eq("workspace_name", old).execute()
+            return True
+        except Exception as e:
+            logger.error("Erreur rename_workspace: %s", e)
+            return False
+
+    def move_saves_to_workspace(self, save_ids: list, target_workspace: str) -> int:
+        """Move saves to target workspace. Returns count of moved saves."""
+        if not self.client:
+            return 0
+        try:
+            target = (target_workspace or "").strip() or "Non classé"
+            moved = 0
+            for sid in (save_ids or []):
+                self.client.table("unified_saves").update({"workspace": target}).eq("save_id", str(sid).strip()).execute()
+                moved += 1
+            return moved
+        except Exception as e:
+            logger.error("Erreur move_saves_to_workspace: %s", e)
+            return 0
+
+    def list_workspace_saves_admin(self, workspace: str) -> list:
+        """List all saves in a workspace (admin, no user filter)."""
+        if not self.client:
+            return []
+        try:
+            ws = (workspace or "").strip()
+            if not ws:
+                return []
+            r = self.client.table("unified_saves").select(
+                "save_id,user_email,site_url,nom_site,created_at,workspace"
+            ).eq("workspace", ws).order("created_at", desc=True).execute()
+            return [
+                {
+                    "save_id": row.get("save_id", ""),
+                    "user_email": row.get("user_email", ""),
+                    "site_url": row.get("site_url", ""),
+                    "nom_site": row.get("nom_site", "Site"),
+                    "created_at": row.get("created_at", ""),
+                    "workspace": (row.get("workspace") or "").strip() or "Non classé",
+                }
+                for row in (r.data or [])
+            ]
+        except Exception as e:
+            logger.error("Erreur list_workspace_saves_admin: %s", e)
             return []
