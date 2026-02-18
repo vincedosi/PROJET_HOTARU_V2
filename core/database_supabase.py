@@ -551,22 +551,21 @@ class AuditDatabase:
 
     # ─── Workspace CRUD (backoffice) ─────────────────────────────────────────
 
-    def _notify_pgrst_reload(self):
-        """Ask PostgREST to reload its schema cache (fixes PGRST205)."""
+    def _has_workspace_access_table(self) -> bool:
+        """Check if user_workspace_access table is reachable."""
+        if not self.client:
+            return False
         try:
-            self.client.postgrest.auth(self.client.options.headers.get("apikey", ""))
-            self.client.rpc("", {}).execute()
-        except Exception:
-            pass
-        try:
-            from supabase._sync.client import SyncClient
-            if hasattr(self.client, 'postgrest'):
-                logger.debug("Tentative NOTIFY pgrst reload schema")
-        except Exception:
-            pass
+            self.client.table("user_workspace_access").select("id").limit(1).execute()
+            return True
+        except Exception as e:
+            if "PGRST205" in str(e) or "schema cache" in str(e).lower():
+                logger.warning("Table user_workspace_access introuvable (PGRST205). Fallback unified_saves.")
+                return False
+            return False
 
     def create_workspace(self, name: str) -> bool:
-        """Register a new workspace (adds to user_workspace_access)."""
+        """Register a new workspace. Uses user_workspace_access if available, otherwise unified_saves fallback."""
         logger.info("create_workspace('%s') — début", name)
         if not self.client:
             logger.error("create_workspace: client Supabase est None")
@@ -575,26 +574,44 @@ class AuditDatabase:
         if not name:
             logger.warning("create_workspace: nom vide")
             raise ValueError("Nom de workspace requis")
+
+        existing = self.list_all_workspaces()
+        if name in existing:
+            raise ValueError(f"Le workspace « {name} » existe déjà.")
+
+        if self._has_workspace_access_table():
+            try:
+                logger.debug("create_workspace: INSERT into user_workspace_access (workspace_name='%s')", name)
+                result = self.client.table("user_workspace_access").insert({
+                    "user_email": "__workspace_registry__",
+                    "workspace_name": name,
+                }).execute()
+                logger.info("create_workspace('%s') → OK via user_workspace_access", name)
+                return True
+            except Exception as e:
+                err_str = str(e)
+                logger.error("create_workspace('%s') EXCEPTION user_workspace_access: %s", name, err_str, exc_info=True)
+                if "duplicate" in err_str.lower() or "unique" in err_str.lower() or "23505" in err_str:
+                    raise ValueError(f"Le workspace « {name} » existe déjà.")
+                raise
+
+        logger.info("create_workspace: fallback → unified_saves placeholder pour '%s'", name)
         try:
-            logger.debug("create_workspace: INSERT into user_workspace_access (user_email='__workspace_registry__', workspace_name='%s')", name)
-            result = self.client.table("user_workspace_access").insert({
+            import uuid
+            placeholder_id = f"__ws_placeholder_{uuid.uuid4().hex[:8]}"
+            self.client.table("unified_saves").insert({
+                "save_id": placeholder_id,
                 "user_email": "__workspace_registry__",
-                "workspace_name": name,
+                "workspace": name,
+                "site_url": "",
+                "nom_site": f"[workspace:{name}]",
+                "created_at": "",
             }).execute()
-            logger.info("create_workspace('%s') → OK (data=%s)", name, result.data[:1] if result.data else "[]")
+            logger.info("create_workspace('%s') → OK via unified_saves fallback", name)
             return True
-        except Exception as e:
-            err_str = str(e)
-            logger.error("create_workspace('%s') EXCEPTION: %s", name, err_str, exc_info=True)
-            if "duplicate" in err_str.lower() or "unique" in err_str.lower() or "23505" in err_str:
-                raise ValueError(f"Le workspace « {name} » existe déjà.")
-            if "PGRST205" in err_str or "schema cache" in err_str.lower():
-                raise ValueError(
-                    "Table user_workspace_access introuvable dans le cache PostgREST. "
-                    "Exécutez dans le SQL Editor Supabase : NOTIFY pgrst, 'reload schema'; "
-                    "puis réessayez."
-                )
-            raise
+        except Exception as e2:
+            logger.error("create_workspace('%s') EXCEPTION fallback: %s", name, e2, exc_info=True)
+            raise ValueError(f"Échec création workspace : {str(e2)[:200]}")
 
     def rename_workspace(self, old_name: str, new_name: str) -> bool:
         """Rename workspace across all tables."""
@@ -606,10 +623,20 @@ class AuditDatabase:
         new = (new_name or "").strip()
         if not old or not new or old == new:
             raise ValueError("Ancien et nouveau nom requis (et différents)")
+        has_access_table = self._has_workspace_access_table()
+        tables = [("unified_saves", "workspace"), ("jsonld", "workspace"), ("audits", "workspace")]
+        if has_access_table:
+            tables.append(("user_workspace_access", "workspace_name"))
         try:
-            for table, col in [("unified_saves", "workspace"), ("jsonld", "workspace"), ("audits", "workspace"), ("user_workspace_access", "workspace_name")]:
-                logger.debug("rename_workspace: UPDATE %s SET %s='%s' WHERE %s='%s'", table, col, new, col, old)
-                self.client.table(table).update({col: new}).eq(col, old).execute()
+            for table, col in tables:
+                try:
+                    logger.debug("rename_workspace: UPDATE %s SET %s='%s' WHERE %s='%s'", table, col, new, col, old)
+                    self.client.table(table).update({col: new}).eq(col, old).execute()
+                except Exception as te:
+                    if "PGRST205" in str(te):
+                        logger.warning("rename_workspace: table %s introuvable — skipped", table)
+                    else:
+                        raise
             logger.info("rename_workspace('%s' → '%s') → OK", old, new)
             return True
         except Exception as e:
@@ -637,7 +664,7 @@ class AuditDatabase:
             return 0
 
     def list_workspace_saves_admin(self, workspace: str) -> list:
-        """List all saves in a workspace (admin, no user filter)."""
+        """List all saves in a workspace (admin, no user filter). Excludes fallback placeholders."""
         logger.debug("list_workspace_saves_admin('%s')...", workspace)
         if not self.client:
             logger.warning("list_workspace_saves_admin: client Supabase est None")
@@ -659,6 +686,7 @@ class AuditDatabase:
                     "workspace": (row.get("workspace") or "").strip() or "Non classé",
                 }
                 for row in (r.data or [])
+                if not (row.get("save_id") or "").startswith("__ws_placeholder_")
             ]
             logger.info("list_workspace_saves_admin('%s') → %d save(s)", ws, len(out))
             return out
