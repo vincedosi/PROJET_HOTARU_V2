@@ -25,8 +25,10 @@ class AuditDatabase:
         self.sheet_file = None  # compat app (getattr(db, "sheet_file"))
         self.client = None
         secrets = secrets or get_secrets()
-        url = secrets.get("supabase_url", "").strip()
-        key = secrets.get("supabase_service_role_key", "").strip() or secrets.get("supabase_key", "").strip()
+        # Accepter [supabase] ou clés à la racine
+        supabase = secrets.get("supabase") or {}
+        url = (supabase.get("supabase_url") or secrets.get("supabase_url") or "").strip()
+        key = (supabase.get("supabase_service_role_key") or supabase.get("supabase_key") or secrets.get("supabase_service_role_key") or secrets.get("supabase_key") or "").strip()
         if not url or not key:
             logger.error("supabase_url ou supabase_service_role_key manquant")
             return
