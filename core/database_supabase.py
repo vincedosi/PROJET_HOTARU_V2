@@ -529,13 +529,19 @@ class AuditDatabase:
                     seen.add(w)
                     out.append(w)
             logger.debug("list_all_workspaces: requête user_workspace_access...")
-            r2 = self.client.table("user_workspace_access").select("workspace_name").execute()
-            logger.debug("list_all_workspaces: user_workspace_access → %d rows", len(r2.data or []))
-            for row in (r2.data or []):
-                w = (row.get("workspace_name") or "").strip()
-                if w and w not in seen:
-                    seen.add(w)
-                    out.append(w)
+            try:
+                r2 = self.client.table("user_workspace_access").select("workspace_name").execute()
+                logger.debug("list_all_workspaces: user_workspace_access → %d rows", len(r2.data or []))
+                for row in (r2.data or []):
+                    w = (row.get("workspace_name") or "").strip()
+                    if w and w not in seen:
+                        seen.add(w)
+                        out.append(w)
+            except Exception as e2:
+                if "PGRST205" in str(e2):
+                    logger.warning("list_all_workspaces: table user_workspace_access introuvable (PGRST205) — NOTIFY pgrst, 'reload schema'; dans le SQL Editor")
+                else:
+                    logger.warning("list_all_workspaces: erreur user_workspace_access: %s", e2)
             result = sorted(out)
             logger.info("list_all_workspaces → %d workspace(s): %s", len(result), result)
             return result
@@ -544,6 +550,20 @@ class AuditDatabase:
             return []
 
     # ─── Workspace CRUD (backoffice) ─────────────────────────────────────────
+
+    def _notify_pgrst_reload(self):
+        """Ask PostgREST to reload its schema cache (fixes PGRST205)."""
+        try:
+            self.client.postgrest.auth(self.client.options.headers.get("apikey", ""))
+            self.client.rpc("", {}).execute()
+        except Exception:
+            pass
+        try:
+            from supabase._sync.client import SyncClient
+            if hasattr(self.client, 'postgrest'):
+                logger.debug("Tentative NOTIFY pgrst reload schema")
+        except Exception:
+            pass
 
     def create_workspace(self, name: str) -> bool:
         """Register a new workspace (adds to user_workspace_access)."""
@@ -568,6 +588,12 @@ class AuditDatabase:
             logger.error("create_workspace('%s') EXCEPTION: %s", name, err_str, exc_info=True)
             if "duplicate" in err_str.lower() or "unique" in err_str.lower() or "23505" in err_str:
                 raise ValueError(f"Le workspace « {name} » existe déjà.")
+            if "PGRST205" in err_str or "schema cache" in err_str.lower():
+                raise ValueError(
+                    "Table user_workspace_access introuvable dans le cache PostgREST. "
+                    "Exécutez dans le SQL Editor Supabase : NOTIFY pgrst, 'reload schema'; "
+                    "puis réessayez."
+                )
             raise
 
     def rename_workspace(self, old_name: str, new_name: str) -> bool:

@@ -344,8 +344,8 @@ def get_cluster_url_pattern(urls: list) -> str:
 
 MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions"
 MISTRAL_MODEL = "mistral-small-latest"
-MISTRAL_TIMEOUT = 25
-MISTRAL_RETRY = 2
+MISTRAL_TIMEOUT = 60
+MISTRAL_RETRY = 3
 
 
 def _parse_mistral_json(content: str):
@@ -585,7 +585,7 @@ def generate_optimized_jsonld(
     sample_pages: list,
     existing_jsonld: Optional[dict],
     url_pattern: str,
-    timeout: int = 30,
+    timeout: int = 90,
     prompt_output: dict = None,
 ) -> Tuple[Optional[dict], Optional[str]]:
     """
@@ -695,59 +695,94 @@ Réponds UNIQUEMENT avec le JSON-LD valide, sans aucun texte, sans balises markd
         "max_tokens": 4000,
     }
 
-    try:
-        response = requests.post(
-            MISTRAL_API_URL,
-            headers=headers,
-            json=payload,
-            timeout=timeout,
-        )
-        if response.status_code >= 400:
-            try:
-                err_body = response.json()
-                err_detail = err_body.get("message") or err_body.get("error") or str(err_body)[:300]
-            except Exception:
-                err_detail = response.text[:300] if response.text else str(response.status_code)
-            err = f"Mistral API erreur {response.status_code} pour {schema_type}: {err_detail}"
-            logging.error(err)
-            return None, err
-        response.raise_for_status()
-        data = response.json()
-        raw_content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
+    import time as _time
+    max_retries = 2
+    last_err = None
 
-        if not raw_content or not str(raw_content).strip():
-            err = f"Réponse Mistral vide pour {schema_type}. L'API a renvoyé une structure sans contenu (choices/message/content)."
-            logging.error(err)
-            return None, err
+    for attempt in range(1, max_retries + 1):
+        try:
+            logging.info(
+                "[Mistral] generate_optimized_jsonld attempt=%d/%d schema=%s timeout=%ds model=%s prompt_len=%d",
+                attempt, max_retries, schema_type, timeout, payload.get("model"), len(user_prompt),
+            )
+            t0 = _time.time()
+            response = requests.post(
+                MISTRAL_API_URL,
+                headers=headers,
+                json=payload,
+                timeout=timeout,
+            )
+            elapsed = _time.time() - t0
+            logging.info("[Mistral] response status=%d elapsed=%.1fs schema=%s", response.status_code, elapsed, schema_type)
 
-        parsed = _parse_mistral_json(raw_content)
-        if not parsed or not isinstance(parsed, dict):
-            try:
-                parsed = json.loads(raw_content.strip())
-            except json.JSONDecodeError:
-                err = f"Parse JSON impossible (Mistral a renvoyé du texte invalide pour {schema_type}). Réponse brute (200 premiers chars): {repr((raw_content or '')[:200])}"
-                logging.error(f"Mistral JSON-LD parse failed for {schema_type}: {raw_content[:300]}")
+            if response.status_code >= 400:
+                try:
+                    err_body = response.json()
+                    err_detail = err_body.get("message") or err_body.get("error") or str(err_body)[:300]
+                except Exception:
+                    err_detail = response.text[:300] if response.text else str(response.status_code)
+                err = f"Mistral API erreur {response.status_code} pour {schema_type}: {err_detail}"
+                logging.error("[Mistral] %s", err)
+                if response.status_code == 429 and attempt < max_retries:
+                    wait = 2 ** attempt
+                    logging.warning("[Mistral] Rate limited, retry in %ds...", wait)
+                    _time.sleep(wait)
+                    continue
                 return None, err
 
-        if "@context" not in parsed or "@type" not in parsed:
-            err = f"Réponse Mistral invalide: manque @context ou @type pour {schema_type}. Structure reçue: {list(parsed.keys())[:10] if isinstance(parsed, dict) else type(parsed).__name__}"
-            logging.error(f"Mistral JSON-LD invalid (@context/@type) for {schema_type}")
-            return None, err
+            response.raise_for_status()
+            data = response.json()
+            usage = data.get("usage", {})
+            logging.info(
+                "[Mistral] usage: prompt_tokens=%s completion_tokens=%s total=%s",
+                usage.get("prompt_tokens"), usage.get("completion_tokens"), usage.get("total_tokens"),
+            )
+            raw_content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
 
-        return parsed, None
+            if not raw_content or not str(raw_content).strip():
+                err = f"Réponse Mistral vide pour {schema_type}."
+                logging.error("[Mistral] %s (response keys: %s)", err, list(data.keys()))
+                return None, err
 
-    except requests.exceptions.Timeout:
-        err = f"Timeout Mistral ({timeout}s) pour {schema_type}. L'API est peut-être surchargée."
-        logging.error(f"Timeout Mistral pour {schema_type}")
-        return None, err
-    except requests.exceptions.RequestException as e:
-        err = f"Erreur API Mistral pour {schema_type}: {str(e)[:300]}"
-        logging.error(f"Erreur API Mistral : {str(e)[:200]}")
-        return None, err
-    except (json.JSONDecodeError, KeyError, TypeError) as e:
-        err = f"Erreur inattendue lors du parsing: {type(e).__name__}: {str(e)[:200]}"
-        logging.exception(f"Mistral JSON-LD exception for {schema_type}")
-        return None, err
+            logging.debug("[Mistral] raw_content length=%d first_100=%s", len(raw_content), repr(raw_content[:100]))
+
+            parsed = _parse_mistral_json(raw_content)
+            if not parsed or not isinstance(parsed, dict):
+                try:
+                    parsed = json.loads(raw_content.strip())
+                except json.JSONDecodeError:
+                    err = f"Parse JSON impossible pour {schema_type}. Réponse brute: {repr((raw_content or '')[:200])}"
+                    logging.error("[Mistral] JSON parse failed: %s", raw_content[:300])
+                    return None, err
+
+            if "@context" not in parsed or "@type" not in parsed:
+                err = f"JSON-LD invalide: manque @context/@type pour {schema_type}. Clés: {list(parsed.keys())[:10]}"
+                logging.error("[Mistral] %s", err)
+                return None, err
+
+            logging.info("[Mistral] SUCCESS schema=%s keys=%d elapsed=%.1fs", schema_type, len(parsed), elapsed)
+            return parsed, None
+
+        except requests.exceptions.Timeout:
+            last_err = f"Timeout Mistral ({timeout}s) pour {schema_type}."
+            logging.error("[Mistral] TIMEOUT attempt=%d/%d schema=%s timeout=%ds", attempt, max_retries, schema_type, timeout)
+            if attempt < max_retries:
+                wait = 2 ** attempt
+                logging.info("[Mistral] Retry in %ds...", wait)
+                _time.sleep(wait)
+                continue
+        except requests.exceptions.RequestException as e:
+            last_err = f"Erreur API Mistral pour {schema_type}: {str(e)[:300]}"
+            logging.error("[Mistral] RequestException: %s", str(e)[:200])
+            if attempt < max_retries:
+                _time.sleep(2)
+                continue
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
+            last_err = f"Erreur parsing: {type(e).__name__}: {str(e)[:200]}"
+            logging.exception("[Mistral] Exception for %s", schema_type)
+            return None, last_err
+
+    return None, last_err or f"Échec après {max_retries} tentatives pour {schema_type}."
 
 
 def validate_jsonld_schema(jsonld_data: dict, timeout: int = 10) -> dict:

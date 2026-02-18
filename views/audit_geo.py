@@ -1675,7 +1675,12 @@ def render_audit_geo():
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        if st.button("LANCER L'ANALYSE", use_container_width=True, type="primary"):
+        def _on_launch_geo():
+            st.session_state["_geo_launch"] = True
+
+        st.button("LANCER L'ANALYSE", use_container_width=True, type="primary", on_click=_on_launch_geo)
+
+        if st.session_state.pop("_geo_launch", False):
             if url_input:
                 urls = [line.strip() for line in url_input.strip().split('\n') if line.strip()]
 

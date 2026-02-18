@@ -305,21 +305,22 @@ def main():
                 submit = st.form_submit_button("CONNEXION", use_container_width=True)
 
                 if submit:
-                    try:
-                        if backend == "supabase":
-                            from core.auth_supabase import AuthManager
-                        else:
-                            from core.auth import AuthManager
-                        auth = AuthManager()
-                        if auth.login(email, password):
-                            st.session_state[SESSION_AUTHENTICATED] = True
-                            st.session_state[SESSION_USER_EMAIL] = email
-                            st.session_state["auth_backend"] = backend  # pour get_cached_database()
-                            st.rerun()
-                        else:
-                            st.error("Identifiants invalides.")
-                    except Exception as e:
-                        st.error(str(e))
+                    with st.spinner("Connexion en cours..."):
+                        try:
+                            if backend == "supabase":
+                                from core.auth_supabase import AuthManager
+                            else:
+                                from core.auth import AuthManager
+                            auth = AuthManager()
+                            if auth.login(email, password):
+                                st.session_state[SESSION_AUTHENTICATED] = True
+                                st.session_state[SESSION_USER_EMAIL] = email
+                                st.session_state["auth_backend"] = backend
+                                st.rerun()
+                            else:
+                                st.error("Identifiants invalides.")
+                        except Exception as e:
+                            st.error(str(e))
         return
 
     # HEADER (logo + version)

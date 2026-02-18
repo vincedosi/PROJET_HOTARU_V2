@@ -3,12 +3,13 @@
 
 import datetime
 
-VERSION = "3.2.0"
+VERSION = "3.2.1"
 BUILD_DATE = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-RELEASE_NOTE = "Audit complet : centralisation Mistral, fix deps circulaires, onglet Traitement unitaire, validation par tabs, error handling, pydantic, fix bugs scraping/DB."
+RELEASE_NOTE = "Fix PGRST205 workspace, fix double-clic Lancer Analyse, Mistral timeout 90s + retry + logs detailles."
 
 # Historique des notes de version (précédentes uniquement, plus récente en premier) — date/heure de release
 RELEASE_HISTORY = [
+    {"version": "3.2.0", "date": "2026-02-18", "note": "Audit complet : centralisation Mistral, fix deps circulaires, onglet Traitement unitaire, validation par tabs, error handling, pydantic, fix bugs scraping/DB."},
     {"version": "3.1.3", "date": "2026-02-18", "note": "Fix IndentationError jsonld_analyzer.py - noms de clusters Mistral restaures."},
     {"version": "3.1.2", "date": "2026-02-18", "note": "Logs détaillés backoffice + database_supabase (create/rename/move workspace, users, accès)."},
     {"version": "3.1.1", "date": "2026-02-18", "note": "Fix creation workspace Supabase (insert + erreurs remontees)."},

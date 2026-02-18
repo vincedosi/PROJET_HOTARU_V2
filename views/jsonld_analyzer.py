@@ -776,7 +776,7 @@ def _render_batch_processing(cluster_labels, cluster_urls, cluster_dom, cluster_
                 result, _ = generate_optimized_jsonld(
                     api_key=mistral_key, schema_type=schema, dom_structure=dom,
                     sample_pages=pages, existing_jsonld=jld, url_pattern=pat,
-                    timeout=30, prompt_output=prompt_out,
+                    timeout=90, prompt_output=prompt_out,
                 )
                 if result:
                     st.session_state[f"optimized_jsonld_{i}"] = result

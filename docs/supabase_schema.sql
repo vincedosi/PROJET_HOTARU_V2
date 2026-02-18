@@ -105,6 +105,14 @@ CREATE TABLE IF NOT EXISTS user_workspace_access (
 
 CREATE INDEX IF NOT EXISTS idx_user_workspace_user ON user_workspace_access (LOWER(TRIM(user_email)));
 
+-- =============================================================================
+-- 6. RAFRAICHIR LE CACHE POSTGREST (obligatoire après création de nouvelles tables)
+-- =============================================================================
+-- Si erreur PGRST205 ("Could not find the table in the schema cache"),
+-- exécuter cette commande dans le SQL Editor Supabase :
+NOTIFY pgrst, 'reload schema';
+
+-- =============================================================================
 -- Optionnel : RLS (Row Level Security) si tu veux isoler par user côté DB.
 -- Ici on utilise la clé service_role côté app donc pas obligatoire.
 -- ALTER TABLE users ENABLE ROW LEVEL SECURITY;
