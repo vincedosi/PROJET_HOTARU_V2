@@ -1,9 +1,12 @@
 # Backoffice HOTARU — Gestion centralisée (tabs SaaS-ready)
 # Onglets : Utilisateurs | Workspaces | Accès
 
+import logging
 import streamlit as st
 
 from core.session_keys import get_current_user_email, is_admin
+
+logger = logging.getLogger(__name__)
 
 
 def render_backoffice_tab(auth, db):
@@ -12,8 +15,11 @@ def render_backoffice_tab(auth, db):
         st.warning("Accès réservé aux administrateurs.")
         return
     if not auth or not db:
+        logger.error("Backoffice: auth=%s db=%s — un des deux est None", type(auth).__name__ if auth else None, type(db).__name__ if db else None)
         st.error("Backoffice : auth ou base non disponible.")
         return
+
+    logger.info("Backoffice ouvert par %s (backend db=%s)", get_current_user_email(), type(db).__name__)
 
     st.markdown("## Backoffice")
     st.caption("Gestion centralisée des utilisateurs, workspaces et droits d'accès.")
@@ -38,7 +44,9 @@ def render_backoffice_tab(auth, db):
 # TAB 1 — Utilisateurs
 # ═══════════════════════════════════════════════════════════════════════════════
 def _render_users_tab(auth):
+    logger.debug("Chargement liste utilisateurs...")
     users = auth.list_users()
+    logger.info("list_users → %d utilisateur(s)", len(users) if users else 0)
 
     st.markdown("### Liste des utilisateurs")
     if not users:
@@ -76,11 +84,14 @@ def _render_users_tab(auth):
                 c1, c2 = st.columns(2)
                 with c1:
                     if new_role != role and st.button("Appliquer", key=f"bo_apply_{i}"):
+                        logger.info("Changement rôle: %s → %s (par %s)", email, new_role, get_current_user_email())
                         try:
                             auth.update_user_role(email, new_role)
+                            logger.info("Rôle de %s mis à jour → %s OK", email, new_role)
                             st.toast(f"Rôle de {email} mis à jour.")
                             st.rerun()
                         except Exception as e:
+                            logger.error("Échec changement rôle %s → %s: %s", email, new_role, e)
                             st.error(str(e)[:200])
                 with c2:
                     if st.button("Supprimer", key=f"bo_del_{i}"):
@@ -88,11 +99,14 @@ def _render_users_tab(auth):
                         if email.strip().lower() == me:
                             st.error("Impossible de supprimer votre propre compte.")
                         else:
+                            logger.info("Suppression utilisateur: %s (par %s)", email, get_current_user_email())
                             try:
                                 auth.delete_user(email)
+                                logger.info("Utilisateur %s supprimé OK", email)
                                 st.toast(f"{email} supprimé.")
                                 st.rerun()
                             except Exception as e:
+                                logger.error("Échec suppression %s: %s", email, e)
                                 st.error(str(e)[:200])
 
     st.markdown("---")
@@ -105,13 +119,17 @@ def _render_users_tab(auth):
             if not new_email or not new_password:
                 st.error("Email et mot de passe requis.")
             else:
+                logger.info("Création utilisateur: %s (rôle=%s, par %s)", new_email.strip(), new_role, get_current_user_email())
                 try:
                     auth.register(new_email.strip(), new_password, role=new_role)
+                    logger.info("Utilisateur %s créé OK (rôle=%s)", new_email.strip(), new_role)
                     st.toast(f"Utilisateur {new_email} créé.")
                     st.rerun()
                 except ValueError as e:
+                    logger.warning("Création utilisateur %s refusée: %s", new_email.strip(), e)
                     st.error(str(e))
                 except Exception as e:
+                    logger.error("Échec création utilisateur %s: %s", new_email.strip(), e)
                     st.error(str(e)[:200])
 
 
@@ -119,7 +137,9 @@ def _render_users_tab(auth):
 # TAB 2 — Workspaces
 # ═══════════════════════════════════════════════════════════════════════════════
 def _render_workspaces_tab(db):
+    logger.debug("Chargement liste workspaces...")
     all_ws = db.list_all_workspaces() or []
+    logger.info("list_all_workspaces → %d workspace(s): %s", len(all_ws), all_ws)
 
     st.markdown("### Workspaces existants")
     if not all_ws:
@@ -138,17 +158,21 @@ def _render_workspaces_tab(db):
             with cols[2]:
                 changed = new_name.strip() and new_name.strip() != ws
                 if changed and st.button("Renommer", key=f"bo_ws_rename_btn_{i}"):
+                    logger.info("Renommage workspace: '%s' → '%s' (par %s)", ws, new_name.strip(), get_current_user_email())
                     if hasattr(db, "rename_workspace"):
                         try:
                             ok = db.rename_workspace(ws, new_name.strip())
+                            logger.info("rename_workspace('%s', '%s') → %s", ws, new_name.strip(), ok)
                             if ok:
                                 st.toast(f"Workspace renommé : {ws} → {new_name.strip()}")
                                 st.rerun()
                             else:
                                 st.error("Échec du renommage.")
                         except Exception as e:
+                            logger.error("Échec renommage workspace '%s' → '%s': %s", ws, new_name.strip(), e)
                             st.error(str(e)[:200])
                     else:
+                        logger.warning("rename_workspace non disponible sur %s", type(db).__name__)
                         st.error("Renommage non disponible pour ce backend.")
         st.divider()
 
@@ -161,21 +185,28 @@ def _render_workspaces_tab(db):
             if not name:
                 st.error("Nom requis.")
             elif name in all_ws:
+                logger.warning("Tentative création workspace en double: '%s'", name)
                 st.error(f"Le workspace « {name} » existe déjà.")
             else:
+                logger.info("Création workspace: '%s' (par %s, db=%s)", name, get_current_user_email(), type(db).__name__)
                 if hasattr(db, "create_workspace"):
                     try:
                         ok = db.create_workspace(name)
+                        logger.info("create_workspace('%s') → %s", name, ok)
                         if ok:
                             st.toast(f"Workspace « {name} » créé.")
                             st.rerun()
                         else:
+                            logger.error("create_workspace('%s') a retourné False", name)
                             st.error("Échec de la création du workspace.")
                     except ValueError as e:
+                        logger.warning("create_workspace('%s') ValueError: %s", name, e)
                         st.error(str(e))
                     except Exception as e:
+                        logger.error("create_workspace('%s') Exception: %s", name, e, exc_info=True)
                         st.error(f"Erreur : {str(e)[:200]}")
                 else:
+                    logger.warning("create_workspace non disponible sur %s", type(db).__name__)
                     st.error("Création non disponible pour ce backend.")
 
     # Déplacer des sauvegardes entre workspaces
@@ -190,7 +221,9 @@ def _render_workspaces_tab(db):
 
         saves = []
         if hasattr(db, "list_workspace_saves_admin"):
+            logger.debug("list_workspace_saves_admin('%s')...", source_ws)
             saves = db.list_workspace_saves_admin(source_ws) or []
+            logger.info("list_workspace_saves_admin('%s') → %d save(s)", source_ws, len(saves))
         if not saves:
             st.info(f"Aucune sauvegarde dans « {source_ws} ».")
         else:
@@ -201,14 +234,18 @@ def _render_workspaces_tab(db):
             selected = st.multiselect("Sauvegardes à déplacer", save_labels, key="bo_move_sel")
             if selected and st.button("Déplacer", type="primary", key="bo_move_btn"):
                 ids = [saves[save_labels.index(lbl)].get("save_id") for lbl in selected]
+                logger.info("Déplacement saves %s → '%s' (par %s)", ids, target_ws, get_current_user_email())
                 if hasattr(db, "move_saves_to_workspace"):
                     try:
                         count = db.move_saves_to_workspace(ids, target_ws)
+                        logger.info("move_saves_to_workspace(%s, '%s') → %d déplacée(s)", ids, target_ws, count)
                         st.toast(f"{count} sauvegarde(s) déplacée(s) vers « {target_ws} ».")
                         st.rerun()
                     except Exception as e:
+                        logger.error("Échec déplacement saves %s → '%s': %s", ids, target_ws, e, exc_info=True)
                         st.error(str(e)[:200])
                 else:
+                    logger.warning("move_saves_to_workspace non disponible sur %s", type(db).__name__)
                     st.error("Déplacement non disponible pour ce backend.")
 
 
@@ -233,6 +270,7 @@ def _render_access_tab(auth, db):
         email = u.get("email", "")
         role = u.get("role", "user")
         current = set(db.get_user_workspaces(email))
+        logger.debug("get_user_workspaces('%s') → %s", email, current)
 
         st.markdown(f"**{email}** `{role}`")
         max_cols = min(len(all_ws), 4)
@@ -244,10 +282,13 @@ def _render_access_tab(auth, db):
                     selected.append(ws)
 
         if st.button("Enregistrer accès", key=f"bo_acc_save_{i}"):
+            logger.info("Enregistrement accès: %s → %s (par %s)", email, selected, get_current_user_email())
             try:
                 db.set_user_workspaces(email, selected)
+                logger.info("set_user_workspaces('%s', %s) OK", email, selected)
                 st.toast(f"Accès mis à jour pour {email}.")
                 st.rerun()
             except Exception as e:
+                logger.error("Échec set_user_workspaces('%s', %s): %s", email, selected, e, exc_info=True)
                 st.error(str(e)[:200])
         st.divider()

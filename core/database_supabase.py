@@ -478,113 +478,142 @@ class AuditDatabase:
     def get_user_workspaces(self, user_email: str) -> list:
         """Liste des workspaces auxquels l'utilisateur a accès (vide = tous)."""
         if not self.client:
+            logger.warning("get_user_workspaces: client Supabase est None")
             return []
         try:
             email_norm = (user_email or "").strip().lower()
             r = self.client.table("user_workspace_access").select("workspace_name").eq("user_email", email_norm).execute()
-            return [(row.get("workspace_name") or "").strip() for row in (r.data or []) if (row.get("workspace_name") or "").strip()]
+            out = [(row.get("workspace_name") or "").strip() for row in (r.data or []) if (row.get("workspace_name") or "").strip()]
+            logger.debug("get_user_workspaces('%s') → %s", email_norm, out)
+            return out
         except Exception as e:
-            logger.error("Erreur get_user_workspaces: %s", e)
+            logger.error("get_user_workspaces('%s') EXCEPTION: %s", user_email, e, exc_info=True)
             return []
 
     def set_user_workspaces(self, user_email: str, workspace_names: list) -> bool:
         """Remplace la liste des workspaces accessibles pour un utilisateur."""
+        logger.info("set_user_workspaces('%s', %s) — début", user_email, workspace_names)
         if not self.client:
+            logger.error("set_user_workspaces: client Supabase est None")
             return False
         try:
             email_norm = (user_email or "").strip().lower()
+            logger.debug("set_user_workspaces: DELETE FROM user_workspace_access WHERE user_email='%s'", email_norm)
             self.client.table("user_workspace_access").delete().eq("user_email", email_norm).execute()
             for wn in (workspace_names or []):
                 name = (wn or "").strip()
                 if name:
+                    logger.debug("set_user_workspaces: INSERT ('%s', '%s')", email_norm, name)
                     self.client.table("user_workspace_access").insert({"user_email": email_norm, "workspace_name": name}).execute()
+            logger.info("set_user_workspaces('%s', %s) → OK", email_norm, workspace_names)
             return True
         except Exception as e:
-            logger.error("Erreur set_user_workspaces: %s", e)
+            logger.error("set_user_workspaces('%s') EXCEPTION: %s", user_email, e, exc_info=True)
             raise
 
     def list_all_workspaces(self) -> list:
         """Liste tous les noms de workspaces distincts (unified_saves + user_workspace_access)."""
         if not self.client:
+            logger.warning("list_all_workspaces: client Supabase est None")
             return []
         try:
             seen = set()
             out = []
+            logger.debug("list_all_workspaces: requête unified_saves...")
             r = self.client.table("unified_saves").select("workspace").execute()
+            logger.debug("list_all_workspaces: unified_saves → %d rows", len(r.data or []))
             for row in (r.data or []):
                 w = (row.get("workspace") or "").strip() or "Non classé"
                 if w not in seen:
                     seen.add(w)
                     out.append(w)
+            logger.debug("list_all_workspaces: requête user_workspace_access...")
             r2 = self.client.table("user_workspace_access").select("workspace_name").execute()
+            logger.debug("list_all_workspaces: user_workspace_access → %d rows", len(r2.data or []))
             for row in (r2.data or []):
                 w = (row.get("workspace_name") or "").strip()
                 if w and w not in seen:
                     seen.add(w)
                     out.append(w)
-            return sorted(out)
+            result = sorted(out)
+            logger.info("list_all_workspaces → %d workspace(s): %s", len(result), result)
+            return result
         except Exception as e:
-            logger.error("Erreur list_all_workspaces: %s", e)
+            logger.error("Erreur list_all_workspaces: %s", e, exc_info=True)
             return []
 
     # ─── Workspace CRUD (backoffice) ─────────────────────────────────────────
 
     def create_workspace(self, name: str) -> bool:
         """Register a new workspace (adds to user_workspace_access)."""
+        logger.info("create_workspace('%s') — début", name)
         if not self.client:
+            logger.error("create_workspace: client Supabase est None")
             raise ValueError("Connexion Supabase indisponible")
         name = (name or "").strip()
         if not name:
+            logger.warning("create_workspace: nom vide")
             raise ValueError("Nom de workspace requis")
         try:
-            self.client.table("user_workspace_access").insert({
+            logger.debug("create_workspace: INSERT into user_workspace_access (user_email='__workspace_registry__', workspace_name='%s')", name)
+            result = self.client.table("user_workspace_access").insert({
                 "user_email": "__workspace_registry__",
                 "workspace_name": name,
             }).execute()
+            logger.info("create_workspace('%s') → OK (data=%s)", name, result.data[:1] if result.data else "[]")
             return True
         except Exception as e:
             err_str = str(e)
+            logger.error("create_workspace('%s') EXCEPTION: %s", name, err_str, exc_info=True)
             if "duplicate" in err_str.lower() or "unique" in err_str.lower() or "23505" in err_str:
                 raise ValueError(f"Le workspace « {name} » existe déjà.")
-            logger.error("Erreur create_workspace: %s", e)
             raise
 
     def rename_workspace(self, old_name: str, new_name: str) -> bool:
         """Rename workspace across all tables."""
+        logger.info("rename_workspace('%s' → '%s') — début", old_name, new_name)
         if not self.client:
+            logger.error("rename_workspace: client Supabase est None")
             raise ValueError("Connexion Supabase indisponible")
         old = (old_name or "").strip()
         new = (new_name or "").strip()
         if not old or not new or old == new:
             raise ValueError("Ancien et nouveau nom requis (et différents)")
         try:
-            self.client.table("unified_saves").update({"workspace": new}).eq("workspace", old).execute()
-            self.client.table("jsonld").update({"workspace": new}).eq("workspace", old).execute()
-            self.client.table("audits").update({"workspace": new}).eq("workspace", old).execute()
-            self.client.table("user_workspace_access").update({"workspace_name": new}).eq("workspace_name", old).execute()
+            for table, col in [("unified_saves", "workspace"), ("jsonld", "workspace"), ("audits", "workspace"), ("user_workspace_access", "workspace_name")]:
+                logger.debug("rename_workspace: UPDATE %s SET %s='%s' WHERE %s='%s'", table, col, new, col, old)
+                self.client.table(table).update({col: new}).eq(col, old).execute()
+            logger.info("rename_workspace('%s' → '%s') → OK", old, new)
             return True
         except Exception as e:
-            logger.error("Erreur rename_workspace: %s", e)
+            logger.error("rename_workspace('%s' → '%s') EXCEPTION: %s", old, new, e, exc_info=True)
             raise
 
     def move_saves_to_workspace(self, save_ids: list, target_workspace: str) -> int:
         """Move saves to target workspace. Returns count of moved saves."""
+        logger.info("move_saves_to_workspace(ids=%s, target='%s') — début", save_ids, target_workspace)
         if not self.client:
+            logger.error("move_saves_to_workspace: client Supabase est None")
             return 0
         try:
             target = (target_workspace or "").strip() or "Non classé"
             moved = 0
             for sid in (save_ids or []):
-                self.client.table("unified_saves").update({"workspace": target}).eq("save_id", str(sid).strip()).execute()
+                sid_str = str(sid).strip()
+                logger.debug("move_saves_to_workspace: UPDATE unified_saves SET workspace='%s' WHERE save_id='%s'", target, sid_str)
+                self.client.table("unified_saves").update({"workspace": target}).eq("save_id", sid_str).execute()
                 moved += 1
+            logger.info("move_saves_to_workspace → %d déplacée(s)", moved)
             return moved
         except Exception as e:
-            logger.error("Erreur move_saves_to_workspace: %s", e)
+            logger.error("move_saves_to_workspace EXCEPTION: %s", e, exc_info=True)
             return 0
 
     def list_workspace_saves_admin(self, workspace: str) -> list:
         """List all saves in a workspace (admin, no user filter)."""
+        logger.debug("list_workspace_saves_admin('%s')...", workspace)
         if not self.client:
+            logger.warning("list_workspace_saves_admin: client Supabase est None")
             return []
         try:
             ws = (workspace or "").strip()
@@ -593,7 +622,7 @@ class AuditDatabase:
             r = self.client.table("unified_saves").select(
                 "save_id,user_email,site_url,nom_site,created_at,workspace"
             ).eq("workspace", ws).order("created_at", desc=True).execute()
-            return [
+            out = [
                 {
                     "save_id": row.get("save_id", ""),
                     "user_email": row.get("user_email", ""),
@@ -604,6 +633,8 @@ class AuditDatabase:
                 }
                 for row in (r.data or [])
             ]
+            logger.info("list_workspace_saves_admin('%s') → %d save(s)", ws, len(out))
+            return out
         except Exception as e:
-            logger.error("Erreur list_workspace_saves_admin: %s", e)
+            logger.error("list_workspace_saves_admin('%s') EXCEPTION: %s", workspace, e, exc_info=True)
             return []
