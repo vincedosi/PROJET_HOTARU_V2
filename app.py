@@ -202,6 +202,7 @@ def _do_global_save(session_state, db, user_email: str, workspace: str):
         models_data = []
         for i in range(num_clusters):
             opt = session_state.get(f"optimized_jsonld_{i}")
+            validated = session_state.get(f"jsonld_validated_{i}", False)
             labels = session_state["jsonld_analyzer_results"].get("cluster_labels", [])
             urls = session_state["jsonld_analyzer_results"].get("cluster_urls", [])
             dom = session_state["jsonld_analyzer_results"].get("cluster_dom_structures", [])
@@ -218,10 +219,20 @@ def _do_global_save(session_state, db, user_email: str, workspace: str):
                 "existing_jsonld": existing,
                 "optimized_jsonld": opt,
                 "optimized_jsonld_delta": delta,
+                "validated": validated,
             })
         if models_data:
             jsonld_data = models_data
     master_json = (session_state.get("jsonld_master") or "").strip() or None
+    master_data_obj = session_state.get("master_data")
+    if master_data_obj is not None:
+        try:
+            from dataclasses import asdict
+            master_data_dict = asdict(master_data_obj)
+            import json as _json
+            geo_data["master_data_serialized"] = _json.dumps(master_data_dict, ensure_ascii=False, default=str)
+        except Exception:
+            pass
     try:
         db.save_unified(
             user_email,
@@ -486,10 +497,28 @@ def main():
                             opt = m.get("optimized_jsonld")
                             if opt is not None and isinstance(opt, dict):
                                 st.session_state[f"optimized_jsonld_{i}"] = opt
+                            if m.get("validated"):
+                                st.session_state[f"jsonld_validated_{i}"] = True
                     except Exception as jld_err:
                         import logging
                         logging.getLogger(__name__).error("Erreur restauration JSON-LD: %s", jld_err, exc_info=True)
                         st.warning("JSON-LD partiellement restauré.")
+                master_json_val = loaded.get("master_json") or ""
+                if master_json_val:
+                    st.session_state["jsonld_master"] = master_json_val
+                master_data_ser = geo_data.get("master_data_serialized")
+                if master_data_ser:
+                    try:
+                        import json as _json
+                        from engine.master_handler import MasterData
+                        md_dict = _json.loads(master_data_ser)
+                        st.session_state["master_data"] = MasterData(**{
+                            k: v for k, v in md_dict.items()
+                            if k in MasterData.__dataclass_fields__
+                        })
+                    except Exception as md_err:
+                        import logging
+                        logging.getLogger(__name__).warning("Restauration master_data partielle: %s", md_err)
                 if loaded.get("crawl_data"):
                     st.session_state["jsonld_analyzer_crawl_results"] = loaded["crawl_data"]
                 st.session_state["global_loaded_save_id"] = save_id
