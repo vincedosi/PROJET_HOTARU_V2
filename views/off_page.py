@@ -738,13 +738,11 @@ def render_off_page_audit():
     
     try:
         serpapi_key = st.secrets["SERPAPI_KEY"]
-    except:
+    except (KeyError, FileNotFoundError):
         pass
     
-    try:
-        mistral_key = st.secrets["mistral"]["api_key"]
-    except:
-        pass
+    from core.mistral_utils import get_mistral_key
+    mistral_key = get_mistral_key() or None
     
     if not serpapi_key:
         st.error(" Clé SERPAPI_KEY manquante dans Secrets")

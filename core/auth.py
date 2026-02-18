@@ -81,8 +81,8 @@ class AuthManager:
                                 row_index, 4,
                                 datetime.now().strftime("%Y-%m-%d %H:%M")
                             )
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.warning("Failed to update last_login: %s", e)
                         return True
                     return False
             return False

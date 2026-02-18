@@ -447,32 +447,41 @@ def main():
                 })
                 jsonld_data = loaded.get("jsonld_data") or []
                 if jsonld_data:
-                    from urllib.parse import urlparse
-                    site_url = loaded.get("site_url", "")
-                    domain = urlparse(site_url).netloc or "site"
-                    cluster_labels = []
-                    cluster_urls = []
-                    cluster_dom = []
-                    cluster_jsonld = []
-                    for m in jsonld_data:
-                        cluster_labels.append({"model_name": m.get("model_name") or "Cluster", "schema_type": m.get("schema_type") or m.get("recommended_schema") or "WebPage"})
-                        urls = m.get("sample_urls") or []
-                        cluster_urls.append(urls if isinstance(urls, list) else [])
-                        cluster_dom.append(m.get("dom_structure") or {})
-                        cluster_jsonld.append(m.get("existing_jsonld"))
-                    st.session_state["jsonld_analyzer_results"] = {
-                        "site_url": site_url, "domain": domain, "total_pages": sum(m.get("page_count", 0) for m in jsonld_data),
-                        "cluster_labels": cluster_labels, "cluster_urls": cluster_urls,
-                        "cluster_dom_structures": cluster_dom, "cluster_jsonld": cluster_jsonld,
-                        "logs": [], "loaded_from_sheet": True,
-                    }
-                    for k in list(st.session_state.keys()):
-                        if k.startswith("optimized_jsonld_"):
-                            del st.session_state[k]
-                    for i, m in enumerate(jsonld_data):
-                        opt = m.get("optimized_jsonld")
-                        if opt is not None and isinstance(opt, dict):
-                            st.session_state[f"optimized_jsonld_{i}"] = opt
+                    try:
+                        from urllib.parse import urlparse
+                        site_url = loaded.get("site_url", "")
+                        domain = urlparse(site_url).netloc or "site"
+                        cluster_labels = []
+                        cluster_urls = []
+                        cluster_dom = []
+                        cluster_jsonld = []
+                        for m in jsonld_data:
+                            cluster_labels.append({
+                                "model_name": m.get("model_name") or "Cluster",
+                                "schema_type": m.get("schema_type") or m.get("recommended_schema") or "WebPage",
+                            })
+                            urls = m.get("sample_urls") or []
+                            cluster_urls.append(urls if isinstance(urls, list) else [])
+                            cluster_dom.append(m.get("dom_structure") or {})
+                            cluster_jsonld.append(m.get("existing_jsonld"))
+                        st.session_state["jsonld_analyzer_results"] = {
+                            "site_url": site_url, "domain": domain,
+                            "total_pages": sum(m.get("page_count", 0) for m in jsonld_data),
+                            "cluster_labels": cluster_labels, "cluster_urls": cluster_urls,
+                            "cluster_dom_structures": cluster_dom, "cluster_jsonld": cluster_jsonld,
+                            "logs": [], "loaded_from_sheet": True,
+                        }
+                        for k in list(st.session_state.keys()):
+                            if k.startswith(("optimized_jsonld_", "jsonld_prompt_", "jsonld_validated_")):
+                                del st.session_state[k]
+                        for i, m in enumerate(jsonld_data):
+                            opt = m.get("optimized_jsonld")
+                            if opt is not None and isinstance(opt, dict):
+                                st.session_state[f"optimized_jsonld_{i}"] = opt
+                    except Exception as jld_err:
+                        import logging
+                        logging.getLogger(__name__).error("Erreur restauration JSON-LD: %s", jld_err, exc_info=True)
+                        st.warning("JSON-LD partiellement restauré.")
                 if loaded.get("crawl_data"):
                     st.session_state["jsonld_analyzer_crawl_results"] = loaded["crawl_data"]
                 st.session_state["global_loaded_save_id"] = save_id

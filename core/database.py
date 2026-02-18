@@ -105,7 +105,7 @@ class AuditDatabase:
         try:
             all_rows = self.sheet.get_all_values()
             # Cache simple par (user_email, hash des données)
-            cache_key = (user_email or "", str(len(all_rows)), all_rows[0][0] if all_rows else "")
+            cache_key = (user_email or "", str(len(all_rows)), all_rows[0][0] if all_rows and all_rows[0] else "")
             now = time.time()
             if cache_key in _audit_cache:
                 cached_time, cached_val = _audit_cache[cache_key]

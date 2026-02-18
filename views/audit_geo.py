@@ -482,10 +482,8 @@ def run_unified_site_analysis(
 
     try:
         clusters = cluster_pages(res, threshold=cluster_threshold)
-        try:
-            mistral_key = st.secrets["mistral"]["api_key"]
-        except Exception:
-            mistral_key = None
+        from core.mistral_utils import get_mistral_key
+        mistral_key = get_mistral_key() or None
 
         cluster_labels = []
         if mistral_key:
@@ -603,10 +601,10 @@ def _call_mistral(api_key, system_prompt, user_prompt, max_tokens=2500):
 
 def generate_robots_optimization(file_content, site_url, found):
     """Genere le code robots.txt optimise + analyse comparative via Mistral"""
-    try:
-        api_key = st.secrets["mistral"]["api_key"]
-    except Exception:
-        return None, "Cle API Mistral manquante dans les secrets Streamlit."
+    from core.mistral_utils import get_mistral_key
+    api_key = get_mistral_key()
+    if not api_key:
+        return None, "Cle API Mistral manquante."
 
     current = file_content if found else "Le fichier robots.txt n'existe pas ou est vide."
 
@@ -679,10 +677,10 @@ Ecris en francais. Utilise des titres en Markdown (**Gras**). Ton professionnel,
 
 def generate_llms_optimization(file_content, site_url, found):
     """Genere le fichier llms.txt Gold Standard via Mistral"""
-    try:
-        api_key = st.secrets["mistral"]["api_key"]
-    except Exception:
-        return "Cle API Mistral manquante dans les secrets Streamlit."
+    from core.mistral_utils import get_mistral_key
+    api_key = get_mistral_key()
+    if not api_key:
+        return "Cle API Mistral manquante."
 
     current = file_content if found else "Le fichier llms.txt n'existe pas."
 

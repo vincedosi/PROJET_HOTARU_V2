@@ -13,10 +13,8 @@ from engine.template_builder import TemplateBuilder
 
 
 def _get_mistral_key():
-    try:
-        return st.secrets["mistral"]["api_key"]
-    except Exception:
-        return ""
+    from core.mistral_utils import get_mistral_key
+    return get_mistral_key()
 
 
 def render_leaf_tab():

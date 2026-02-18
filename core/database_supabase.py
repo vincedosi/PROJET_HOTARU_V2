@@ -190,7 +190,8 @@ class AuditDatabase:
         try:
             raw = base64.b64decode(s)
             return json.loads(zlib.decompress(raw).decode("utf-8"))
-        except Exception:
+        except (base64.binascii.Error, zlib.error, json.JSONDecodeError, UnicodeDecodeError):
+            logger.warning("_cells_to_json: decompression/parse failed for input length=%d", len(s))
             return None
 
     def list_jsonld_sites(self, user_email: str):
@@ -281,13 +282,14 @@ class AuditDatabase:
             return None
         try:
             return json.loads(joined)
-        except Exception:
+        except (json.JSONDecodeError, ValueError):
             pass
         try:
             decoded = base64.b64decode(joined)
             decompressed = zlib.decompress(decoded).decode("utf-8")
             return json.loads(decompressed)
-        except Exception:
+        except (base64.binascii.Error, zlib.error, json.JSONDecodeError, UnicodeDecodeError, ValueError):
+            logger.warning("_reassemble_json: failed to parse/decompress data (length=%d)", len(joined))
             return None
 
     def save_unified(self, user_email: str, workspace: str, site_url: str, nom_site: str,
@@ -370,8 +372,7 @@ class AuditDatabase:
             email_norm = (user_email or "").strip().lower()
             if not email_norm:
                 return []
-            # Match exact (insensible à la casse) au cas où le DB a une autre casse
-            q = self.client.table("unified_saves").select("*").ilike("user_email", email_norm)
+            q = self.client.table("unified_saves").select("*").eq("user_email", email_norm)
             if workspace and (workspace or "").strip():
                 q = q.eq("workspace", (workspace or "").strip())
             r = q.order("created_at", desc=True).execute()
@@ -401,7 +402,7 @@ class AuditDatabase:
             return None
         try:
             email_norm = (user_email or "").strip().lower()
-            r = self.client.table("unified_saves").select("*").eq("save_id", str(save_id).strip()).ilike("user_email", email_norm).limit(1).execute()
+            r = self.client.table("unified_saves").select("*").eq("save_id", str(save_id).strip()).eq("user_email", email_norm).limit(1).execute()
             if not r.data or len(r.data) == 0:
                 return None
             row = r.data[0]

@@ -90,11 +90,8 @@ def _get_sample_pages(urls_in_cluster, session_state, max_pages=3):
 
 
 def _get_mistral_key():
-    import streamlit as st
-    try:
-        return st.secrets["mistral"]["api_key"]
-    except Exception:
-        return None
+    from core.mistral_utils import get_mistral_key
+    return get_mistral_key() or None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -230,7 +227,7 @@ def render_jsonld_analyzer_tab():
         return
 
     st.markdown("---")
-    tab_names = ["VUE ENSEMBLE", "TRAITEMENT EN MASSE", "TABLEAU", "EXPORT", "FUSION"]
+    tab_names = ["VUE ENSEMBLE", "TRAITEMENT UNITAIRE", "TRAITEMENT EN MASSE", "TABLEAU", "EXPORT", "FUSION"]
     if logs:
         tab_names.append("Logs")
     tabs = st.tabs(tab_names)
@@ -238,15 +235,17 @@ def render_jsonld_analyzer_tab():
     with tabs[0]:
         _render_vue_ensemble(data, cluster_labels, cluster_urls, cluster_dom, cluster_jsonld, num_clusters, domain)
     with tabs[1]:
-        _render_batch_processing(cluster_labels, cluster_urls, cluster_dom, cluster_jsonld, num_clusters)
+        _render_unit_processing(cluster_labels, cluster_urls, cluster_dom, cluster_jsonld, num_clusters)
     with tabs[2]:
-        _render_tableau(cluster_labels, cluster_urls, num_clusters)
+        _render_batch_processing(cluster_labels, cluster_urls, cluster_dom, cluster_jsonld, num_clusters)
     with tabs[3]:
-        _render_export(data, cluster_labels, cluster_urls, cluster_dom, cluster_jsonld, num_clusters, domain, total_pages)
+        _render_tableau(cluster_labels, cluster_urls, num_clusters)
     with tabs[4]:
+        _render_export(data, cluster_labels, cluster_urls, cluster_dom, cluster_jsonld, num_clusters, domain, total_pages)
+    with tabs[5]:
         _render_fusion(cluster_labels, cluster_urls, cluster_dom, cluster_jsonld, num_clusters)
-    if logs and len(tabs) > 5:
-        with tabs[5]:
+    if logs and len(tabs) > 6:
+        with tabs[6]:
             st.text("\n".join(logs[-150:]))
 
 
@@ -540,6 +539,186 @@ def _show_validation_badge(optimized):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# TRAITEMENT UNITAIRE — Sélection d'un nœud, optimisation Mistral, comparaison
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _render_unit_processing(cluster_labels, cluster_urls, cluster_dom, cluster_jsonld, num_clusters):
+    import streamlit as st
+
+    st.markdown("### Traitement unitaire")
+    st.caption("Sélectionnez un nœud, lancez l'optimisation Mistral et comparez le JSON-LD actuel avec l'optimisé.")
+
+    options = [
+        f"{i+1}. {(cluster_labels[i].get('model_name') or '').strip() or f'Cluster {i+1}'} ({len(cluster_urls[i])} p.)"
+        for i in range(num_clusters)
+    ]
+    sel = st.selectbox("Sélectionner un nœud à optimiser", options, key="unit_node_select")
+    if not sel:
+        return
+    idx = options.index(sel)
+
+    label = cluster_labels[idx] if idx < len(cluster_labels) else {}
+    name = (label.get("model_name") or "").strip() or f"Cluster {idx + 1}"
+    schema_type = (label.get("schema_type") or "").strip() or "—"
+    urls_in_cluster = cluster_urls[idx] if idx < len(cluster_urls) else []
+    pattern = get_cluster_url_pattern(urls_in_cluster)
+    dom = cluster_dom[idx] if idx < len(cluster_dom) else {}
+    existing_jld = cluster_jsonld[idx] if idx < len(cluster_jsonld) else None
+    optimized = st.session_state.get(f"optimized_jsonld_{idx}")
+    prompt_data = st.session_state.get(f"jsonld_prompt_{idx}")
+    is_validated = st.session_state.get(f"jsonld_validated_{idx}", False)
+
+    # ── Info banner ──────────────────────────────────────────────────────────
+    st.markdown(
+        f'<div style="background:#f8fafc;border:1px solid #e2e8f0;padding:12px 16px;border-radius:6px;margin-bottom:1rem;">'
+        f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">'
+        f'<div><span style="color:#64748b;font-size:0.75rem;text-transform:uppercase;">Modèle</span><br/><strong>{name}</strong></div>'
+        f'<div><span style="color:#64748b;font-size:0.75rem;text-transform:uppercase;">Schema.org</span><br/><code>{schema_type}</code></div>'
+        f'<div><span style="color:#64748b;font-size:0.75rem;text-transform:uppercase;">Pattern</span><br/><code>{pattern}</code></div>'
+        f'<div><span style="color:#64748b;font-size:0.75rem;text-transform:uppercase;">Pages</span><br/><strong>{len(urls_in_cluster)}</strong></div>'
+        f'</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Bouton Générer / Regénérer ───────────────────────────────────────────
+    col_g1, col_g2 = st.columns([3, 1])
+    with col_g1:
+        st.markdown("**Optimisation Mistral**")
+        st.caption("Mistral AI analyse la structure DOM et les pages du cluster pour générer un JSON-LD Schema.org complet.")
+    with col_g2:
+        gen_btn = st.button(
+            "GÉNÉRER" if not optimized else "REGÉNÉRER",
+            type="primary",
+            use_container_width=True,
+            key=f"unit_gen_{idx}",
+        )
+
+    if gen_btn:
+        mistral_key = _get_mistral_key()
+        if not mistral_key:
+            st.error("Clé API Mistral manquante. Configurez `st.secrets['mistral']['api_key']`.")
+        else:
+            sample_pages = _get_sample_pages(urls_in_cluster, st.session_state)
+            prompt_out = {}
+            with st.spinner("Mistral génère le JSON-LD optimisé..."):
+                result, err = generate_optimized_jsonld(
+                    api_key=mistral_key,
+                    schema_type=schema_type if schema_type != "—" else "WebPage",
+                    dom_structure=dom,
+                    sample_pages=sample_pages,
+                    existing_jsonld=existing_jld,
+                    url_pattern=pattern,
+                    prompt_output=prompt_out,
+                )
+            if result:
+                st.session_state[f"optimized_jsonld_{idx}"] = result
+                if prompt_out:
+                    st.session_state[f"jsonld_prompt_{idx}"] = prompt_out
+                st.success("JSON-LD optimisé généré !")
+                st.rerun()
+            else:
+                st.error(f"Échec de la génération. {err or ''}")
+
+    # ── Prompt Mistral ───────────────────────────────────────────────────────
+    if prompt_data:
+        with st.expander("Voir le prompt envoyé à Mistral"):
+            st.markdown("**System prompt :**")
+            st.code(prompt_data.get("system_prompt", ""), language=None)
+            st.markdown("**User prompt :**")
+            st.code(prompt_data.get("user_prompt", ""), language=None)
+
+    st.markdown("---")
+
+    # ── Comparaison JSON-LD actuel vs optimisé ───────────────────────────────
+    st.markdown("#### Comparaison : JSON-LD actuel vs optimisé")
+
+    display_mode = st.radio(
+        "Mode d'affichage",
+        ["Comparaison visuelle", "JSON-LD optimisé complet", "JSON-LD actuel + champs vides"],
+        horizontal=True,
+        key=f"unit_display_{idx}",
+    )
+
+    if display_mode == "Comparaison visuelle":
+        if optimized:
+            html = render_comparison_html(existing_jld, optimized)
+            st.markdown(html, unsafe_allow_html=True)
+            _show_validation_badge(optimized)
+            ds = diff_summary(existing_jld, optimized)
+            st.caption(f"Champs : {ds['same']} identiques, {ds['added']} ajoutés, {ds['enriched']} enrichis, {ds['removed']} supprimés")
+        else:
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.markdown("**JSON-LD actuel**")
+                if existing_jld:
+                    st.json(existing_jld)
+                else:
+                    st.caption("Aucun JSON-LD détecté sur ces pages.")
+            with col_b:
+                st.markdown("**JSON-LD optimisé**")
+                st.caption("Cliquez sur GÉNÉRER ci-dessus.")
+
+    elif display_mode == "JSON-LD optimisé complet":
+        if optimized:
+            st.json(optimized)
+            _show_validation_badge(optimized)
+        else:
+            st.caption("Aucun JSON-LD optimisé. Générez-le ci-dessus.")
+
+    elif display_mode == "JSON-LD actuel + champs vides":
+        if existing_jld:
+            if optimized:
+                merged = {}
+                for key in list(dict.fromkeys(list(optimized.keys()) + list(existing_jld.keys()))):
+                    if key in existing_jld:
+                        merged[key] = existing_jld[key]
+                    else:
+                        merged[key] = f"⟵ {key} (absent)"
+                st.json(merged)
+                st.caption("Les champs ⟵ sont absents dans l'actuel mais présents dans l'optimisé.")
+            else:
+                st.json(existing_jld)
+        else:
+            st.caption("Aucun JSON-LD détecté.")
+
+    # ── Actions : Download / Valider / Annuler ───────────────────────────────
+    if optimized:
+        st.markdown("---")
+        col_d1, col_d2, col_d3, col_d4 = st.columns(4)
+        with col_d1:
+            st.download_button(
+                "JSON-LD optimisé",
+                data=json.dumps(optimized, ensure_ascii=False, indent=2),
+                file_name=f"jsonld_opt_{re.sub(r'[^a-z0-9]+', '_', name.lower())[:30]}.json",
+                mime="application/json",
+                use_container_width=True,
+                key=f"unit_dl_opt_{idx}",
+            )
+        with col_d2:
+            delta = extract_modified_fields(existing_jld, optimized)
+            if delta:
+                st.download_button(
+                    "Delta uniquement",
+                    data=json.dumps(delta, ensure_ascii=False, indent=2),
+                    file_name=f"jsonld_delta_{re.sub(r'[^a-z0-9]+', '_', name.lower())[:30]}.json",
+                    mime="application/json",
+                    use_container_width=True,
+                    key=f"unit_dl_delta_{idx}",
+                )
+        with col_d3:
+            if is_validated:
+                st.success("Validé")
+            elif st.button("Valider", key=f"unit_validate_{idx}", type="primary", use_container_width=True):
+                st.session_state[f"jsonld_validated_{idx}"] = True
+                st.rerun()
+        with col_d4:
+            if st.button("Annuler (rollback)", key=f"unit_rollback_{idx}", use_container_width=True):
+                for prefix in ("optimized_jsonld_", "jsonld_validated_", "jsonld_prompt_"):
+                    st.session_state.pop(f"{prefix}{idx}", None)
+                st.rerun()
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # TRAITEMENT EN MASSE — Batch generation + node-by-node validation
 # ═════════════════════════════════════════════════════════════════════════════
 
@@ -618,32 +797,40 @@ def _render_batch_processing(cluster_labels, cluster_urls, cluster_dom, cluster_
 
     st.markdown("---")
 
-    # ── 2. Validation nœud par nœud ─────────────────────────────────────────
+    # ── 2. Validation nœud par nœud (onglets) ──────────────────────────────
     st.markdown("#### 2. Validation nœud par nœud")
     st.caption("Comparez avant/après et validez ou annulez chaque JSON-LD optimisé.")
 
+    validation_tab_labels = []
     for i in range(num_clusters):
         label = cluster_labels[i] if i < len(cluster_labels) else {}
         cname = (label.get("model_name") or "").strip() or f"Cluster {i + 1}"
-        schema = (label.get("schema_type") or "").strip() or "WebPage"
-        opt = st.session_state.get(f"optimized_jsonld_{i}")
-        existing = cluster_jsonld[i] if i < len(cluster_jsonld) else None
         is_validated = st.session_state.get(f"jsonld_validated_{i}", False)
-
+        has_opt = st.session_state.get(f"optimized_jsonld_{i}")
         if is_validated:
             icon = "✓"
-        elif opt:
+        elif has_opt:
             icon = "⏳"
         else:
             icon = "—"
+        validation_tab_labels.append(f"{icon} {i+1}. {cname}")
 
-        with st.expander(f"{icon} {i+1}. {cname} ({schema})"):
+    validation_tabs = st.tabs(validation_tab_labels)
+    for i, vtab in enumerate(validation_tabs):
+        with vtab:
+            label = cluster_labels[i] if i < len(cluster_labels) else {}
+            cname = (label.get("model_name") or "").strip() or f"Cluster {i + 1}"
+            schema = (label.get("schema_type") or "").strip() or "WebPage"
+            opt = st.session_state.get(f"optimized_jsonld_{i}")
+            existing = cluster_jsonld[i] if i < len(cluster_jsonld) else None
+            is_validated = st.session_state.get(f"jsonld_validated_{i}", False)
+
             if opt:
                 html = render_comparison_html(existing, opt)
                 st.markdown(html, unsafe_allow_html=True)
 
                 ds = diff_summary(existing, opt)
-                st.caption(f"Champs : {ds['same']} identiques, {ds['added']} ajoutés, {ds['enriched']} enrichis, {ds['removed']} supprimés")
+                st.caption(f"**{cname}** ({schema}) — {ds['same']} identiques, {ds['added']} ajoutés, {ds['enriched']} enrichis, {ds['removed']} supprimés")
 
                 c_v, c_r = st.columns(2)
                 with c_v:
@@ -659,7 +846,7 @@ def _render_batch_processing(cluster_labels, cluster_urls, cluster_dom, cluster_
                             st.session_state.pop(f"{prefix}{i}", None)
                         st.rerun()
             else:
-                st.caption("Non encore généré. Utilisez « GÉNÉRER TOUS » ci-dessus.")
+                st.caption("Non encore généré. Utilisez « GÉNÉRER TOUS » ci-dessus ou l'onglet **Traitement unitaire**.")
 
     if generated > 0:
         st.markdown("---")

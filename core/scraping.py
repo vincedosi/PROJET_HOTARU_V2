@@ -254,7 +254,7 @@ class SmartScraper:
         if json_ld_data is None:
             json_ld_data = self._extract_jsonld_from_soup(soup)
 
-        raw_title = soup.title.string.strip() if soup.title else ""
+        raw_title = (soup.title.get_text(strip=True) if soup.title else "") or ""
         h1 = soup.find("h1").get_text().strip() if soup.find("h1") else ""
         final_title = self.clean_title(raw_title, h1, url)
         meta_desc = ""
@@ -601,7 +601,7 @@ class SmartScraper:
                 return None
 
             # ========== EXTRACTION DONNÉES (après bloc Selenium) ==========
-            raw_title = soup.title.string.strip() if soup.title else ""
+            raw_title = (soup.title.get_text(strip=True) if soup.title else "") or ""
             h1 = soup.find("h1").get_text().strip() if soup.find("h1") else ""
             final_title = self.clean_title(raw_title, h1, url)
 

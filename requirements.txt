@@ -1,6 +1,7 @@
 streamlit
 fastapi
 uvicorn[standard]
+pydantic
 pyvis
 networkx
 pandas

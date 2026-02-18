@@ -11,7 +11,7 @@ HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority I
 ## Vision produit
 
 - **Audit** : **Audit GEO** (structure du site, graphe interactif, patterns d'URL, renommage IA Mistral ; **chargement et sauvegarde via la barre en haut** puis nouvelle analyse), **Authority Score** (AI Authority Index — 5 piliers), **Scraping** (diagnostic URL + logs JSON-LD / techno / Selenium).
-- **JSON-LD** : **Master** (données d'entité Wikidata + Mistral, JSON-LD Organization, audit & gap), **Analyse JSON-LD** (clustering DOM, nommage Mistral, graphe, génération JSON-LD par cluster, **comparaison visuelle gris/vert/rouge**, affichage du prompt Mistral, **traitement en masse avec validation nœud par nœud**, **fusion manuelle à choix multiples** ; chargement et sauvegarde **uniquement via la barre en haut**).
+- **JSON-LD** : **Master** (données d'entité Wikidata + Mistral, JSON-LD Organization, audit & gap), **Analyse JSON-LD** (clustering DOM, nommage Mistral, graphe, **traitement unitaire** (sélection nœud + optimisation Mistral + comparaison actuel/optimisé), **traitement en masse** (génération batch + validation par onglets), **comparaison visuelle gris/vert/rouge**, affichage du prompt Mistral, **fusion manuelle à choix multiples** ; chargement et sauvegarde **uniquement via la barre en haut**).
 - **Eco-Score** : **AIO Efficiency** — calculatrice d'impact carbone (tokens, kWh, gCO₂), paramètres site, Big Numbers, graphique Plotly 12 mois.
 - **Design :** Fond blanc, noir + rouge `rgb(168, 27, 35)`. Titres `XX / TITRE`, rouge souligné.
 
@@ -48,7 +48,12 @@ PROJET_HOTARU_V2/
 │   ├── database_supabase.py    # AuditDatabase (Supabase / PostgreSQL)
 │   ├── runtime.py              # get_secrets(), get_session() — agnostique UI
 │   ├── session_keys.py         # SESSION_*, get_current_user_email(), is_authenticated(), is_admin()
-│   └── scraping.py             # SmartScraper (crawl, Selenium, fetch_page)
+│   ├── mistral_utils.py        # get_mistral_key() — accès centralisé à la clé Mistral
+│   ├── scraping.py             # SmartScraper V1 (crawl, Selenium, fetch_page)
+│   ├── scraping_v2.py          # SmartScraperV2 (Crawl4AI / Playwright)
+│   ├── selenium_utils.py       # Utilitaires Selenium (drivers, options)
+│   ├── link_extractor.py       # Extraction de liens (HTML, sitemap, Markdown)
+│   └── logger.py               # Logger centralisé (UI-agnostique)
 ├── engine/
 │   ├── master_handler.py       # MasterDataHandler, Wikidata + Mistral
 │   ├── dynamic_handler.py      # Prédictions Mistral (LEAF)
@@ -67,7 +72,7 @@ PROJET_HOTARU_V2/
 │   ├── off_page.py
 │   ├── leaf.py
 │   └── methodologie_blocks.py
-├── modules/                    # Ré-exports vers views/ (lazy load depuis app.py)
+├── modules/                    # Lazy imports vers views/ + logique métier (geo_scoring, authority_score, eco_impact)
 │   ├── home.py
 │   ├── audit/                  # render_audit_geo, etc. (importe views)
 │   ├── jsonld/                 # render_master_tab, render_jsonld_analyzer_tab
@@ -266,6 +271,9 @@ SERPAPI_KEY = "..."  # Optionnel, Audit Externe
 - [x] Traitement en masse : batch generation + validation nœud par nœud (rollback)
 - [x] Sauvegarde delta Supabase (champs modifiés uniquement)
 - [x] Détail cluster sous le schéma des nœuds (layout pleine largeur)
+- [x] Onglet Traitement unitaire (sélection nœud + optimisation Mistral + comparaison)
+- [x] Validation en masse par onglets (plus d'accordéons)
+- [x] Audit code complet : centralisation Mistral (`core/mistral_utils.py`), fix dépendances circulaires, lazy imports modules, pydantic dans requirements, fix bare except, fix `soup.title.string`, error handling restauration JSON-LD
 - [ ] Onglet Paramètres (profil, préférences)
 - [ ] Vault : clés API chiffrées par utilisateur
 - [ ] API REST étendue (user_email/workspace en entrée, routes analyse/crawl)
