@@ -3,12 +3,13 @@
 
 import datetime
 
-VERSION = "3.1.2"
+VERSION = "3.1.3"
 BUILD_DATE = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-RELEASE_NOTE = "Logs détaillés backoffice + database_supabase (create/rename/move workspace, users, accès)."
+RELEASE_NOTE = "Fix jsonld_analyzer.py : IndentationError corrigée — noms de clusters Mistral restaurés."
 
 # Historique des notes de version (précédentes uniquement, plus récente en premier) — date/heure de release
 RELEASE_HISTORY = [
+    {"version": "3.1.2", "date": "2026-02-18", "note": "Logs détaillés backoffice + database_supabase (create/rename/move workspace, users, accès)."},
     {"version": "3.1.1", "date": "2026-02-18", "note": "Fix creation workspace Supabase (insert + erreurs remontees)."},
     {"version": "3.1.0", "date": "2026-02-18", "note": "Backoffice tabs + CRUD workspaces. Fix scraping 1er clic. Comparaison JSON-LD (gris/vert/rouge). Prompt Mistral visible. Traitement en masse avec validation noeud par noeud. Delta Supabase."},
     {"version": "3.0.86", "date": "2026-02-17", "note": "README : Supabase, backoffice admin, structure et secrets à jour."},

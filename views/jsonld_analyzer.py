@@ -739,21 +739,31 @@ def _render_export(data, cluster_labels, cluster_urls, cluster_dom, cluster_json
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.markdown(f'<div class="zen-metric"><div class="zen-metric-value">{num_clusters}</div><div class="zen-metric-label">Clusters</div></div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="zen-metric"><div class="zen-metric-value">{num_clusters}</div>'
+            '<div class="zen-metric-label">Clusters</div></div>',
+            unsafe_allow_html=True,
+        )
     with c2:
         st.markdown(
-            f'<div class="zen-metric"><div class="zen-metric-value">{generated_count}<span style="font-size:0.75rem;font-weight:500;color:rgba(0,0,0,0.4);">/{num_clusters}</span></div>'
+            f'<div class="zen-metric"><div class="zen-metric-value">{generated_count}'
+            f'<span style="font-size:0.75rem;font-weight:500;color:rgba(0,0,0,0.4);">/{num_clusters}</span></div>'
             '<div class="zen-metric-label">JSON-LD générés</div></div>',
             unsafe_allow_html=True,
         )
     with c3:
         st.markdown(
-            f'<div class="zen-metric"><div class="zen-metric-value">{valid_count}<span style="font-size:0.75rem;font-weight:500;color:rgba(0,0,0,0.4);">/{generated_count}</span></div>'
+            f'<div class="zen-metric"><div class="zen-metric-value">{valid_count}'
+            f'<span style="font-size:0.75rem;font-weight:500;color:rgba(0,0,0,0.4);">/{generated_count}</span></div>'
             '<div class="zen-metric-label">Valides</div></div>',
             unsafe_allow_html=True,
         )
     with c4:
-        st.markdown(f'<div class="zen-metric"><div class="zen-metric-value">{total_p}</div><div class="zen-metric-label">Pages</div></div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="zen-metric"><div class="zen-metric-value">{total_p}</div>'
+            '<div class="zen-metric-label">Pages</div></div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown("---")
 
