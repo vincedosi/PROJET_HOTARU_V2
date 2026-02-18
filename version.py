@@ -3,12 +3,13 @@
 
 import datetime
 
-VERSION = "3.0.85"
+VERSION = "3.0.86"
 BUILD_DATE = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-RELEASE_NOTE = "Supabase: chargement liste sauvegardes (ilike + fallback backend). Vue ensemble: fix widget jsonld_cluster_select."
+RELEASE_NOTE = "README : Supabase, backoffice admin, structure et secrets à jour."
 
 # Historique des notes de version (précédentes uniquement, plus récente en premier) — date/heure de release
 RELEASE_HISTORY = [
+    {"version": "3.0.85", "date": "2026-02-17", "note": "Supabase: chargement liste sauvegardes (ilike + fallback backend). Vue ensemble: fix widget jsonld_cluster_select."},
     {"version": "3.0.84", "date": "2026-02-17", "note": "Backoffice: correctif st.expander (sans key) pour compat Streamlit Cloud."},
     {"version": "3.0.83", "date": "2026-02-17", "note": "Backoffice admin : onglet réservé aux admins — gestion utilisateurs, rôles et accès par workspace (Sheets + Supabase)."},
     {"version": "3.0.82", "date": "2026-02-17", "note": "Supabase: sauvegarde unifiée activée (SAUVEGARDER fonctionne avec connexion Supabase)."},

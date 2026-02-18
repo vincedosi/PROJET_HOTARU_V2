@@ -2,7 +2,7 @@
 
 **SaaS d'audit et d'optimisation pour le web lisible par l'IA**
 
-HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority Index (AI-Native), Master Data (JSON-LD entité), **Analyse JSON-LD** (clustering DOM, graphe interactif, génération JSON-LD optimisé via Mistral AI, **fusion multi-clusters** à choix multiples, export Google Sheets), **Eco-Score** (AIO Impact Calculator). Multi-utilisateurs avec **isolation stricte par `user_email` et par workspace**.
+HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority Index (AI-Native), Master Data (JSON-LD entité), **Analyse JSON-LD** (clustering DOM, graphe interactif, génération JSON-LD optimisé via Mistral AI, **fusion multi-clusters** à choix multiples), **Eco-Score** (AIO Impact Calculator). Multi-utilisateurs avec **isolation par `user_email` et workspace**. **Deux backends au choix à la connexion :** Google Sheets ou **Supabase** (PostgreSQL). **Backoffice admin** (visible aux rôles admin) : gestion utilisateurs, rôles et accès par workspace.
 
 **Interface :** Français uniquement.
 
@@ -34,7 +34,7 @@ L'app affiche **V {VERSION} // {BUILD_DATE}** dans le header et le footer.
 
 ```
 PROJET_HOTARU_V2/
-├── app.py                      # Point d'entrée : auth, barre SaaS (workspace, sauvegarde, VALIDER, SAUVEGARDER, déconnexion), 4 tabs, footer
+├── app.py                      # Point d'entrée : auth (Sheets ou Supabase au choix), barre SaaS, 4 onglets + Backoffice (admin), footer
 ├── version.py                  # VERSION + BUILD_DATE (à mettre à jour à chaque push/PR)
 ├── packages.txt                # Streamlit Cloud : chromium, chromium-driver
 ├── requirements.txt
@@ -42,10 +42,12 @@ PROJET_HOTARU_V2/
 │   ├── logo.png
 │   └── style.css               # Design system (noir, rouge, section-title)
 ├── core/
-│   ├── auth.py                 # AuthManager (Google Sheets users)
-│   ├── database.py             # AuditDatabase (audits, jsonld, unified_saves)
+│   ├── auth.py                 # AuthManager (Google Sheets)
+│   ├── auth_supabase.py        # AuthManager (Supabase)
+│   ├── database.py             # AuditDatabase (Google Sheets : audits, jsonld, unified_saves, user_workspace_access)
+│   ├── database_supabase.py    # AuditDatabase (Supabase / PostgreSQL)
 │   ├── runtime.py              # get_secrets(), get_session() — agnostique UI
-│   ├── session_keys.py         # SESSION_*, get_current_user_email(), is_authenticated()
+│   ├── session_keys.py         # SESSION_*, get_current_user_email(), is_authenticated(), is_admin()
 │   └── scraping.py             # SmartScraper (crawl, Selenium, fetch_page)
 ├── engine/
 │   ├── master_handler.py       # MasterDataHandler, Wikidata + Mistral
@@ -58,6 +60,7 @@ PROJET_HOTARU_V2/
 │   ├── audit_scraping.py
 │   ├── authority_score.py
 │   ├── jsonld_analyzer.py      # Analyse JSON-LD (onglet Charger d'abord, fusion multi-select)
+│   ├── backoffice.py           # Backoffice admin : utilisateurs, rôles, accès workspaces (visible si is_admin())
 │   ├── master.py
 │   ├── eco_impact.py
 │   ├── off_page.py
@@ -68,6 +71,11 @@ PROJET_HOTARU_V2/
 │   ├── audit/                  # render_audit_geo, etc. (importe views)
 │   ├── jsonld/                 # render_master_tab, render_jsonld_analyzer_tab
 │   └── eco/
+├── docs/
+│   ├── supabase_schema.sql     # Schéma Supabase (users, audits, jsonld, unified_saves, user_workspace_access)
+│   ├── supabase_insert_first_user.sql   # Premier utilisateur (upsert)
+│   ├── supabase_migration_workspace_access.sql
+│   └── SUPABASE_SECRETS.md     # Config secrets Streamlit pour Supabase
 ├── api/
 │   └── main.py                 # FastAPI : /audit/authority, /health (base pour future API)
 └── README.md
@@ -100,23 +108,23 @@ Si l’erreur « Executable doesn't exist at …/ms-playwright/… » s’affich
 
 ## SaaS : authentification et isolation
 
-- **Login :** `core.auth.AuthManager` — email + mot de passe, hash en Google Sheets (onglet `users`).
-- **Session :** `core.session_keys` — `get_current_user_email()`, `is_authenticated()`. Stockage via `core.runtime.get_session()` (compatible Streamlit ou autre runtime).
-- **Barre SaaS (en haut, sur toutes les pages) :** Ligne 1 = **Choix du workspace** + DÉCONNEXION. Ligne 2 = **Choix de la sauvegarde** + **VALIDER** (charge la sauvegarde dans tout le dashboard) + **SAUVEGARDER** (enregistre l'état courant dans unified_saves). Aucun autre bouton de chargement ou sauvegarde dans les onglets — tout passe par cette barre.
+- **Login :** Sur la page de connexion, choix **Google Sheets** ou **Supabase**. Puis email + mot de passe. Auth via `core.auth.AuthManager` (Sheets) ou `core.auth_supabase.AuthManager` (Supabase). Hash stocké en base (onglet `users` ou table `users`).
+- **Session :** `core.session_keys` — `get_current_user_email()`, `is_authenticated()`, **`is_admin()`**. Stockage via `core.runtime.get_session()`. Le backend choisi à la connexion (`auth_backend` = `sheets` ou `supabase`) est conservé pour toute la session (sauvegardes et chargement).
+- **Barre SaaS (en haut) :** Ligne 1 = **Choix du workspace** + DÉCONNEXION. Ligne 2 = **Choix de la sauvegarde** + **VALIDER** (charge la sauvegarde dans tout le dashboard) + **SAUVEGARDER** (enregistre dans unified_saves — Sheets ou Supabase selon le backend).
 - **Isolation :**
-  - `AuditDatabase.load_user_audits(user_email)` — audits filtrés par email.
-  - `AuditDatabase.list_unified_saves(user_email, workspace=selected_ws)` — sauvegardes unifiées par email + workspace.
-  - `AuditDatabase.load_unified(save_id, user_email)` — vérifie `user_email` avant de renvoyer les données.
-- **Usage :** Toujours utiliser `get_current_user_email()` et le workspace de session pour lire/écrire les données.
+  - `AuditDatabase` (Sheets ou Supabase selon session) : `list_unified_saves(user_email, workspace)`, `load_unified(save_id, user_email)`, `save_unified(...)`.
+  - Si **droits workspace** sont définis en backoffice pour un user, il ne voit que les sauvegardes des workspaces auxquels il a accès.
+- **Backoffice (admin uniquement) :** Onglet **Backoffice** visible si `is_admin()`. Gestion des utilisateurs (liste, ajout, suppression, changement de rôle), et **accès par workspace** par utilisateur (cases à cocher + Enregistrer accès).
 
 ---
 
 ## Sauvegardes unifiées (unified_saves) — source unique du dashboard
 
-**Tout le dashboard** lit et écrit dans l'onglet **unified_saves** (workspaces, audits GEO, JSON-LD, MASTER).
+**Tout le dashboard** lit et écrit dans **unified_saves** (workspaces, audits GEO, JSON-LD, MASTER), soit dans **Google Sheets** (onglet `unified_saves`), soit dans **Supabase** (table `unified_saves`) selon le backend choisi à la connexion.
 
-- **Onglet GSheet :** `unified_saves`
-- **Colonnes (27) :**  
+- **Google Sheets :** onglet `unified_saves`
+- **Supabase :** table `unified_saves` (voir `docs/supabase_schema.sql`)
+- **Colonnes / champs (27) :**  
   `save_id`, `user_email`, `workspace`, `site_url`, `nom_site`, `created_at`,  
   `crawl_pages_count`, `geo_score`, `geo_clusters_count`, `jsonld_models_count`,  
   `geo_stats_pages_crawled`, `geo_stats_links_discovered`, `geo_stats_links_filtered`,  
@@ -132,7 +140,7 @@ Si l’erreur « Executable doesn't exist at …/ms-playwright/… » s’affich
 ## Navigation et flux UX
 
 - **Header :** Logo, version, **barre SaaS** (2 lignes), déconnexion.
-- **Onglets principaux :** Accueil | Audit | JSON-LD | Eco-Score.
+- **Onglets principaux :** Accueil | Audit | JSON-LD | Eco-Score. **Backoffice** (visible uniquement aux rôles admin) : gestion utilisateurs, rôles et accès par workspace.
 - **Audit GEO :** En tête d’onglet Audit Site → 01 / NOUVELLE ANALYSE (URLs, limite, Selenium).
 - **Analyse JSON-LD :** Chargement/sauvegarde via la barre en haut. Onglet Nouvelle analyse ; résultats : 02 Génération, 03 Export, 05 Télécharger.
 - **Master :** Chargement/sauvegarde via la barre en haut (VALIDER charge tout ; SAUVEGARDER enregistre tout).
@@ -152,20 +160,25 @@ Si l’erreur « Executable doesn't exist at …/ms-playwright/… » s’affich
 
 ---
 
-## Base de données (Google Sheets)
+## Base de données
 
-- **Onglet `users` / `USERS` :** email, password_hash, created_at, last_login, role.
-- **Onglet `audits` (legacy) :** audit_id, user_email, workspace, date, site_url, nb_urls, data_compressed, nom_site, master_json. (Legacy ; préférer unified_saves.)
-- **Onglet `jsonld` (legacy) :** site_url, model_id, model_name, page_count, url_pattern, sample_urls, dom_structure, existing_jsonld, recommended_schema, optimized_jsonld, created_at, workspace, user_email. (Legacy ; sauvegarde unifiée complète en plus.)
-- **Onglet `unified_saves` :** 27 colonnes (voir ci-dessus). **Source unique** : workspaces, audits, JSON-LD, MASTER.
-- **Onglets `audits` / `jsonld` :** plus utilisés par le dashboard (legacy).
+**Deux backends possibles**, choisis à la connexion : **Google Sheets** ou **Supabase (PostgreSQL)**.
 
-**Source de vérité :** Tout le dashboard lit et écrit uniquement dans **unified_saves**.  
- Chargement/sauvegarde : **barre SaaS en haut** uniquement pour la liste des workspaces (header), le chargement/sauvegarde des audits (Audit GEO) et le chargement/sauvegarde JSON-LD (Analyse JSON-LD). L’onglet `audits` reste en lecture pour le fallback « anciennes archives » et pour l’onglet Master (liste + colonne master_json).
+### Google Sheets
 
-### Backend Supabase (optionnel)
+- **Onglet `users` :** email, password_hash, created_at, last_login, role.
+- **Onglet `audits` (legacy) :** audit_id, user_email, workspace, date, site_url, nb_urls, data_compressed, nom_site, master_json.
+- **Onglet `jsonld` (legacy) :** site_url, model_id, model_name, page_count, url_pattern, sample_urls, dom_structure, existing_jsonld, recommended_schema, optimized_jsonld, created_at, workspace, user_email.
+- **Onglet `unified_saves` :** 27 colonnes — source unique du dashboard (workspaces, audits, JSON-LD, MASTER).
+- **Onglet `user_workspace_access` :** user_email, workspace_name (droits par workspace, créé automatiquement si absent).
 
-Sur la **page de connexion**, deux options : **Google Sheets** (par défaut) ou **Supabase**. Choisir Supabase utilise PostgreSQL pour l’auth et les sauvegardes. Voir **`docs/SUPABASE_SECRETS.md`** (schéma SQL + secrets). Quand Supabase est OK, tu pourras supprimer l’option Google Sheets.
+### Supabase (PostgreSQL)
+
+Tables : `users`, `audits`, `jsonld`, `unified_saves`, **`user_workspace_access`**. Schéma complet : **`docs/supabase_schema.sql`**. Premier utilisateur : **`docs/supabase_insert_first_user.sql`**. Migration droits seuls : **`docs/supabase_migration_workspace_access.sql`**. Configuration des secrets : **`docs/SUPABASE_SECRETS.md`**.
+
+### Comportement commun
+
+**Source de vérité :** Le dashboard lit et écrit dans **unified_saves** (Sheets ou Supabase selon la session). Chargement/sauvegarde uniquement via la **barre SaaS en haut** (Choix workspace, Choix sauvegarde, VALIDER, SAUVEGARDER).
 
 ---
 
@@ -187,7 +200,7 @@ Sur la **page de connexion**, deux options : **Google Sheets** (par défaut) ou 
 
 ## Installation
 
-**Prérequis :** Python 3.9+, clé API Mistral, Google Sheets (users + audits/jsonld/unified_saves). Pour **Streamlit Cloud** : `packages.txt` (chromium, chromium-driver).
+**Prérequis :** Python 3.9+, clé API Mistral. Backend au choix : **Google Sheets** (gcp_service_account + sheet_url) ou **Supabase** (supabase_url + supabase_service_role_key). Pour **Streamlit Cloud** : `packages.txt` (chromium, chromium-driver).
 
 ```bash
 git clone https://github.com/vincedosi/PROJET_HOTARU_V2.git
@@ -202,10 +215,16 @@ streamlit run app.py
 [mistral]
 api_key = "..."
 
+# Option 1 : Google Sheets (connexion avec "Google Sheets" sur la page de login)
 [gcp_service_account]
 # JSON compte de service Google
-
 sheet_url = "https://docs.google.com/spreadsheets/d/..."
+
+# Option 2 : Supabase (connexion avec "Supabase" sur la page de login)
+[supabase]
+supabase_url = "https://xxxx.supabase.co"
+supabase_service_role_key = "eyJ..."
+
 SERPAPI_KEY = "..."  # Optionnel, Audit Externe
 ```
 
@@ -237,9 +256,10 @@ SERPAPI_KEY = "..."  # Optionnel, Audit Externe
 - [x] Analyse JSON-LD : fusion manuelle à choix multiples (multiselect)
 - [x] SmartScraper, Audit GEO, Authority Score, Master, Analyse JSON-LD, Eco-Score
 - [x] Analyse JSON-LD : génération JSON-LD optimisé Mistral, sauvegarde/chargement Sheets
+- [x] Backend Supabase (auth + unified_saves + chargement liste)
+- [x] Backoffice admin : gestion utilisateurs, rôles, accès par workspace (onglet visible si admin)
 - [ ] Onglet Paramètres (profil, préférences)
 - [ ] Vault : clés API chiffrées par utilisateur
-- [ ] Rôle admin (stats, gestion comptes)
 - [ ] API REST étendue (user_email/workspace en entrée, routes analyse/crawl)
 
 ---
