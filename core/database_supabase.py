@@ -471,3 +471,49 @@ class AuditDatabase:
         except Exception as e:
             logger.error("Erreur _append_unified_master_only: %s", e)
             return False
+
+    def get_user_workspaces(self, user_email: str) -> list:
+        """Liste des workspaces auxquels l'utilisateur a accès (vide = tous)."""
+        if not self.client:
+            return []
+        try:
+            email_norm = (user_email or "").strip().lower()
+            r = self.client.table("user_workspace_access").select("workspace_name").eq("user_email", email_norm).execute()
+            return [(row.get("workspace_name") or "").strip() for row in (r.data or []) if (row.get("workspace_name") or "").strip()]
+        except Exception as e:
+            logger.error("Erreur get_user_workspaces: %s", e)
+            return []
+
+    def set_user_workspaces(self, user_email: str, workspace_names: list) -> bool:
+        """Remplace la liste des workspaces accessibles pour un utilisateur."""
+        if not self.client:
+            return False
+        try:
+            email_norm = (user_email or "").strip().lower()
+            self.client.table("user_workspace_access").delete().eq("user_email", email_norm).execute()
+            for wn in (workspace_names or []):
+                name = (wn or "").strip()
+                if name:
+                    self.client.table("user_workspace_access").insert({"user_email": email_norm, "workspace_name": name}).execute()
+            return True
+        except Exception as e:
+            logger.error("Erreur set_user_workspaces: %s", e)
+            raise
+
+    def list_all_workspaces(self) -> list:
+        """Liste tous les noms de workspaces distincts (unified_saves) pour le backoffice."""
+        if not self.client:
+            return []
+        try:
+            r = self.client.table("unified_saves").select("workspace").execute()
+            seen = set()
+            out = []
+            for row in (r.data or []):
+                w = (row.get("workspace") or "").strip() or "Non classé"
+                if w not in seen:
+                    seen.add(w)
+                    out.append(w)
+            return sorted(out)
+        except Exception as e:
+            logger.error("Erreur list_all_workspaces: %s", e)
+            return []

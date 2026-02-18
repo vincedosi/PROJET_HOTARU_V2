@@ -93,6 +93,18 @@ CREATE TABLE IF NOT EXISTS unified_saves (
 CREATE INDEX IF NOT EXISTS idx_unified_user ON unified_saves (LOWER(TRIM(user_email)));
 CREATE INDEX IF NOT EXISTS idx_unified_save_id ON unified_saves (save_id);
 
+-- =============================================================================
+-- 5. USER_WORKSPACE_ACCESS (droits par workspace — backoffice)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS user_workspace_access (
+  id BIGSERIAL PRIMARY KEY,
+  user_email TEXT NOT NULL,
+  workspace_name TEXT NOT NULL,
+  UNIQUE(user_email, workspace_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_workspace_user ON user_workspace_access (LOWER(TRIM(user_email)));
+
 -- Optionnel : RLS (Row Level Security) si tu veux isoler par user côté DB.
 -- Ici on utilise la clé service_role côté app donc pas obligatoire.
 -- ALTER TABLE users ENABLE ROW LEVEL SECURITY;

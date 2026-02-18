@@ -3,12 +3,13 @@
 
 import datetime
 
-VERSION = "3.0.82"
+VERSION = "3.0.83"
 BUILD_DATE = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-RELEASE_NOTE = "Supabase: sauvegarde unifiée activée (SAUVEGARDER fonctionne avec connexion Supabase)."
+RELEASE_NOTE = "Backoffice admin : onglet réservé aux admins — gestion utilisateurs, rôles et accès par workspace (Sheets + Supabase)."
 
 # Historique des notes de version (précédentes uniquement, plus récente en premier) — date/heure de release
 RELEASE_HISTORY = [
+    {"version": "3.0.82", "date": "2026-02-17", "note": "Supabase: sauvegarde unifiée activée (SAUVEGARDER fonctionne avec connexion Supabase)."},
     {"version": "3.0.81", "date": "2026-02-17", "note": "AUDIT SCRAPING OPTIMIZED: Reset complet + HTML fallback (sites sans JSON-LD) + Cleanup resources. sengager.fr fonctionne maintenant!"},
     {"version": "3.0.80", "date": "2026-02-17", "note": "OPTIMIZATIONS MASSIVES (Phase 1-3): Utilities centralisées (-100 LOC duplication) + Regex cache (+20% perf) + Exponential backoff Mistral + HTML truncation (-66% mémoire) + LinkExtractor unified."},
     {"version": "3.0.79", "date": "2026-02-17", "note": "PHASE 2: Regex compile cache (+20% clustering perf), Exponential backoff Mistral (1s, 2s, 4s, 8s), date validation optimized."},

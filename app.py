@@ -24,6 +24,7 @@ from core.session_keys import (
     SESSION_AUTHENTICATED,
     SESSION_USER_EMAIL,
     get_current_user_email,
+    is_admin,
 )
 
 # VERSION et BUILD_DATE : définis dans version.py (mis à jour à chaque push/PR)
@@ -110,6 +111,16 @@ def get_cached_database():
         st.session_state.db_instance = AuditDatabase()
         st.session_state.db_backend = backend
     return st.session_state.db_instance
+
+
+def get_cached_auth():
+    """Retourne AuthManager (Sheets ou Supabase) pour le backoffice."""
+    backend = st.session_state.get("auth_backend", "sheets")
+    if backend == "supabase":
+        from core.auth_supabase import AuthManager
+    else:
+        from core.auth import AuthManager
+    return AuthManager()
 
 
 # =============================================================================
@@ -327,12 +338,19 @@ def main():
     # ========== BARRE SAAS : Workspace + Sauvegarde (Valider) + Sauvegarder + Déconnexion ==========
     user_email = get_current_user_email() or ""
     db = get_cached_database()
-    unified_list = []
-    if getattr(db, "sheet_file", None) or getattr(db, "client", None):
-        unified_list = db.list_unified_saves(user_email, workspace=None) or []
+
     def _norm_ws(w):
         s = str(w or "").strip()
         return "Non classé" if not s or s in ("Non classé", "Uncategorized") else s
+
+    unified_list = []
+    if getattr(db, "sheet_file", None) or getattr(db, "client", None):
+        unified_list = db.list_unified_saves(user_email, workspace=None) or []
+        if not is_admin() and hasattr(db, "get_user_workspaces"):
+            allowed = db.get_user_workspaces(user_email)
+            if allowed:
+                allowed_set = {_norm_ws(x) for x in allowed}
+                unified_list = [u for u in unified_list if _norm_ws(u.get("workspace")) in allowed_set]
     ws_set = {_norm_ws(u.get("workspace")) for u in unified_list}
     ws_list = ["Nouveau"] if not ws_set else sorted(ws_set) + ["+ Créer Nouveau"]
     if st.session_state.get("audit_workspace_select") not in ws_list:
@@ -456,13 +474,12 @@ def main():
 
     st.markdown('<div class="hotaru-header-divider"></div>', unsafe_allow_html=True)
 
-    # NAVIGATION — 4 onglets
-    tab_home, tab_audit, tab_jsonld, tab_eco = st.tabs([
-        "Accueil",
-        "Audit",
-        "JSON-LD",
-        "Eco-Score",
-    ])
+    # NAVIGATION — 4 onglets + Backoffice (admin uniquement)
+    tab_names = ["Accueil", "Audit", "JSON-LD", "Eco-Score"]
+    if is_admin():
+        tab_names.append("Backoffice")
+    all_tabs = st.tabs(tab_names)
+    tab_home, tab_audit, tab_jsonld, tab_eco = all_tabs[0], all_tabs[1], all_tabs[2], all_tabs[3]
 
     with tab_home:
         render_home = get_render_home()
@@ -501,6 +518,11 @@ def main():
     with tab_eco:
         render_eco_tab = get_render_eco_tab()
         render_eco_tab()
+
+    if is_admin():
+        with all_tabs[4]:
+            from views.backoffice import render_backoffice_tab
+            render_backoffice_tab(get_cached_auth(), get_cached_database())
 
     # FOOTER (BUILD = date/heure du push, dans version.py)
     st.markdown(

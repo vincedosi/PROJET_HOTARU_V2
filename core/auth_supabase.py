@@ -122,3 +122,42 @@ class AuthManager:
         except Exception as e:
             logger.error("Erreur de migration Supabase : %s", e)
             raise
+
+    def list_users(self):
+        """Liste tous les utilisateurs (admin backoffice)."""
+        if not self.client:
+            return []
+        try:
+            r = self.client.table("users").select("id", "email", "role", "created_at", "last_login").execute()
+            return [
+                {"id": u.get("id"), "email": u.get("email", ""), "role": u.get("role", "user"),
+                 "created_at": u.get("created_at", ""), "last_login": u.get("last_login", "")}
+                for u in (r.data or [])
+            ]
+        except Exception as e:
+            logger.error("Erreur list_users Supabase : %s", e)
+            return []
+
+    def delete_user(self, email: str) -> bool:
+        """Supprime un utilisateur par email (admin backoffice)."""
+        if not self.client:
+            return False
+        try:
+            email_norm = (email or "").strip().lower()
+            self.client.table("users").delete().eq("email", email_norm).execute()
+            return True
+        except Exception as e:
+            logger.error("Erreur delete_user Supabase : %s", e)
+            raise
+
+    def update_user_role(self, email: str, role: str) -> bool:
+        """Met à jour le rôle d'un utilisateur (admin backoffice)."""
+        if not self.client:
+            return False
+        try:
+            email_norm = (email or "").strip().lower()
+            self.client.table("users").update({"role": (role or "user").strip()}).eq("email", email_norm).execute()
+            return True
+        except Exception as e:
+            logger.error("Erreur update_user_role Supabase : %s", e)
+            raise

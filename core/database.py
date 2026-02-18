@@ -707,3 +707,91 @@ class AuditDatabase:
         except Exception as e:
             logger.error("Erreur _append_unified_master_only: %s", e)
             return False
+
+    def _get_workspace_access_worksheet(self):
+        """Onglet user_workspace_access (user_email, workspace_name)."""
+        if not self.sheet_file:
+            return None
+        try:
+            ws = self.sheet_file.worksheet("user_workspace_access")
+            vals = ws.get_all_values()
+            if not vals or len(vals) == 0:
+                ws.append_row(["user_email", "workspace_name"])
+            return ws
+        except Exception:
+            try:
+                ws = self.sheet_file.add_worksheet(title="user_workspace_access", rows=500, cols=2)
+                ws.append_row(["user_email", "workspace_name"])
+                return ws
+            except Exception as e:
+                logger.error("Impossible de créer user_workspace_access: %s", e)
+                return None
+
+    def get_user_workspaces(self, user_email: str) -> list:
+        """Liste des workspaces auxquels l'utilisateur a accès (vide = tous)."""
+        ws = self._get_workspace_access_worksheet()
+        if not ws:
+            return []
+        try:
+            email_norm = (user_email or "").strip().lower()
+            rows = ws.get_all_values()
+            if len(rows) < 2:
+                return []
+            out = []
+            for row in rows[1:]:
+                if len(row) < 2:
+                    continue
+                if (row[0] or "").strip().lower() == email_norm:
+                    w = (row[1] or "").strip()
+                    if w and w not in out:
+                        out.append(w)
+            return out
+        except Exception as e:
+            logger.error("Erreur get_user_workspaces: %s", e)
+            return []
+
+    def set_user_workspaces(self, user_email: str, workspace_names: list) -> bool:
+        """Remplace la liste des workspaces accessibles pour un utilisateur."""
+        ws = self._get_workspace_access_worksheet()
+        if not ws:
+            return False
+        try:
+            email_norm = (user_email or "").strip().lower()
+            rows = ws.get_all_values()
+            new_rows = []
+            for row in rows[1:]:
+                if len(row) >= 2 and (row[0] or "").strip().lower() != email_norm:
+                    new_rows.append(row)
+            for wn in (workspace_names or []):
+                name = (wn or "").strip()
+                if name:
+                    new_rows.append([email_norm, name])
+            ws.clear()
+            ws.append_row(["user_email", "workspace_name"])
+            if new_rows:
+                ws.append_rows(new_rows, value_input_option="RAW")
+            return True
+        except Exception as e:
+            logger.error("Erreur set_user_workspaces: %s", e)
+            raise
+
+    def list_all_workspaces(self) -> list:
+        """Liste tous les noms de workspaces distincts (unified_saves) pour le backoffice."""
+        ws = self._get_unified_worksheet()
+        if not ws:
+            return []
+        try:
+            rows = ws.get_all_values()
+            if len(rows) < 2:
+                return []
+            seen = set()
+            out = []
+            for row in rows[1:]:
+                w = (row[2] if len(row) > 2 else "").strip() or "Non classé"
+                if w not in seen:
+                    seen.add(w)
+                    out.append(w)
+            return sorted(out)
+        except Exception as e:
+            logger.error("Erreur list_all_workspaces: %s", e)
+            return []

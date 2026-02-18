@@ -154,3 +154,48 @@ class AuthManager:
         except Exception as e:
             logger.error("Erreur de migration : %s", e)
             raise
+
+    def list_users(self):
+        """Liste tous les utilisateurs (admin backoffice)."""
+        if not self.users_sheet:
+            return []
+        try:
+            all_users = self.users_sheet.get_all_records()
+            return [
+                {"email": u.get("email", ""), "role": u.get("role", "user"),
+                 "created_at": u.get("created_at", ""), "last_login": u.get("last_login", "")}
+                for u in all_users
+            ]
+        except Exception as e:
+            logger.error("Erreur list_users GSheet : %s", e)
+            return []
+
+    def delete_user(self, email: str) -> bool:
+        """Supprime un utilisateur par email (admin backoffice)."""
+        if not self.users_sheet:
+            return False
+        try:
+            all_rows = self.users_sheet.get_all_values()
+            for i, row in enumerate(all_rows[1:], start=2):
+                if (row[0] or "").strip().lower() == (email or "").strip().lower():
+                    self.users_sheet.delete_rows(i)
+                    return True
+            return False
+        except Exception as e:
+            logger.error("Erreur delete_user GSheet : %s", e)
+            raise
+
+    def update_user_role(self, email: str, role: str) -> bool:
+        """Met à jour le rôle d'un utilisateur (admin backoffice)."""
+        if not self.users_sheet:
+            return False
+        try:
+            all_rows = self.users_sheet.get_all_values()
+            for i, row in enumerate(all_rows[1:], start=2):
+                if (row[0] or "").strip().lower() == (email or "").strip().lower():
+                    self.users_sheet.update_cell(i, 5, (role or "user").strip())  # colonne role = 5 (F)
+                    return True
+            return False
+        except Exception as e:
+            logger.error("Erreur update_user_role GSheet : %s", e)
+            raise
