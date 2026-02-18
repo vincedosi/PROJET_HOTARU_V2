@@ -146,7 +146,7 @@ def _render_workspaces_tab(db):
         st.info("Aucun workspace trouvé. Créez-en un ci-dessous.")
     else:
         for i, ws in enumerate(all_ws):
-            cols = st.columns([3, 2, 1])
+            cols = st.columns([3, 2, 1, 1])
             with cols[0]:
                 st.markdown(f"**{ws}**")
             with cols[1]:
@@ -174,6 +174,55 @@ def _render_workspaces_tab(db):
                     else:
                         logger.warning("rename_workspace non disponible sur %s", type(db).__name__)
                         st.error("Renommage non disponible pour ce backend.")
+            with cols[3]:
+                delete_key = f"bo_ws_delete_confirm_{i}"
+                if st.session_state.get(delete_key):
+                    pass
+                else:
+                    if st.button("Supprimer", key=f"bo_ws_delete_btn_{i}", type="secondary"):
+                        st.session_state[delete_key] = True
+                        st.rerun()
+
+        for i, ws in enumerate(all_ws):
+            delete_key = f"bo_ws_delete_confirm_{i}"
+            if st.session_state.get(delete_key):
+                saves_in = []
+                if hasattr(db, "list_workspace_saves_admin"):
+                    saves_in = db.list_workspace_saves_admin(ws)
+                st.warning(
+                    f"**Supprimer le workspace « {ws} » ?**\n\n"
+                    f"{'Ce workspace contient **' + str(len(saves_in)) + ' sauvegarde(s)** qui seront déplacées vers « Non classé ».' if saves_in else 'Ce workspace est vide.'}\n\n"
+                    f"Cette action est **irréversible**."
+                )
+                other_ws = [w for w in all_ws if w != ws]
+                move_target = "Non classé"
+                if saves_in and other_ws:
+                    move_target = st.selectbox(
+                        "Déplacer les sauvegardes vers :",
+                        ["Non classé"] + other_ws,
+                        key=f"bo_ws_delete_move_{i}",
+                    )
+                col_yes, col_no = st.columns(2)
+                with col_yes:
+                    if st.button("Confirmer la suppression", key=f"bo_ws_delete_yes_{i}", type="primary"):
+                        logger.info("Suppression workspace '%s' confirmée (move_to='%s') par %s", ws, move_target, get_current_user_email())
+                        if hasattr(db, "delete_workspace"):
+                            try:
+                                result = db.delete_workspace(ws, move_saves_to=move_target)
+                                logger.info("delete_workspace('%s') → %s", ws, result)
+                                st.toast(f"Workspace « {ws} » supprimé. {result.get('saves_moved', 0)} sauvegarde(s) déplacée(s).")
+                                st.session_state.pop(delete_key, None)
+                                st.rerun()
+                            except Exception as e:
+                                logger.error("delete_workspace('%s') EXCEPTION: %s", ws, e, exc_info=True)
+                                st.error(f"Erreur : {str(e)[:200]}")
+                        else:
+                            st.error("Suppression non disponible pour ce backend.")
+                with col_no:
+                    if st.button("Annuler", key=f"bo_ws_delete_no_{i}"):
+                        st.session_state.pop(delete_key, None)
+                        st.rerun()
+
         st.divider()
 
     # Créer un workspace

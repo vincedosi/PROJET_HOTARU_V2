@@ -643,6 +643,43 @@ class AuditDatabase:
             logger.error("rename_workspace('%s' → '%s') EXCEPTION: %s", old, new, e, exc_info=True)
             raise
 
+    def delete_workspace(self, name: str, move_saves_to: str = "Non classé") -> dict:
+        """Delete a workspace: move its saves to another workspace, remove registry entries.
+        Returns {"saves_moved": int, "deleted": bool}."""
+        logger.info("delete_workspace('%s', move_to='%s') — début", name, move_saves_to)
+        if not self.client:
+            raise ValueError("Connexion Supabase indisponible")
+        name = (name or "").strip()
+        if not name:
+            raise ValueError("Nom de workspace requis")
+        target = (move_saves_to or "").strip() or "Non classé"
+        saves_moved = 0
+        try:
+            r = self.client.table("unified_saves").select("save_id").eq("workspace", name).execute()
+            save_ids = [row.get("save_id") for row in (r.data or []) if row.get("save_id")]
+            if save_ids:
+                for sid in save_ids:
+                    self.client.table("unified_saves").update({"workspace": target}).eq("save_id", sid).execute()
+                    saves_moved += 1
+                logger.info("delete_workspace: %d sauvegarde(s) déplacée(s) vers '%s'", saves_moved, target)
+        except Exception as e:
+            logger.error("delete_workspace: erreur déplacement saves: %s", e, exc_info=True)
+
+        if self._has_workspace_access_table():
+            try:
+                self.client.table("user_workspace_access").delete().eq("workspace_name", name).execute()
+                logger.info("delete_workspace: entrées user_workspace_access supprimées pour '%s'", name)
+            except Exception as e:
+                logger.warning("delete_workspace: erreur suppression user_workspace_access: %s", e)
+
+        try:
+            self.client.table("unified_saves").delete().eq("workspace", name).eq("user_email", "__workspace_registry__").execute()
+        except Exception:
+            pass
+
+        logger.info("delete_workspace('%s') → OK (saves_moved=%d)", name, saves_moved)
+        return {"saves_moved": saves_moved, "deleted": True}
+
     def move_saves_to_workspace(self, save_ids: list, target_workspace: str) -> int:
         """Move saves to target workspace. Returns count of moved saves."""
         logger.info("move_saves_to_workspace(ids=%s, target='%s') — début", save_ids, target_workspace)

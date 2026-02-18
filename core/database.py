@@ -849,6 +849,33 @@ class AuditDatabase:
                 ok = False
         return ok
 
+    def delete_workspace(self, name: str, move_saves_to: str = "Non classé") -> dict:
+        """Delete a workspace: move saves, remove registry entries."""
+        name = (name or "").strip()
+        if not name:
+            raise ValueError("Nom de workspace requis")
+        target = (move_saves_to or "").strip() or "Non classé"
+        saves_moved = self.move_saves_to_workspace(
+            [s["save_id"] for s in self.list_workspace_saves_admin(name)],
+            target,
+        )
+        wa = self._get_workspace_access_worksheet()
+        if wa:
+            try:
+                rows = wa.get_all_values()
+                to_delete = []
+                for r_idx, row in enumerate(rows):
+                    if r_idx == 0:
+                        continue
+                    ws_col = (row[1] if len(row) > 1 else "").strip()
+                    if ws_col == name:
+                        to_delete.append(r_idx + 1)
+                for r in sorted(to_delete, reverse=True):
+                    wa.delete_rows(r)
+            except Exception as e:
+                logger.error("delete_workspace GSheet erreur: %s", e)
+        return {"saves_moved": saves_moved, "deleted": True}
+
     def move_saves_to_workspace(self, save_ids: list, target_workspace: str) -> int:
         """Move saves to target workspace. Returns count."""
         ws = self._get_unified_worksheet()

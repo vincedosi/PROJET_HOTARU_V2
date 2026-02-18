@@ -3,12 +3,13 @@
 
 import datetime
 
-VERSION = "3.2.3"
+VERSION = "3.2.4"
 BUILD_DATE = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-RELEASE_NOTE = "Choix du workspace : affiche tous les workspaces (y compris vides) via list_all_workspaces. Fallback creation workspace unified_saves."
+RELEASE_NOTE = "Suppression workspace avec confirmation (alerte, deplacement saves, irréversible). Backend Supabase + GSheet."
 
 # Historique des notes de version (précédentes uniquement, plus récente en premier) — date/heure de release
 RELEASE_HISTORY = [
+    {"version": "3.2.3", "date": "2026-02-18", "note": "Choix du workspace affiche tous les workspaces (meme vides) via list_all_workspaces."},
     {"version": "3.2.2", "date": "2026-02-18", "note": "Workspace creation fallback unified_saves si table user_workspace_access absente (PGRST205). Rename resilient, placeholders filtres."},
     {"version": "3.2.1", "date": "2026-02-18", "note": "Fix PGRST205 workspace, fix double-clic Lancer Analyse, Mistral timeout 90s + retry + logs detailles."},
     {"version": "3.2.0", "date": "2026-02-18", "note": "Audit complet : centralisation Mistral, fix deps circulaires, onglet Traitement unitaire, validation par tabs, error handling, pydantic, fix bugs scraping/DB."},
