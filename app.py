@@ -367,6 +367,13 @@ def main():
                 allowed_set = {_norm_ws(x) for x in allowed}
                 unified_list = [u for u in unified_list if _norm_ws(u.get("workspace")) in allowed_set]
     ws_set = {_norm_ws(u.get("workspace")) for u in unified_list}
+    if hasattr(db, "list_all_workspaces"):
+        try:
+            for w in db.list_all_workspaces():
+                ws_set.add(_norm_ws(w))
+        except Exception:
+            pass
+    ws_set.discard("Non classé")
     ws_list = ["Nouveau"] if not ws_set else sorted(ws_set) + ["+ Créer Nouveau"]
     if st.session_state.get("audit_workspace_select") not in ws_list:
         st.session_state["audit_workspace_select"] = ws_list[0]
