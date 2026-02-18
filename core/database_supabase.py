@@ -368,7 +368,10 @@ class AuditDatabase:
             return []
         try:
             email_norm = (user_email or "").strip().lower()
-            q = self.client.table("unified_saves").select("*").eq("user_email", email_norm)
+            if not email_norm:
+                return []
+            # Match exact (insensible à la casse) au cas où le DB a une autre casse
+            q = self.client.table("unified_saves").select("*").ilike("user_email", email_norm)
             if workspace and (workspace or "").strip():
                 q = q.eq("workspace", (workspace or "").strip())
             r = q.order("created_at", desc=True).execute()
@@ -398,7 +401,7 @@ class AuditDatabase:
             return None
         try:
             email_norm = (user_email or "").strip().lower()
-            r = self.client.table("unified_saves").select("*").eq("save_id", str(save_id).strip()).eq("user_email", email_norm).limit(1).execute()
+            r = self.client.table("unified_saves").select("*").eq("save_id", str(save_id).strip()).ilike("user_email", email_norm).limit(1).execute()
             if not r.data or len(r.data) == 0:
                 return None
             row = r.data[0]

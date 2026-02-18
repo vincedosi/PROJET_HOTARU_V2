@@ -19,7 +19,7 @@ import os
 import streamlit as st
 
 from version import BUILD_DATE, VERSION
-from core.runtime import init as core_init
+from core.runtime import init as core_init, get_secrets
 from core.session_keys import (
     SESSION_AUTHENTICATED,
     SESSION_USER_EMAIL,
@@ -338,6 +338,16 @@ def main():
     # ========== BARRE SAAS : Workspace + Sauvegarde (Valider) + Sauvegarder + Déconnexion ==========
     user_email = get_current_user_email() or ""
     db = get_cached_database()
+    # Sur Streamlit Cloud la session peut perdre auth_backend : si on a un user mais pas de client Supabase et pas de sheet, forcer Supabase si configuré
+    if user_email and not getattr(db, "client", None) and not getattr(db, "sheet_file", None):
+        supabase = get_secrets().get("supabase") or {}
+        if (supabase.get("supabase_url") or get_secrets().get("supabase_url")) and (supabase.get("supabase_service_role_key") or supabase.get("supabase_key") or get_secrets().get("supabase_service_role_key") or get_secrets().get("supabase_key")):
+            if "db_instance" in st.session_state:
+                del st.session_state["db_instance"]
+            if "db_backend" in st.session_state:
+                del st.session_state["db_backend"]
+            st.session_state["auth_backend"] = "supabase"
+            db = get_cached_database()
 
     def _norm_ws(w):
         s = str(w or "").strip()

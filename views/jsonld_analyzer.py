@@ -299,8 +299,6 @@ def render_jsonld_analyzer_tab():
                 default_idx = selected_cluster_idx + 1 if selected_cluster_idx >= 0 else 0
                 if default_idx >= len(options):
                     default_idx = 0
-                if default_idx < len(options):
-                    st.session_state["jsonld_cluster_select"] = options[default_idx]
 
                 # Layout : graphe à gauche, panneau latéral à droite
                 col_graph, col_panel = st.columns([2, 1])
