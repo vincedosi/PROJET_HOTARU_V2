@@ -62,7 +62,7 @@ def render_backoffice_tab(auth, db):
                             st.rerun()
                         except Exception as e:
                             st.error(str(e)[:200])
-            with st.expander(f"Accès workspaces — {email}", key=f"ws_{i}"):
+            with st.expander(f"Accès workspaces — {email}"):
                 all_ws = db.list_all_workspaces() or []
                 current = set(db.get_user_workspaces(email))
                 selected = []

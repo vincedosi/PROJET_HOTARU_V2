@@ -3,12 +3,13 @@
 
 import datetime
 
-VERSION = "3.0.83"
+VERSION = "3.0.84"
 BUILD_DATE = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-RELEASE_NOTE = "Backoffice admin : onglet réservé aux admins — gestion utilisateurs, rôles et accès par workspace (Sheets + Supabase)."
+RELEASE_NOTE = "Backoffice: correctif st.expander (sans key) pour compat Streamlit Cloud."
 
 # Historique des notes de version (précédentes uniquement, plus récente en premier) — date/heure de release
 RELEASE_HISTORY = [
+    {"version": "3.0.83", "date": "2026-02-17", "note": "Backoffice admin : onglet réservé aux admins — gestion utilisateurs, rôles et accès par workspace (Sheets + Supabase)."},
     {"version": "3.0.82", "date": "2026-02-17", "note": "Supabase: sauvegarde unifiée activée (SAUVEGARDER fonctionne avec connexion Supabase)."},
     {"version": "3.0.81", "date": "2026-02-17", "note": "AUDIT SCRAPING OPTIMIZED: Reset complet + HTML fallback (sites sans JSON-LD) + Cleanup resources. sengager.fr fonctionne maintenant!"},
     {"version": "3.0.80", "date": "2026-02-17", "note": "OPTIMIZATIONS MASSIVES (Phase 1-3): Utilities centralisées (-100 LOC duplication) + Regex cache (+20% perf) + Exponential backoff Mistral + HTML truncation (-66% mémoire) + LinkExtractor unified."},
