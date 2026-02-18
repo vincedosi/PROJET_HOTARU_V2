@@ -532,29 +532,32 @@ class AuditDatabase:
     def create_workspace(self, name: str) -> bool:
         """Register a new workspace (adds to user_workspace_access)."""
         if not self.client:
-            return False
+            raise ValueError("Connexion Supabase indisponible")
+        name = (name or "").strip()
+        if not name:
+            raise ValueError("Nom de workspace requis")
         try:
-            name = (name or "").strip()
-            if not name:
-                return False
-            self.client.table("user_workspace_access").upsert({
+            self.client.table("user_workspace_access").insert({
                 "user_email": "__workspace_registry__",
                 "workspace_name": name,
             }).execute()
             return True
         except Exception as e:
+            err_str = str(e)
+            if "duplicate" in err_str.lower() or "unique" in err_str.lower() or "23505" in err_str:
+                raise ValueError(f"Le workspace « {name} » existe déjà.")
             logger.error("Erreur create_workspace: %s", e)
-            return False
+            raise
 
     def rename_workspace(self, old_name: str, new_name: str) -> bool:
         """Rename workspace across all tables."""
         if not self.client:
-            return False
+            raise ValueError("Connexion Supabase indisponible")
+        old = (old_name or "").strip()
+        new = (new_name or "").strip()
+        if not old or not new or old == new:
+            raise ValueError("Ancien et nouveau nom requis (et différents)")
         try:
-            old = (old_name or "").strip()
-            new = (new_name or "").strip()
-            if not old or not new or old == new:
-                return False
             self.client.table("unified_saves").update({"workspace": new}).eq("workspace", old).execute()
             self.client.table("jsonld").update({"workspace": new}).eq("workspace", old).execute()
             self.client.table("audits").update({"workspace": new}).eq("workspace", old).execute()
@@ -562,7 +565,7 @@ class AuditDatabase:
             return True
         except Exception as e:
             logger.error("Erreur rename_workspace: %s", e)
-            return False
+            raise
 
     def move_saves_to_workspace(self, save_ids: list, target_workspace: str) -> int:
         """Move saves to target workspace. Returns count of moved saves."""

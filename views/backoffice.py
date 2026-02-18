@@ -165,11 +165,16 @@ def _render_workspaces_tab(db):
             else:
                 if hasattr(db, "create_workspace"):
                     try:
-                        db.create_workspace(name)
-                        st.toast(f"Workspace « {name} » créé.")
-                        st.rerun()
+                        ok = db.create_workspace(name)
+                        if ok:
+                            st.toast(f"Workspace « {name} » créé.")
+                            st.rerun()
+                        else:
+                            st.error("Échec de la création du workspace.")
+                    except ValueError as e:
+                        st.error(str(e))
                     except Exception as e:
-                        st.error(str(e)[:200])
+                        st.error(f"Erreur : {str(e)[:200]}")
                 else:
                     st.error("Création non disponible pour ce backend.")
 
