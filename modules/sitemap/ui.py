@@ -43,39 +43,45 @@ def render_sitemap_tab():
         unsafe_allow_html=True,
     )
 
-    sdb = _get_db()
-    if not sdb:
-        st.warning("Connexion Supabase requise pour le module Sitemap.")
-        return
-
-    workspace = _get_workspace()
-    user_email = get_current_user_email()
-
-    _render_project_selector(sdb, workspace, user_email)
-
-    project = st.session_state.get("sitemap_current_project")
-    if not project:
-        st.info("Sélectionnez ou créez un projet pour commencer.")
-        return
-
-    tab_methodo, tab_import, tab_config, tab_gen, tab_history = st.tabs([
+    tab_methodo, tab_project = st.tabs([
         "Méthodologie",
-        "Import",
-        "Configuration",
-        "Génération",
-        "Historique",
+        "Projet Sitemap",
     ])
 
     with tab_methodo:
         _render_methodology_section()
-    with tab_import:
-        _render_import_section(sdb, project)
-    with tab_config:
-        _render_config_section(sdb, project)
-    with tab_gen:
-        _render_generation_section(sdb, project, user_email)
-    with tab_history:
-        _render_history_section(sdb, project)
+
+    with tab_project:
+        sdb = _get_db()
+        if not sdb:
+            st.warning("Connexion Supabase requise pour le module Sitemap.")
+            return
+
+        workspace = _get_workspace()
+        user_email = get_current_user_email()
+
+        _render_project_selector(sdb, workspace, user_email)
+
+        project = st.session_state.get("sitemap_current_project")
+        if not project:
+            st.info("Sélectionnez ou créez un projet pour commencer.")
+            return
+
+        sub_import, sub_config, sub_gen, sub_history = st.tabs([
+            "Import",
+            "Configuration",
+            "Génération",
+            "Historique",
+        ])
+
+        with sub_import:
+            _render_import_section(sdb, project)
+        with sub_config:
+            _render_config_section(sdb, project)
+        with sub_gen:
+            _render_generation_section(sdb, project, user_email)
+        with sub_history:
+            _render_history_section(sdb, project)
 
 
 # =============================================================================
