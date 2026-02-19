@@ -511,6 +511,76 @@ class AuditDatabase:
         session["audit_cache_version"] = session.get("audit_cache_version", 0) + 1
         return save_id
 
+    def update_unified(self, save_id: str, user_email: str, workspace: str, site_url: str, nom_site: str,
+                       crawl_data: list, geo_data: dict = None, jsonld_data: list = None,
+                       master_json: str = None) -> bool:
+        """Overwrite an existing save (same save_id) instead of creating a new version."""
+        ws = self._get_unified_worksheet()
+        if not ws:
+            raise ValueError("Onglet unified_saves indisponible")
+        rows = ws.get_all_values()
+        target_row = None
+        for r_idx, row in enumerate(rows):
+            if r_idx == 0:
+                continue
+            if len(row) > 0 and row[0].strip() == str(save_id).strip():
+                target_row = r_idx + 1
+                break
+        if target_row is None:
+            raise ValueError(f"Sauvegarde {save_id} introuvable")
+        updated_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        final_ws = (workspace or "").strip() or "Non classé"
+        crawl_pages_count = len(crawl_data) if crawl_data else 0
+        geo_score_val = (geo_data or {}).get("geo_score")
+        geo_score_str = str(int(geo_score_val)) if geo_score_val is not None else ""
+        geo_clusters = (geo_data or {}).get("clusters") or {}
+        geo_clusters_count = len(geo_clusters) if isinstance(geo_clusters, dict) else 0
+        jsonld_models_count = len(jsonld_data) if jsonld_data else 0
+        stats = (geo_data or {}).get("stats") or {}
+        infra = (geo_data or {}).get("geo_infra") or {}
+        infra_names = list(infra.keys())[:4] if isinstance(infra, dict) else []
+        infra_vals = []
+        for i in range(4):
+            name = infra_names[i] if i < len(infra_names) else ""
+            if name and infra.get(name):
+                status = "Present" if infra[name].get("status") else "Absent"
+                infra_vals.append(f"{name}:{status}")
+            else:
+                infra_vals.append("")
+        crawl_chunks = self._json_to_cells(crawl_data)
+        geo_chunks = self._json_to_cells(geo_data)
+        jsonld_chunks = self._json_to_cells(jsonld_data)
+        master_str = (master_json or "").strip() if isinstance(master_json, str) else ""
+        master_chunks = []
+        if master_str:
+            for i in range(0, len(master_str), self._UNIFIED_MAX_CELL):
+                master_chunks.append(master_str[i : i + self._UNIFIED_MAX_CELL])
+        new_row = [
+            str(save_id).strip(), (user_email or "").strip(), final_ws,
+            (site_url or "")[:500], (nom_site or "Site")[:200], updated_at,
+            crawl_pages_count, geo_score_str, geo_clusters_count, jsonld_models_count,
+            stats.get("pages_crawled", ""), stats.get("links_discovered", ""),
+            stats.get("links_filtered", ""), stats.get("links_duplicate", ""), stats.get("errors", ""),
+            infra_vals[0] if len(infra_vals) > 0 else "",
+            infra_vals[1] if len(infra_vals) > 1 else "",
+            infra_vals[2] if len(infra_vals) > 2 else "",
+            infra_vals[3] if len(infra_vals) > 3 else "",
+            crawl_chunks[0] if len(crawl_chunks) > 0 else "",
+            crawl_chunks[1] if len(crawl_chunks) > 1 else "",
+            geo_chunks[0] if len(geo_chunks) > 0 else "",
+            geo_chunks[1] if len(geo_chunks) > 1 else "",
+            jsonld_chunks[0] if len(jsonld_chunks) > 0 else "",
+            jsonld_chunks[1] if len(jsonld_chunks) > 1 else "",
+            master_chunks[0] if len(master_chunks) > 0 else "",
+            master_chunks[1] if len(master_chunks) > 1 else "",
+        ]
+        cell_range = f"A{target_row}:AA{target_row}"
+        ws.update(cell_range, [new_row], value_input_option="RAW")
+        session = get_session()
+        session["audit_cache_version"] = session.get("audit_cache_version", 0) + 1
+        logger.info("update_unified save_id=%s row=%d → OK", save_id, target_row)
+        return True
+
     def list_unified_saves(self, user_email: str, workspace: str = None):
         """
         Liste les sauvegardes unifiées de l'utilisateur (SaaS).

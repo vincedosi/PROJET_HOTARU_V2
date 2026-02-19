@@ -365,6 +365,81 @@ class AuditDatabase:
             logger.error("Erreur save_unified Supabase: %s", e)
             raise
 
+    def update_unified(self, save_id: str, user_email: str, workspace: str, site_url: str, nom_site: str,
+                       crawl_data: list, geo_data: dict = None, jsonld_data: list = None,
+                       master_json: str = None) -> bool:
+        """Overwrite an existing save (same save_id) instead of creating a new version."""
+        if not self.client:
+            raise ValueError("Connexion Supabase indisponible")
+        try:
+            email_norm = (user_email or "").strip().lower()
+            r = self.client.table("unified_saves").select("id").eq("save_id", str(save_id).strip()).eq("user_email", email_norm).limit(1).execute()
+            if not r.data:
+                raise ValueError(f"Sauvegarde {save_id} introuvable pour {email_norm}")
+            row_db_id = r.data[0]["id"]
+            final_ws = (workspace or "").strip() or "Non classé"
+            updated_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+            crawl_pages_count = len(crawl_data) if crawl_data else 0
+            geo_score_val = (geo_data or {}).get("geo_score")
+            geo_score_str = str(int(geo_score_val)) if geo_score_val is not None else ""
+            geo_clusters = (geo_data or {}).get("clusters") or {}
+            geo_clusters_count = len(geo_clusters) if isinstance(geo_clusters, dict) else 0
+            jsonld_models_count = len(jsonld_data) if jsonld_data else 0
+            stats = (geo_data or {}).get("stats") or {}
+            infra = (geo_data or {}).get("geo_infra") or {}
+            infra_names = list(infra.keys())[:4] if isinstance(infra, dict) else []
+            infra_vals = []
+            for i in range(4):
+                name = infra_names[i] if i < len(infra_names) else ""
+                if name and infra.get(name):
+                    status = "Present" if infra[name].get("status") else "Absent"
+                    infra_vals.append("{}:{}".format(name, status))
+                else:
+                    infra_vals.append("")
+            crawl_chunks = self._json_to_cells(crawl_data)
+            geo_chunks = self._json_to_cells(geo_data)
+            jsonld_chunks = self._json_to_cells(jsonld_data)
+            master_str = (master_json or "").strip() if isinstance(master_json, str) else ""
+            master_chunks = []
+            if master_str:
+                for i in range(0, len(master_str), self._UNIFIED_MAX_CELL):
+                    master_chunks.append(master_str[i:i + self._UNIFIED_MAX_CELL])
+            payload = {
+                "workspace": final_ws,
+                "site_url": (site_url or "")[:500],
+                "nom_site": (nom_site or "Site")[:200],
+                "created_at": updated_at,
+                "crawl_pages_count": crawl_pages_count,
+                "geo_score": geo_score_str,
+                "geo_clusters_count": geo_clusters_count,
+                "jsonld_models_count": jsonld_models_count,
+                "geo_stats_pages_crawled": stats.get("pages_crawled", ""),
+                "geo_stats_links_discovered": stats.get("links_discovered", ""),
+                "geo_stats_links_filtered": stats.get("links_filtered", ""),
+                "geo_stats_links_duplicate": stats.get("links_duplicate", ""),
+                "geo_stats_errors": stats.get("errors", ""),
+                "geo_infra_1": infra_vals[0] if len(infra_vals) > 0 else "",
+                "geo_infra_2": infra_vals[1] if len(infra_vals) > 1 else "",
+                "geo_infra_3": infra_vals[2] if len(infra_vals) > 2 else "",
+                "geo_infra_4": infra_vals[3] if len(infra_vals) > 3 else "",
+                "crawl_data_1": crawl_chunks[0] if len(crawl_chunks) > 0 else "",
+                "crawl_data_2": crawl_chunks[1] if len(crawl_chunks) > 1 else "",
+                "geo_data_1": geo_chunks[0] if len(geo_chunks) > 0 else "",
+                "geo_data_2": geo_chunks[1] if len(geo_chunks) > 1 else "",
+                "jsonld_data_1": jsonld_chunks[0] if len(jsonld_chunks) > 0 else "",
+                "jsonld_data_2": jsonld_chunks[1] if len(jsonld_chunks) > 1 else "",
+                "master_json_1": master_chunks[0] if len(master_chunks) > 0 else "",
+                "master_json_2": master_chunks[1] if len(master_chunks) > 1 else "",
+            }
+            self.client.table("unified_saves").update(payload).eq("id", row_db_id).execute()
+            session = get_session()
+            session["audit_cache_version"] = session.get("audit_cache_version", 0) + 1
+            logger.info("update_unified save_id=%s → OK", save_id)
+            return True
+        except Exception as e:
+            logger.error("Erreur update_unified Supabase: %s", e)
+            raise
+
     def list_unified_saves(self, user_email: str, workspace: str = None):
         if not self.client:
             return []

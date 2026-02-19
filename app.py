@@ -150,19 +150,12 @@ def _light_page(p):
     return out
 
 
-def _do_global_save(session_state, db, user_email: str, workspace: str):
-    """Sauvegarde l'état courant (audit GEO et/ou JSON-LD) dans unified_saves (Sheets ou Supabase)."""
-    if not getattr(db, "sheet_file", None) and not getattr(db, "client", None):
-        st.error("Connexion indisponible (vérifiez Google Sheet ou Supabase).")
-        return
+def _collect_save_payload(session_state):
+    """Collect all data from session_state for saving. Returns dict with all save fields."""
     target_url = (session_state.get("target_url") or "").strip()
     results = session_state.get("results") or []
     clusters = session_state.get("clusters") or []
-    nom_site = (session_state.get("target_url") or "Site").replace("https://", "").replace("http://", "").split("/")[0][:200] or "Site"
-    if not target_url:
-        st.warning("Aucune URL de site en mémoire. Lancez un audit ou chargez une sauvegarde puis VALIDER.")
-        return
-    # Version allégée pour tenir dans les cellules GSheet (~90k) — sinon JSON tronqué au rechargement.
+    nom_site = (target_url or "Site").replace("https://", "").replace("http://", "").split("/")[0][:200] or "Site"
     max_saved = 180
     crawl_data = [_light_page(p) for p in (results[:max_saved] if results else [])]
     clusters_light = []
@@ -233,23 +226,66 @@ def _do_global_save(session_state, db, user_email: str, workspace: str):
             geo_data["master_data_serialized"] = _json.dumps(master_data_dict, ensure_ascii=False, default=str)
         except Exception:
             pass
+    return {
+        "target_url": target_url, "nom_site": nom_site,
+        "crawl_data": crawl_data, "geo_data": geo_data,
+        "jsonld_data": jsonld_data, "master_json": master_json,
+    }
+
+
+def _do_global_save(session_state, db, user_email: str, workspace: str):
+    """Crée une NOUVELLE sauvegarde (nouvelle version)."""
+    if not getattr(db, "sheet_file", None) and not getattr(db, "client", None):
+        st.error("Connexion indisponible (vérifiez Google Sheet ou Supabase).")
+        return
+    payload = _collect_save_payload(session_state)
+    if not payload["target_url"]:
+        st.warning("Aucune URL de site en mémoire. Lancez un audit ou chargez une sauvegarde puis VALIDER.")
+        return
     try:
-        db.save_unified(
-            user_email,
-            workspace or "Non classé",
-            target_url,
-            nom_site,
-            crawl_data=crawl_data,
-            geo_data=geo_data,
-            jsonld_data=jsonld_data,
-            master_json=master_json,
+        new_id = db.save_unified(
+            user_email, workspace or "Non classé",
+            payload["target_url"], payload["nom_site"],
+            crawl_data=payload["crawl_data"], geo_data=payload["geo_data"],
+            jsonld_data=payload["jsonld_data"], master_json=payload["master_json"],
         )
-        st.toast("Sauvegarde enregistrée dans unified_saves.")
+        session_state["global_loaded_save_id"] = new_id
+        st.toast("Nouvelle sauvegarde créée.")
         from core.runtime import get_session
         s = get_session()
         s["audit_cache_version"] = s.get("audit_cache_version", 0) + 1
     except Exception as e:
         st.error("Erreur lors de la sauvegarde: " + str(e)[:150])
+
+
+def _do_global_overwrite(session_state, db, user_email: str, workspace: str, save_id: str):
+    """Écrase la sauvegarde existante (même save_id, pas de nouvelle version)."""
+    if not getattr(db, "sheet_file", None) and not getattr(db, "client", None):
+        st.error("Connexion indisponible (vérifiez Google Sheet ou Supabase).")
+        return
+    if not save_id:
+        st.warning("Aucune sauvegarde chargée à écraser. Utilisez SAUVEGARDER pour créer une nouvelle version.")
+        return
+    if not hasattr(db, "update_unified"):
+        st.error("Ce backend ne supporte pas la mise à jour en place.")
+        return
+    payload = _collect_save_payload(session_state)
+    if not payload["target_url"]:
+        st.warning("Aucune URL de site en mémoire.")
+        return
+    try:
+        db.update_unified(
+            save_id, user_email, workspace or "Non classé",
+            payload["target_url"], payload["nom_site"],
+            crawl_data=payload["crawl_data"], geo_data=payload["geo_data"],
+            jsonld_data=payload["jsonld_data"], master_json=payload["master_json"],
+        )
+        st.toast("Sauvegarde écrasée (même version mise à jour).")
+        from core.runtime import get_session
+        s = get_session()
+        s["audit_cache_version"] = s.get("audit_cache_version", 0) + 1
+    except Exception as e:
+        st.error("Erreur lors de la mise à jour: " + str(e)[:150])
 
 
 # =============================================================================
@@ -417,7 +453,8 @@ def main():
             st.session_state.clear()
             st.rerun()
 
-    row2_col_save, row2_valider, row2_sauvegarder = st.columns([3, 1, 1])
+    has_loaded_save = bool(st.session_state.get("global_loaded_save_id"))
+    row2_col_save, row2_valider, row2_sauvegarder, row2_ecraser = st.columns([3, 1, 1, 1])
     with row2_col_save:
         st.selectbox(
             "Choix de la sauvegarde",
@@ -431,7 +468,15 @@ def main():
         valider_clicked = st.button("VALIDER", use_container_width=True, type="primary", key="header_valider")
     with row2_sauvegarder:
         st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
-        sauvegarder_clicked = st.button("SAUVEGARDER", use_container_width=True, key="header_sauvegarder")
+        sauvegarder_clicked = st.button("SAUVEGARDER", use_container_width=True, key="header_sauvegarder",
+                                         help="Crée une nouvelle version de sauvegarde.")
+    with row2_ecraser:
+        st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
+        ecraser_clicked = st.button(
+            "ÉCRASER", use_container_width=True, key="header_ecraser",
+            disabled=not has_loaded_save,
+            help="Remplace la sauvegarde chargée sans créer de nouvelle version." if has_loaded_save else "Chargez d'abord une sauvegarde avec VALIDER.",
+        )
 
     if valider_clicked:
         chosen_label = st.session_state.get("header_save_select", "— Aucune —")
@@ -531,6 +576,10 @@ def main():
 
     if sauvegarder_clicked:
         _do_global_save(st.session_state, db, user_email, selected_ws)
+
+    if ecraser_clicked:
+        loaded_id = st.session_state.get("global_loaded_save_id")
+        _do_global_overwrite(st.session_state, db, user_email, selected_ws, loaded_id)
 
     st.markdown('<div class="hotaru-header-divider"></div>', unsafe_allow_html=True)
 
