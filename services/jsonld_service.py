@@ -348,13 +348,22 @@ MISTRAL_TIMEOUT = 60
 MISTRAL_RETRY = 3
 
 
+def _strip_script_tags(text: str) -> str:
+    """Remove <script ...> and </script> wrapper tags from Mistral output."""
+    text = re.sub(r'<script[^>]*>', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'</script>', '', text, flags=re.IGNORECASE)
+    return text.strip()
+
+
 def _parse_mistral_json(content: str):
-    """Extrait un objet JSON de la réponse Mistral."""
+    """Extrait un objet JSON de la réponse Mistral (gère ```json, <script>, etc.)."""
     content = (content or "").strip()
-    m = re.search(r"```(?:json)?\s*([\s\S]*?)```", content)
+    content = _strip_script_tags(content)
+    m = re.search(r"```(?:json|jsonld|ld\+json)?\s*([\s\S]*?)```", content)
     if m:
+        inner = _strip_script_tags(m.group(1).strip())
         try:
-            return json.loads(m.group(1).strip())
+            return json.loads(inner)
         except json.JSONDecodeError:
             pass
     m = re.search(r"\{[\s\S]*\}", content)
@@ -626,7 +635,8 @@ LocalBusiness : name, description, address (PostalAddress complet), geo, telepho
 
 Organization : name, legalName, description, url, logo, address, contactPoint, sameAs, founder, foundingDate, numberOfEmployees, brand, slogan
 
-**Réponds UNIQUEMENT avec le JSON-LD valide, sans texte avant ou après, sans balises markdown.**
+**Réponds UNIQUEMENT avec le JSON-LD valide (objet JSON commençant par {{ et finissant par }}).
+INTERDIT : pas de balises markdown (```), pas de balises HTML (<script>), pas de texte avant ou après.**
 """
 
     user_prompt = f"""Génère un JSON-LD Schema.org de type `{schema_type}` pour les pages suivantes.
@@ -673,7 +683,8 @@ Extrait HTML (5000 premiers chars) :
 5. Respecte à 100% la spec Schema.org
 6. Optimise pour la citation par les LLMs (ChatGPT, Claude, Gemini)
 
-Réponds UNIQUEMENT avec le JSON-LD valide, sans aucun texte, sans balises markdown, sans commentaires.
+Réponds UNIQUEMENT avec le JSON-LD valide (objet JSON pur commençant par {{ et finissant par }}).
+INTERDIT : pas de balises markdown (```), pas de <script>, pas de texte explicatif.
 """
 
     if prompt_output is not None:

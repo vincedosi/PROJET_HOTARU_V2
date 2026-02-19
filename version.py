@@ -3,12 +3,13 @@
 
 import datetime
 
-VERSION = "3.2.6"
+VERSION = "3.2.7"
 BUILD_DATE = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-RELEASE_NOTE = "Master JSON-LD : constantes Master integrees a la sauvegarde (nom, SIREN, adresse). Plus de template vide."
+RELEASE_NOTE = "Fix parse Mistral JSON-LD : nettoyage balises script et markdown. Prompt renforce pour JSON pur."
 
 # Historique des notes de version (précédentes uniquement, plus récente en premier) — date/heure de release
 RELEASE_HISTORY = [
+    {"version": "3.2.6", "date": "2026-02-18", "note": "Master JSON-LD : constantes Master integrees a la sauvegarde. Plus de template vide."},
     {"version": "3.2.5", "date": "2026-02-18", "note": "Sauvegarde complete : master_data, jsonld_master, validations, optimized_jsonld tous restaures au chargement."},
     {"version": "3.2.4", "date": "2026-02-18", "note": "Suppression workspace avec confirmation (alerte, deplacement saves, irréversible). Backend Supabase + GSheet."},
     {"version": "3.2.3", "date": "2026-02-18", "note": "Choix du workspace affiche tous les workspaces (meme vides) via list_all_workspaces."},
