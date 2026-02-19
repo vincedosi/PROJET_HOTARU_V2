@@ -483,10 +483,12 @@ def _render_config_section(sdb, project: dict):
     with tab_seo:
         st.markdown("**Paramètres SEO**")
         st.caption("Le sitemap SEO inclut toutes les pages actives, triées par priorité SEO.")
+        available_types = sorted({p.get("content_type", "page") for p in pages})
+        default_exclude = [t for t in ["legal", "cgv", "mentions"] if t in available_types]
         exclude_seo = st.multiselect(
             "Exclure les types",
-            sorted({p.get("content_type", "page") for p in pages}),
-            default=["legal"],
+            available_types,
+            default=default_exclude,
             key="sitemap_seo_exclude",
         )
         if st.button("Prévisualiser SEO", key="sitemap_preview_seo"):
