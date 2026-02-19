@@ -223,7 +223,7 @@ def _do_global_save(session_state, db, user_email: str, workspace: str):
             })
         if models_data:
             jsonld_data = models_data
-    master_json = (session_state.get("jsonld_master") or "").strip() or None
+    master_json = (session_state.get("jsonld_master_filled") or session_state.get("jsonld_master") or "").strip() or None
     master_data_obj = session_state.get("master_data")
     if master_data_obj is not None:
         try:

@@ -804,7 +804,7 @@ def _render_master_data_content():
         unsafe_allow_html=True,
     )
 
-    st.caption("Ce qui est sauvegardé est uniquement le **template** (structure vide). L’option « Remplir les champs » est un aperçu visuel uniquement.")
+    st.caption("Le JSON-LD sauvegardé inclut les **constantes Master** (nom, SIREN, adresse...). Activez « Remplir avec les constantes » pour intégrer vos données permanentes.")
     col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
 
     with col_btn2:
@@ -818,11 +818,11 @@ def _render_master_data_content():
             if not mistral_key:
                 st.error("Clé API Mistral manquante (st.secrets['mistral']['api_key']).")
             else:
-                with st.spinner("Génération du template (structure vide)..."):
+                with st.spinner("Génération du template JSON-LD..."):
                     template_str, err = MasterDataHandler.generate_organization_template_mistral(mistral_key)
                     if template_str:
                         st.session_state.jsonld_master = template_str
-                        st.success("Template JSON-LD généré (champs vides). Ce template est ce qui sera sauvegardé.")
+                        st.success("Template JSON-LD généré. Cochez « Remplir avec les constantes » pour y intégrer vos données Master.")
                         st.rerun()
                     else:
                         st.error(f"Erreur : {err or 'Inconnue'}")
@@ -830,7 +830,7 @@ def _render_master_data_content():
     if "jsonld_master" in st.session_state and st.session_state.jsonld_master:
         st.markdown("<br>", unsafe_allow_html=True)
         fill_preview = st.checkbox(
-            "Remplir les champs (aperçu uniquement — non sauvegardé)",
+            "Remplir avec les constantes Master (intégré à la sauvegarde)",
             value=False,
             key="master_fill_preview",
         )
@@ -843,10 +843,12 @@ def _render_master_data_content():
                 filled = TemplateBuilder().generate_jsonld(
                     master_data=master, dynamic_data=None, page_data=None
                 )
-                st.caption("Aperçu avec les données Master (non enregistré). Téléchargement / sauvegarde = template vide.")
+                st.session_state["jsonld_master_filled"] = filled
+                st.caption("JSON-LD avec constantes Master intégrées. C’est cette version qui est sauvegardée et téléchargée.")
                 st.code(filled, language="json", line_numbers=True)
             else:
-                st.caption("Template (structure vide) — ce qui est enregistré et téléchargé.")
+                st.session_state.pop("jsonld_master_filled", None)
+                st.caption("Template (structure sans constantes). Cochez ci-dessus pour remplir les champs permanents.")
                 st.code(
                     st.session_state.jsonld_master, language="json", line_numbers=True
                 )
@@ -854,7 +856,7 @@ def _render_master_data_content():
         with col2:
             st.download_button(
                 label="TELECHARGER",
-                data=st.session_state.jsonld_master,
+                data=st.session_state.get("jsonld_master_filled", st.session_state.jsonld_master),
                 file_name=f"master_template_{(master.brand_name or 'org').lower().replace(' ', '_')}.json",
                 mime="application/ld+json",
                 use_container_width=True,
@@ -863,7 +865,7 @@ def _render_master_data_content():
             st.metric("LIGNES", len(st.session_state.jsonld_master.split("\n")))
             st.metric("TAILLE", f"{len(st.session_state.jsonld_master)} chars")
 
-            st.caption("Sauvegarde : **SAUVEGARDER** en haut enregistre le **template** (pas l’aperçu rempli).")
+            st.caption("Sauvegarde : **SAUVEGARDER** en haut enregistre le JSON-LD affiché (avec ou sans constantes).")
             if st.button("NOUVEAU", use_container_width=True, key="reset_btn"):
                 st.session_state.master_data = None
                 st.session_state.pop("jsonld_master", None)
