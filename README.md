@@ -2,7 +2,7 @@
 
 **SaaS d'audit et d'optimisation pour le web lisible par l'IA**
 
-HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority Index (AI-Native), Master Data (JSON-LD entité), **Analyse JSON-LD** (clustering DOM, graphe interactif, génération JSON-LD optimisé via Mistral AI, **fusion multi-clusters** à choix multiples), **Eco-Score** (AIO Impact Calculator). Multi-utilisateurs avec **isolation par `user_email` et workspace**. **Deux backends au choix à la connexion :** Google Sheets ou **Supabase** (PostgreSQL). **Backoffice admin** (visible aux rôles admin) : gestion utilisateurs, rôles et accès par workspace.
+HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority Index (AI-Native), Master Data (JSON-LD entité), **Analyse JSON-LD** (clustering DOM, graphe interactif, génération JSON-LD optimisé via Mistral AI, **fusion multi-clusters** à choix multiples), **Sitemap Dynamique** (génération sitemaps SEO et GEO optimisés), **Eco-Score** (AIO Impact Calculator). Multi-utilisateurs avec **isolation par `user_email` et workspace**. **Deux backends au choix à la connexion :** Google Sheets ou **Supabase** (PostgreSQL). **Backoffice admin** (visible aux rôles admin) : gestion utilisateurs, rôles et accès par workspace.
 
 **Interface :** Français uniquement.
 
@@ -12,6 +12,7 @@ HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority I
 
 - **Audit** : **Audit GEO** (structure du site, graphe interactif, patterns d'URL, renommage IA Mistral ; **chargement et sauvegarde via la barre en haut** puis nouvelle analyse), **Authority Score** (AI Authority Index — 5 piliers), **Scraping** (diagnostic URL + logs JSON-LD / techno / Selenium).
 - **JSON-LD** : **Master** (données d'entité Wikidata + Mistral, JSON-LD Organization, audit & gap), **Analyse JSON-LD** (clustering DOM, nommage Mistral, graphe, **traitement unitaire** (sélection nœud + optimisation Mistral + comparaison actuel/optimisé), **traitement en masse** (génération batch + validation par onglets), **comparaison visuelle gris/vert/rouge**, affichage du prompt Mistral, **fusion manuelle à choix multiples** ; chargement et sauvegarde **uniquement via la barre en haut**).
+- **Sitemap Dynamique** : Génération de sitemaps **SEO** et **GEO** optimisés. Import CSV ou depuis données crawlées. Scoring par type de contenu, qualité JSON-LD, trafic, backlinks, fraîcheur. Prévisualisation, téléchargement XML, sauvegarde en base, historique des générations. Architecture API-ready (engine/strategies/xml_generator indépendants de Streamlit).
 - **Eco-Score** : **AIO Efficiency** — calculatrice d'impact carbone (tokens, kWh, gCO₂), paramètres site, Big Numbers, graphique Plotly 12 mois.
 - **Design :** Fond blanc, noir + rouge `rgb(168, 27, 35)`. Titres `XX / TITRE`, rouge souligné.
 
@@ -34,7 +35,7 @@ L'app affiche **V {VERSION} // {BUILD_DATE}** dans le header et le footer.
 
 ```
 PROJET_HOTARU_V2/
-├── app.py                      # Point d'entrée : auth (Sheets ou Supabase au choix), barre SaaS, 4 onglets + Backoffice (admin), footer
+├── app.py                      # Point d'entrée : auth (Sheets ou Supabase au choix), barre SaaS, 5 onglets + Backoffice (admin), footer
 ├── version.py                  # VERSION + BUILD_DATE (à mettre à jour à chaque push/PR)
 ├── packages.txt                # Streamlit Cloud : chromium, chromium-driver
 ├── requirements.txt
@@ -72,13 +73,20 @@ PROJET_HOTARU_V2/
 │   ├── off_page.py
 │   ├── leaf.py
 │   └── methodologie_blocks.py
-├── modules/                    # Lazy imports vers views/ + logique métier (geo_scoring, authority_score, eco_impact)
+├── modules/                    # Lazy imports vers views/ + logique métier
 │   ├── home.py
 │   ├── audit/                  # render_audit_geo, etc. (importe views)
 │   ├── jsonld/                 # render_master_tab, render_jsonld_analyzer_tab
+│   ├── sitemap/                # Module Sitemap Dynamique (SEO + GEO)
+│   │   ├── strategies.py       # Scoring SEO/GEO, citabilité, changefreq (pur Python)
+│   │   ├── xml_generator.py    # Génération XML sitemap (pur Python)
+│   │   ├── engine.py           # SitemapEngine orchestrateur (pur Python)
+│   │   ├── database.py         # SitemapDatabase CRUD Supabase
+│   │   └── ui.py               # Interface Streamlit 5 sections
 │   └── eco/
 ├── docs/
 │   ├── supabase_schema.sql     # Schéma Supabase (users, audits, jsonld, unified_saves, user_workspace_access)
+│   ├── supabase_sitemap.sql    # Schéma Sitemap (sitemap_projects, sitemap_pages, sitemap_generations)
 │   ├── supabase_insert_first_user.sql   # Premier utilisateur (upsert)
 │   ├── supabase_migration_workspace_access.sql
 │   └── SUPABASE_SECRETS.md     # Config secrets Streamlit pour Supabase
@@ -116,7 +124,7 @@ Si l’erreur « Executable doesn't exist at …/ms-playwright/… » s’affich
 
 - **Login :** Sur la page de connexion, choix **Google Sheets** ou **Supabase**. Puis email + mot de passe. Auth via `core.auth.AuthManager` (Sheets) ou `core.auth_supabase.AuthManager` (Supabase). Hash stocké en base (onglet `users` ou table `users`).
 - **Session :** `core.session_keys` — `get_current_user_email()`, `is_authenticated()`, **`is_admin()`**. Stockage via `core.runtime.get_session()`. Le backend choisi à la connexion (`auth_backend` = `sheets` ou `supabase`) est conservé pour toute la session (sauvegardes et chargement).
-- **Barre SaaS (en haut) :** Ligne 1 = **Choix du workspace** + DÉCONNEXION. Ligne 2 = **Choix de la sauvegarde** + **VALIDER** (charge la sauvegarde dans tout le dashboard) + **SAUVEGARDER** (enregistre dans unified_saves — Sheets ou Supabase selon le backend).
+- **Barre SaaS (en haut) :** Ligne 1 = **Choix du workspace** + DÉCONNEXION. Ligne 2 = **Choix de la sauvegarde** + **VALIDER** (charge la sauvegarde) + **SAUVEGARDER** (nouvelle version) + **ÉCRASER** (remplace la sauvegarde chargée sans nouvelle version) ; stockage dans unified_saves — Sheets ou Supabase selon le backend).
 - **Isolation :**
   - `AuditDatabase` (Sheets ou Supabase selon session) : `list_unified_saves(user_email, workspace)`, `load_unified(save_id, user_email)`, `save_unified(...)`.
   - Si **droits workspace** sont définis en backoffice pour un user, il ne voit que les sauvegardes des workspaces auxquels il a accès.
@@ -146,7 +154,7 @@ Si l’erreur « Executable doesn't exist at …/ms-playwright/… » s’affich
 ## Navigation et flux UX
 
 - **Header :** Logo, version, **barre SaaS** (2 lignes), déconnexion.
-- **Onglets principaux :** Accueil | Audit | JSON-LD | Eco-Score. **Backoffice** (visible uniquement aux rôles admin) : gestion utilisateurs, rôles et accès par workspace.
+- **Onglets principaux :** Accueil | Audit | JSON-LD | **Sitemap** | Eco-Score. **Backoffice** (visible uniquement aux rôles admin) : gestion utilisateurs, rôles et accès par workspace.
 - **Audit GEO :** En tête d’onglet Audit Site → 01 / NOUVELLE ANALYSE (URLs, limite, Selenium).
 - **Analyse JSON-LD :** Chargement/sauvegarde via la barre en haut. Onglet Nouvelle analyse ; résultats : 02 Génération, 03 Export, 05 Télécharger.
 - **Master :** Chargement/sauvegarde via la barre en haut (VALIDER charge tout ; SAUVEGARDER enregistre tout).
@@ -180,7 +188,7 @@ Si l’erreur « Executable doesn't exist at …/ms-playwright/… » s’affich
 
 ### Supabase (PostgreSQL)
 
-Tables : `users`, `audits`, `jsonld`, `unified_saves`, **`user_workspace_access`**. Schéma complet : **`docs/supabase_schema.sql`**. Premier utilisateur : **`docs/supabase_insert_first_user.sql`**. Migration droits seuls : **`docs/supabase_migration_workspace_access.sql`**. Configuration des secrets : **`docs/SUPABASE_SECRETS.md`**.
+Tables : `users`, `audits`, `jsonld`, `unified_saves`, `user_workspace_access`, **`sitemap_projects`**, **`sitemap_pages`**, **`sitemap_generations`**. Schéma complet : **`docs/supabase_schema.sql`**. Premier utilisateur : **`docs/supabase_insert_first_user.sql`**. Migration droits seuls : **`docs/supabase_migration_workspace_access.sql`**. Configuration des secrets : **`docs/SUPABASE_SECRETS.md`**.
 
 ### Comportement commun
 
@@ -274,6 +282,12 @@ SERPAPI_KEY = "..."  # Optionnel, Audit Externe
 - [x] Onglet Traitement unitaire (sélection nœud + optimisation Mistral + comparaison)
 - [x] Validation en masse par onglets (plus d'accordéons)
 - [x] Audit code complet : centralisation Mistral (`core/mistral_utils.py`), fix dépendances circulaires, lazy imports modules, pydantic dans requirements, fix bare except, fix `soup.title.string`, error handling restauration JSON-LD
+- [x] Module Sitemap Dynamique (SEO + GEO, import CSV, scoring, preview, historique, XML)
+- [x] Bouton ÉCRASER (mise à jour sauvegarde existante sans nouvelle version)
+- [x] Master Data et JSON-LD Master intégrés dans les sauvegardes et restaurés au chargement
+- [x] Suppression workspace avec confirmation et déplacement des sauvegardes
+- [x] Fallback création workspace (unified_saves) si table user_workspace_access absente
+- [x] Fix parse Mistral JSON-LD (nettoyage balises script/markdown)
 - [ ] Onglet Paramètres (profil, préférences)
 - [ ] Vault : clés API chiffrées par utilisateur
 - [ ] API REST étendue (user_email/workspace en entrée, routes analyse/crawl)

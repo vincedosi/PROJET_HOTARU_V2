@@ -3,9 +3,9 @@
 
 import datetime
 
-VERSION = "3.4.0"
+VERSION = "3.4.1"
 BUILD_DATE = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-RELEASE_NOTE = "Module Sitemap Dynamique : generation sitemaps SEO et GEO, import CSV, scoring, preview, historique, download XML. Architecture API-ready."
+RELEASE_NOTE = "README et version.py a jour : Sitemap Dynamique, bouton ECRASER, Master save, suppression workspace, fix Mistral parse."
 
 # Historique des notes de version (précédentes uniquement, plus récente en premier) — date/heure de release
 RELEASE_HISTORY = [
