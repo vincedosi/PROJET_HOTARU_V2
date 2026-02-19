@@ -133,6 +133,26 @@ _LIGHT_PAGE_KEYS = (
 )
 
 
+def _light_jsonld(raw):
+    """Résumé léger du JSON-LD : on garde @type + quelques champs clés, pas le contenu complet."""
+    if not raw:
+        return None
+    items = raw if isinstance(raw, list) else [raw]
+    out = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        summary = {"@type": item.get("@type", "Unknown")}
+        for k in ("name", "url", "@id"):
+            if k in item:
+                v = item[k]
+                if isinstance(v, str) and len(v) > 200:
+                    v = v[:200]
+                summary[k] = v
+        out.append(summary)
+    return out if out else None
+
+
 def _light_page(p):
     """Une page allégée pour la sauvegarde (graphe + journal + score partiel)."""
     if not isinstance(p, dict):
@@ -147,6 +167,9 @@ def _light_page(p):
         if k == "title" and isinstance(v, str) and len(v) > 300:
             v = v[:300]
         out[k] = v
+    jld = p.get("json_ld")
+    if jld:
+        out["json_ld"] = _light_jsonld(jld)
     return out
 
 

@@ -297,6 +297,75 @@ def _render_workspaces_tab(db):
                     logger.warning("move_saves_to_workspace non disponible sur %s", type(db).__name__)
                     st.error("Déplacement non disponible pour ce backend.")
 
+    # Supprimer des sauvegardes
+    st.markdown("---")
+    st.markdown("### Supprimer des sauvegardes")
+    del_ws_list = db.list_all_workspaces() or []
+    if not del_ws_list:
+        st.info("Aucun workspace.")
+    else:
+        del_ws = st.selectbox("Workspace", del_ws_list, key="bo_del_save_ws")
+        del_saves = []
+        if hasattr(db, "list_workspace_saves_admin"):
+            del_saves = db.list_workspace_saves_admin(del_ws) or []
+
+        if not del_saves:
+            st.info(f"Aucune sauvegarde dans « {del_ws} ».")
+        else:
+            del_labels = [
+                f"{s.get('nom_site', 'Save')} — {s.get('user_email', '?')} ({s.get('created_at', '')[:16]})"
+                for s in del_saves
+            ]
+            del_selected = st.multiselect(
+                f"Sauvegardes à supprimer ({len(del_saves)} au total)",
+                del_labels, key="bo_del_save_sel",
+            )
+
+            if del_selected:
+                del_confirm_key = "bo_del_save_confirm"
+                if st.session_state.get(del_confirm_key):
+                    st.error(
+                        f"**Confirmer la suppression de {len(del_selected)} sauvegarde(s) ?**\n\n"
+                        f"Cette action est **irréversible**. Les données seront définitivement effacées de la base."
+                    )
+                    col_yes, col_no = st.columns(2)
+                    with col_yes:
+                        if st.button("Oui, supprimer définitivement", key="bo_del_save_yes", type="primary"):
+                            ids = [del_saves[del_labels.index(lbl)].get("save_id") for lbl in del_selected]
+                            logger.info("Suppression saves %s (par %s)", ids, get_current_user_email())
+                            if hasattr(db, "delete_saves_bulk"):
+                                try:
+                                    count = db.delete_saves_bulk(ids)
+                                    logger.info("delete_saves_bulk → %d supprimée(s)", count)
+                                    st.toast(f"{count} sauvegarde(s) supprimée(s) définitivement.")
+                                    st.session_state.pop(del_confirm_key, None)
+                                    st.rerun()
+                                except Exception as e:
+                                    logger.error("delete_saves_bulk EXCEPTION: %s", e, exc_info=True)
+                                    st.error(f"Erreur : {str(e)[:200]}")
+                            elif hasattr(db, "delete_save"):
+                                try:
+                                    count = 0
+                                    for sid in ids:
+                                        if db.delete_save(sid):
+                                            count += 1
+                                    st.toast(f"{count} sauvegarde(s) supprimée(s).")
+                                    st.session_state.pop(del_confirm_key, None)
+                                    st.rerun()
+                                except Exception as e:
+                                    logger.error("delete_save EXCEPTION: %s", e, exc_info=True)
+                                    st.error(f"Erreur : {str(e)[:200]}")
+                            else:
+                                st.error("Suppression non disponible pour ce backend.")
+                    with col_no:
+                        if st.button("Annuler", key="bo_del_save_no"):
+                            st.session_state.pop(del_confirm_key, None)
+                            st.rerun()
+                else:
+                    if st.button(f"Supprimer {len(del_selected)} sauvegarde(s)", type="secondary", key="bo_del_save_btn"):
+                        st.session_state[del_confirm_key] = True
+                        st.rerun()
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 3 — Accès par workspace

@@ -946,6 +946,41 @@ class AuditDatabase:
                 logger.error("delete_workspace GSheet erreur: %s", e)
         return {"saves_moved": saves_moved, "deleted": True}
 
+    def delete_save(self, save_id: str) -> bool:
+        """Delete a single save by save_id from unified worksheet. Returns True on success."""
+        logger.info("delete_save('%s') GSheet — début", save_id)
+        ws = self._get_unified_worksheet()
+        if not ws:
+            return False
+        try:
+            sid = str(save_id).strip()
+            if not sid:
+                return False
+            rows = ws.get_all_values()
+            for r_idx in range(len(rows) - 1, 0, -1):
+                row_sid = (rows[r_idx][0] if rows[r_idx] else "").strip()
+                if row_sid == sid:
+                    ws.delete_rows(r_idx + 1)
+                    logger.info("delete_save('%s') GSheet → row %d supprimée", sid, r_idx + 1)
+                    return True
+            logger.warning("delete_save('%s') GSheet → save_id non trouvé", sid)
+            return False
+        except Exception as e:
+            logger.error("delete_save('%s') GSheet EXCEPTION: %s", save_id, e, exc_info=True)
+            raise
+
+    def delete_saves_bulk(self, save_ids: list) -> int:
+        """Delete multiple saves. Returns count of deleted saves."""
+        logger.info("delete_saves_bulk(%d ids) GSheet — début", len(save_ids or []))
+        deleted = 0
+        for sid in (save_ids or []):
+            try:
+                if self.delete_save(sid):
+                    deleted += 1
+            except Exception as e:
+                logger.error("delete_saves_bulk GSheet: échec pour '%s': %s", sid, e)
+        return deleted
+
     def move_saves_to_workspace(self, save_ids: list, target_workspace: str) -> int:
         """Move saves to target workspace. Returns count."""
         ws = self._get_unified_worksheet()

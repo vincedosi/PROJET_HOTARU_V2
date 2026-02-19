@@ -775,6 +775,37 @@ class AuditDatabase:
             logger.error("move_saves_to_workspace EXCEPTION: %s", e, exc_info=True)
             return 0
 
+    def delete_save(self, save_id: str) -> bool:
+        """Delete a single save by save_id from unified_saves. Returns True on success."""
+        logger.info("delete_save('%s') — début", save_id)
+        if not self.client:
+            logger.error("delete_save: client Supabase est None")
+            return False
+        try:
+            sid = str(save_id).strip()
+            if not sid:
+                logger.warning("delete_save: save_id vide")
+                return False
+            self.client.table("unified_saves").delete().eq("save_id", sid).execute()
+            logger.info("delete_save('%s') → OK", sid)
+            return True
+        except Exception as e:
+            logger.error("delete_save('%s') EXCEPTION: %s", save_id, e, exc_info=True)
+            raise
+
+    def delete_saves_bulk(self, save_ids: list) -> int:
+        """Delete multiple saves. Returns count of deleted saves."""
+        logger.info("delete_saves_bulk(%d ids) — début", len(save_ids or []))
+        deleted = 0
+        for sid in (save_ids or []):
+            try:
+                if self.delete_save(sid):
+                    deleted += 1
+            except Exception as e:
+                logger.error("delete_saves_bulk: échec pour '%s': %s", sid, e)
+        logger.info("delete_saves_bulk → %d supprimée(s)", deleted)
+        return deleted
+
     def list_workspace_saves_admin(self, workspace: str) -> list:
         """List all saves in a workspace (admin, no user filter). Excludes fallback placeholders."""
         logger.debug("list_workspace_saves_admin('%s')...", workspace)

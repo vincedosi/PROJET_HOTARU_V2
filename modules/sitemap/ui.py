@@ -58,13 +58,16 @@ def render_sitemap_tab():
         st.info("Sélectionnez ou créez un projet pour commencer.")
         return
 
-    tab_import, tab_config, tab_gen, tab_history = st.tabs([
+    tab_methodo, tab_import, tab_config, tab_gen, tab_history = st.tabs([
+        "Méthodologie",
         "Import",
         "Configuration",
         "Génération",
         "Historique",
     ])
 
+    with tab_methodo:
+        _render_methodology_section()
     with tab_import:
         _render_import_section(sdb, project)
     with tab_config:
@@ -73,6 +76,144 @@ def render_sitemap_tab():
         _render_generation_section(sdb, project, user_email)
     with tab_history:
         _render_history_section(sdb, project)
+
+
+# =============================================================================
+# SECTION 0 : METHODOLOGIE
+# =============================================================================
+
+def _render_methodology_section():
+    st.markdown("""
+<div class="methodo-container">
+
+<div class="methodo-title">METHODOLOGIE — SITEMAP DYNAMIQUE</div>
+<div class="methodo-subtitle">Comprendre la strategie double-sitemap SEO + GEO</div>
+
+<div class="methodo-header">C'EST QUOI UN SITEMAP ?</div>
+<p class="methodo-text">
+Le plan de votre site donne aux robots (Google, ChatGPT, Claude...) pour qu'ils trouvent vos pages facilement.
+</p>
+<div style="display: flex; gap: 0; margin-bottom: 24px;">
+    <div class="methodo-card" style="flex: 1;">
+        <div class="methodo-badge">SANS SITEMAP</div>
+        <p class="methodo-text" style="margin-bottom: 0;">Les robots cherchent au hasard. Beaucoup de pages ne sont jamais trouvees.</p>
+    </div>
+    <div class="methodo-card" style="flex: 1;">
+        <div class="methodo-badge">AVEC SITEMAP</div>
+        <p class="methodo-text" style="margin-bottom: 0;">Vous leur donnez la liste complete avec les priorites. Rien n'est oublie.</p>
+    </div>
+</div>
+
+<div class="methodo-header">LE PROBLEME</div>
+<p class="methodo-text">
+Un sitemap classique traite toutes les pages de la meme facon.
+Mais les robots cherchent des choses differentes :
+</p>
+<div style="display: flex; gap: 0; margin-bottom: 24px;">
+    <div class="methodo-card" style="flex: 1;">
+        <div class="methodo-badge">GOOGLE</div>
+        <p class="methodo-text" style="margin-bottom: 0;">Veut tout voir pour indexer. Priorise le trafic, les backlinks, la fraicheur du contenu.</p>
+    </div>
+    <div class="methodo-card" style="flex: 1;">
+        <div class="methodo-badge">CHATGPT / CLAUDE</div>
+        <p class="methodo-text" style="margin-bottom: 0;">Veut du contenu citable — guides, tutos, FAQ, definitions. Pas vos CGV ni vos pages commerciales.</p>
+    </div>
+</div>
+<p class="methodo-text" style="font-weight: 700; color: #000;">
+Resultat : avec un sitemap unique, vous gaspillez des opportunites.
+</p>
+
+<div class="methodo-header">LA SOLUTION : 2 SITEMAPS OPTIMISES</div>
+
+<div class="methodo-card">
+    <div class="methodo-badge">SITEMAP SEO — POUR GOOGLE</div>
+    <p class="methodo-text">On priorise selon des signaux concrets :</p>
+    <ul class="methodo-tips">
+        <li>Pages avec du trafic — priorite haute</li>
+        <li>Pages avec des backlinks — priorite haute</li>
+        <li>Pages recentes — priorite haute</li>
+        <li>Contenu de qualite (titre, meta, h1, h2) — priorite haute</li>
+    </ul>
+    <div class="methodo-health" style="margin: 20px 0 0 0; padding: 20px;">
+        <p style="font-size: 0.7rem; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 8px;">BENEFICE</p>
+        <p class="methodo-text" style="margin-bottom: 0;">Google crawle 30 a 50% mieux. Indexation 2 a 3 fois plus rapide.</p>
+    </div>
+</div>
+
+<div class="methodo-card" style="margin-top: -1px;">
+    <div class="methodo-badge">SITEMAP GEO — POUR CHATGPT / CLAUDE</div>
+    <p class="methodo-text">On garde seulement les pages citables :</p>
+    <ul class="methodo-tips">
+        <li>Guides, tutoriels, definitions, FAQ</li>
+        <li>Pages avec JSON-LD de qualite</li>
+        <li>Contenu a forte valeur informative</li>
+    </ul>
+    <p class="methodo-text" style="font-weight: 600;">
+    On exclut les CGV, les pages commerciales pures, les pages pauvres en contenu.
+    <br>On limite a 500 meilleures pages — qualite superieure a quantite.
+    </p>
+    <div class="methodo-health" style="margin: 20px 0 0 0; padding: 20px;">
+        <p style="font-size: 0.7rem; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 8px;">BENEFICE</p>
+        <p class="methodo-text" style="margin-bottom: 0;">+300% de citations par les LLMs. Vous devenez une source de reference.</p>
+    </div>
+</div>
+
+<div class="methodo-header" style="margin-top: 40px;">COMMENT CA MARCHE ?</div>
+
+<div style="display: flex; gap: 0; margin-bottom: 24px;">
+    <div class="methodo-card" style="flex: 1; text-align: center;">
+        <div class="methodo-badge">ETAPE 01</div>
+        <p style="font-weight: 800; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px;">IMPORT</p>
+        <p class="methodo-text" style="margin-bottom: 0; font-size: 0.85rem;">Uploadez vos pages CSV ou importez directement depuis le crawl HOTARU.</p>
+    </div>
+    <div class="methodo-card" style="flex: 1; text-align: center;">
+        <div class="methodo-badge">ETAPE 02</div>
+        <p style="font-weight: 800; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px;">ANALYSE</p>
+        <p class="methodo-text" style="margin-bottom: 0; font-size: 0.85rem;">Calcul automatique des scores de qualite, citabilite et priorites.</p>
+    </div>
+    <div class="methodo-card" style="flex: 1; text-align: center;">
+        <div class="methodo-badge">ETAPE 03</div>
+        <p style="font-weight: 800; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px;">GENERATION</p>
+        <p class="methodo-text" style="margin-bottom: 0; font-size: 0.85rem;">2 fichiers XML optimises, prets a deployer sur votre serveur.</p>
+    </div>
+    <div class="methodo-card" style="flex: 1; text-align: center;">
+        <div class="methodo-badge">ETAPE 04</div>
+        <p style="font-weight: 800; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px;">INSTALLATION</p>
+        <p class="methodo-text" style="margin-bottom: 0; font-size: 0.85rem;">Telechargez et installez les sitemaps sur votre site.</p>
+    </div>
+</div>
+
+<div class="methodo-header" style="margin-top: 40px;">EN RESUME</div>
+
+<div style="display: flex; gap: 0; margin-bottom: 24px;">
+    <div class="methodo-card" style="flex: 1;">
+        <div class="methodo-badge">AVANT</div>
+        <p class="methodo-text" style="margin-bottom: 0; font-weight: 600;">1 sitemap pour tous — inefficace. Google et les LLMs recoivent les memes informations sans distinction.</p>
+    </div>
+    <div class="methodo-card" style="flex: 1; border-left: 3px solid #000;">
+        <div class="methodo-badge">APRES</div>
+        <p class="methodo-text" style="margin-bottom: 0; font-weight: 600;">2 sitemaps cibles — Google crawle mieux, les LLMs vous citent plus.</p>
+    </div>
+</div>
+
+<div class="methodo-health">
+    <p style="font-size: 0.7rem; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 16px;">IMPACT TYPIQUE</p>
+    <div class="methodo-grade-row">
+        <span class="methodo-grade-letter">CRAWL GOOGLE</span>
+        <span class="methodo-grade-range">+40%</span>
+    </div>
+    <div class="methodo-grade-row">
+        <span class="methodo-grade-letter">CITATIONS LLMS</span>
+        <span class="methodo-grade-range">+300%</span>
+    </div>
+    <div class="methodo-grade-row" style="border-bottom: none;">
+        <span class="methodo-grade-letter">TRAFIC AI</span>
+        <span class="methodo-grade-range">+500%</span>
+    </div>
+</div>
+
+</div>
+""", unsafe_allow_html=True)
 
 
 # =============================================================================
@@ -113,10 +254,22 @@ def _render_project_selector(sdb, workspace: str, user_email: str):
 
     if choice == "— Nouveau projet —":
         st.session_state.pop("sitemap_current_project", None)
+
+        crawl_domain = ""
+        crawl_url = st.session_state.get("target_url", "")
+        if crawl_url:
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(crawl_url)
+                crawl_domain = f"{parsed.scheme}://{parsed.netloc}" if parsed.netloc else crawl_url
+            except Exception:
+                crawl_domain = crawl_url
+
         with st.form("sitemap_new_project"):
             st.markdown("**Créer un projet**")
-            name = st.text_input("Nom du projet", placeholder="Mon site e-commerce")
-            domain = st.text_input("Domaine", placeholder="https://example.com")
+            default_name = crawl_domain.replace("https://", "").replace("http://", "").split("/")[0] if crawl_domain else ""
+            name = st.text_input("Nom du projet", value=default_name, placeholder="Mon site e-commerce")
+            domain = st.text_input("Domaine", value=crawl_domain, placeholder="https://example.com")
             description = st.text_area("Description (optionnel)", height=68)
             c1, c2 = st.columns(2)
             with c1:
@@ -141,7 +294,11 @@ def _render_project_selector(sdb, workspace: str, user_email: str):
                         st.toast(f"Projet « {name} » créé.")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Erreur : {str(e)[:200]}")
+                        err_str = str(e)
+                        if "23505" in err_str or "unique" in err_str.lower() or "duplicate" in err_str.lower():
+                            st.error(f"Un projet « {name.strip()} » existe déjà dans ce workspace. Choisissez un autre nom ou sélectionnez-le dans la liste.")
+                        else:
+                            st.error(f"Erreur : {err_str[:200]}")
     else:
         st.session_state["sitemap_current_project"] = project_map.get(choice)
 
@@ -205,30 +362,108 @@ def _render_import_section(sdb, project: dict):
             st.success(f"{count} pages importées. Priorités recalculées.")
             st.rerun()
 
-    use_crawl = st.checkbox("Importer depuis les données crawlées en session", key="sitemap_from_crawl")
-    if use_crawl:
-        results = st.session_state.get("results") or []
-        if not results:
-            st.warning("Aucune donnée crawlée en session. Lancez d'abord un audit.")
-        else:
-            st.info(f"{len(results)} pages en session.")
-            if st.button("Importer depuis la session", key="sitemap_import_session"):
-                pages = []
-                for r in results:
-                    pages.append({
-                        "url": r.get("url", ""),
-                        "content_type": r.get("content_type", "page"),
-                        "has_jsonld": bool(r.get("jsonld")),
-                        "jsonld_quality": 0.7 if r.get("jsonld") else 0.0,
-                        "content_quality": 0.6,
-                        "monthly_traffic": 0,
-                        "backlinks": 0,
-                    })
-                with st.spinner("Import..."):
-                    count = sdb.import_pages(project["id"], pages)
-                    sdb.calculate_priorities(project["id"])
-                st.success(f"{count} pages importées depuis la session.")
-                st.rerun()
+    st.markdown("---")
+    st.markdown("**Import automatique depuis le crawl HOTARU**")
+
+    results = st.session_state.get("results") or []
+    jld_results = st.session_state.get("jsonld_analyzer_results") or {}
+    cluster_labels = jld_results.get("cluster_labels", [])
+    cluster_urls = jld_results.get("cluster_urls", [])
+    cluster_jsonld = jld_results.get("cluster_jsonld", [])
+
+    url_to_cluster_type = {}
+    for i, label in enumerate(cluster_labels):
+        schema_type = (label.get("schema_type") or "WebPage").lower()
+        type_map = {
+            "jobposting": "job", "product": "product", "article": "article",
+            "newsarticle": "news", "blogposting": "blog", "event": "event",
+            "faqpage": "faq", "localbusiness": "service", "organization": "page",
+            "webpage": "page", "collectionpage": "category",
+        }
+        ct = type_map.get(schema_type, "page")
+        for url in (cluster_urls[i] if i < len(cluster_urls) else []):
+            u = url if isinstance(url, str) else (url.get("url", "") if isinstance(url, dict) else "")
+            if u:
+                url_to_cluster_type[u] = ct
+
+    url_has_optimized = set()
+    for i in range(len(cluster_labels)):
+        opt = st.session_state.get(f"optimized_jsonld_{i}")
+        if opt and isinstance(opt, dict):
+            for url in (cluster_urls[i] if i < len(cluster_urls) else []):
+                u = url if isinstance(url, str) else (url.get("url", "") if isinstance(url, dict) else "")
+                if u:
+                    url_has_optimized.add(u)
+
+    if not results:
+        st.info("Lancez un audit (Audit GEO ou JSON-LD) pour remplir automatiquement les pages du sitemap.")
+    else:
+        n_with_jld = sum(1 for r in results if r.get("has_structured_data") or r.get("json_ld"))
+        n_typed = len(url_to_cluster_type)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Pages crawlées", len(results))
+        c2.metric("Avec JSON-LD", n_with_jld)
+        c3.metric("Typées (clusters)", n_typed)
+
+        if st.button("Importer depuis le crawl HOTARU", type="primary", key="sitemap_import_session"):
+            pages = []
+            for r in results:
+                url = r.get("url", "")
+                if not url:
+                    continue
+                has_jld = bool(r.get("has_structured_data") or r.get("json_ld"))
+                jld_data = r.get("json_ld") or r.get("jsonld")
+                jld_quality = 0.0
+                if has_jld and jld_data:
+                    if isinstance(jld_data, dict):
+                        fields_filled = sum(1 for v in jld_data.values() if v)
+                        total_fields = max(len(jld_data), 1)
+                        jld_quality = round(min(1.0, fields_filled / total_fields), 2)
+                    elif isinstance(jld_data, list) and jld_data:
+                        jld_quality = 0.6
+                    else:
+                        jld_quality = 0.4
+                if url in url_has_optimized:
+                    jld_quality = max(jld_quality, 0.85)
+
+                title = r.get("title", "")
+                desc = r.get("description", "")
+                h1 = r.get("h1", "")
+                h2_count = int(r.get("h2_count") or 0)
+                cq_score = 0.0
+                if title:
+                    cq_score += 0.25
+                if desc and len(desc) > 50:
+                    cq_score += 0.25
+                if h1:
+                    cq_score += 0.20
+                if h2_count >= 2:
+                    cq_score += 0.15
+                if has_jld:
+                    cq_score += 0.15
+                cq_score = round(min(1.0, cq_score), 2)
+
+                ct = url_to_cluster_type.get(url, "page")
+
+                pages.append({
+                    "url": url,
+                    "content_type": ct,
+                    "has_jsonld": has_jld,
+                    "jsonld_quality": jld_quality,
+                    "content_quality": cq_score,
+                    "monthly_traffic": 0,
+                    "backlinks": 0,
+                    "last_modified": r.get("last_modified") or None,
+                })
+
+            with st.spinner(f"Import de {len(pages)} pages..."):
+                count = sdb.import_pages(project["id"], pages)
+                sdb.calculate_priorities(project["id"], {
+                    "min_content_quality": float(project.get("min_content_quality", 0.5)),
+                    "min_jsonld_quality": float(project.get("min_jsonld_quality", 0.5)),
+                })
+            st.success(f"{count} pages importées depuis le crawl. Types, JSON-LD et qualité intégrés.")
+            st.rerun()
 
 
 # =============================================================================

@@ -3,12 +3,14 @@
 
 import datetime
 
-VERSION = "3.4.1"
+VERSION = "3.5.0"
 BUILD_DATE = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-RELEASE_NOTE = "README et version.py a jour : Sitemap Dynamique, bouton ECRASER, Master save, suppression workspace, fix Mistral parse."
+RELEASE_NOTE = "Import enrichi crawl->Sitemap, suppression sauvegardes backoffice, onglet Methodologie Sitemap, pre-remplissage projet, gestion doublon."
 
 # Historique des notes de version (précédentes uniquement, plus récente en premier) — date/heure de release
 RELEASE_HISTORY = [
+    {"version": "3.4.1", "date": "2026-02-18", "note": "README et version.py a jour : Sitemap Dynamique, bouton ECRASER, Master save, suppression workspace, fix Mistral parse."},
+    {"version": "3.4.0", "date": "2026-02-18", "note": "Module Sitemap Dynamique complet (SEO + GEO). Tables Supabase sitemap_projects/pages/generations."},
     {"version": "3.3.0", "date": "2026-02-18", "note": "Bouton ECRASER (update_unified), Master restaure auto, gestion versions."},
     {"version": "3.2.7", "date": "2026-02-18", "note": "Fix parse Mistral JSON-LD : nettoyage balises script et markdown. Prompt renforce pour JSON pur."},
     {"version": "3.2.6", "date": "2026-02-18", "note": "Master JSON-LD : constantes Master integrees a la sauvegarde. Plus de template vide."},

@@ -12,7 +12,7 @@ HOTARU (luciole) est une application Streamlit : crawl, scoring GEO, Authority I
 
 - **Audit** : **Audit GEO** (structure du site, graphe interactif, patterns d'URL, renommage IA Mistral ; **chargement et sauvegarde via la barre en haut** puis nouvelle analyse), **Authority Score** (AI Authority Index — 5 piliers), **Scraping** (diagnostic URL + logs JSON-LD / techno / Selenium).
 - **JSON-LD** : **Master** (données d'entité Wikidata + Mistral, JSON-LD Organization, audit & gap), **Analyse JSON-LD** (clustering DOM, nommage Mistral, graphe, **traitement unitaire** (sélection nœud + optimisation Mistral + comparaison actuel/optimisé), **traitement en masse** (génération batch + validation par onglets), **comparaison visuelle gris/vert/rouge**, affichage du prompt Mistral, **fusion manuelle à choix multiples** ; chargement et sauvegarde **uniquement via la barre en haut**).
-- **Sitemap Dynamique** : Génération de sitemaps **SEO** et **GEO** optimisés. Import CSV ou depuis données crawlées. Scoring par type de contenu, qualité JSON-LD, trafic, backlinks, fraîcheur. Prévisualisation, téléchargement XML, sauvegarde en base, historique des générations. Architecture API-ready (engine/strategies/xml_generator indépendants de Streamlit).
+- **Sitemap Dynamique** : Génération de sitemaps **SEO** et **GEO** optimisés. **Onglet Méthodologie** (explication double-sitemap, scoring, impact). Import CSV ou **import enrichi depuis le crawl HOTARU** (types Schema.org, qualité JSON-LD calculée, content quality score, détection optimisations Mistral). Scoring par type de contenu, qualité JSON-LD, trafic, backlinks, fraîcheur. Prévisualisation, téléchargement XML, sauvegarde en base, historique des générations. Architecture API-ready (engine/strategies/xml_generator indépendants de Streamlit).
 - **Eco-Score** : **AIO Efficiency** — calculatrice d'impact carbone (tokens, kWh, gCO₂), paramètres site, Big Numbers, graphique Plotly 12 mois.
 - **Design :** Fond blanc, noir + rouge `rgb(168, 27, 35)`. Titres `XX / TITRE`, rouge souligné.
 
@@ -82,7 +82,7 @@ PROJET_HOTARU_V2/
 │   │   ├── xml_generator.py    # Génération XML sitemap (pur Python)
 │   │   ├── engine.py           # SitemapEngine orchestrateur (pur Python)
 │   │   ├── database.py         # SitemapDatabase CRUD Supabase
-│   │   └── ui.py               # Interface Streamlit 5 sections
+│   │   └── ui.py               # Interface Streamlit 6 sections (Méthodologie, Import, Config, Génération, Historique)
 │   └── eco/
 ├── docs/
 │   ├── supabase_schema.sql     # Schéma Supabase (users, audits, jsonld, unified_saves, user_workspace_access)
@@ -128,7 +128,7 @@ Si l’erreur « Executable doesn't exist at …/ms-playwright/… » s’affich
 - **Isolation :**
   - `AuditDatabase` (Sheets ou Supabase selon session) : `list_unified_saves(user_email, workspace)`, `load_unified(save_id, user_email)`, `save_unified(...)`.
   - Si **droits workspace** sont définis en backoffice pour un user, il ne voit que les sauvegardes des workspaces auxquels il a accès.
-- **Backoffice (admin uniquement) :** Onglet **Backoffice** visible si `is_admin()`. Gestion des utilisateurs (liste, ajout, suppression, changement de rôle), et **accès par workspace** par utilisateur (cases à cocher + Enregistrer accès).
+- **Backoffice (admin uniquement) :** Onglet **Backoffice** visible si `is_admin()`. Gestion des utilisateurs (liste, ajout, suppression, changement de rôle), **CRUD workspaces** (créer, renommer, supprimer), **déplacer des sauvegardes** entre workspaces, **supprimer des sauvegardes** (sélection multiple + double confirmation), et **accès par workspace** par utilisateur (cases à cocher + Enregistrer accès).
 
 ---
 
@@ -288,6 +288,11 @@ SERPAPI_KEY = "..."  # Optionnel, Audit Externe
 - [x] Suppression workspace avec confirmation et déplacement des sauvegardes
 - [x] Fallback création workspace (unified_saves) si table user_workspace_access absente
 - [x] Fix parse Mistral JSON-LD (nettoyage balises script/markdown)
+- [x] Import enrichi crawl → Sitemap (types Schema.org, JSON-LD quality, content quality, last_modified)
+- [x] Sauvegarde légère JSON-LD dans les pages crawlées (persistance pour Sitemap au rechargement)
+- [x] Suppression de sauvegardes depuis le backoffice (sélection multiple + double confirmation + Supabase)
+- [x] Onglet Méthodologie Sitemap (explication double-sitemap SEO/GEO, scoring, impact)
+- [x] Pré-remplissage projet Sitemap depuis le domaine crawlé + gestion doublon (erreur 23505)
 - [ ] Onglet Paramètres (profil, préférences)
 - [ ] Vault : clés API chiffrées par utilisateur
 - [ ] API REST étendue (user_email/workspace en entrée, routes analyse/crawl)
