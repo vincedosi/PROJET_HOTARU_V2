@@ -583,12 +583,12 @@ def main():
 
     st.markdown('<div class="hotaru-header-divider"></div>', unsafe_allow_html=True)
 
-    # NAVIGATION — 4 onglets + Backoffice (admin uniquement)
-    tab_names = ["Accueil", "Audit", "JSON-LD", "Eco-Score"]
+    # NAVIGATION — 5 onglets + Backoffice (admin uniquement)
+    tab_names = ["Accueil", "Audit", "JSON-LD", "Sitemap", "Eco-Score"]
     if is_admin():
         tab_names.append("Backoffice")
     all_tabs = st.tabs(tab_names)
-    tab_home, tab_audit, tab_jsonld, tab_eco = all_tabs[0], all_tabs[1], all_tabs[2], all_tabs[3]
+    tab_home, tab_audit, tab_jsonld, tab_sitemap, tab_eco = all_tabs[0], all_tabs[1], all_tabs[2], all_tabs[3], all_tabs[4]
 
     with tab_home:
         render_home = get_render_home()
@@ -624,12 +624,16 @@ def main():
             render_jsonld_fusion_intelligente = get_render_jsonld_fusion_intelligente()
             render_jsonld_fusion_intelligente()
 
+    with tab_sitemap:
+        from modules.sitemap.ui import render_sitemap_tab
+        render_sitemap_tab()
+
     with tab_eco:
         render_eco_tab = get_render_eco_tab()
         render_eco_tab()
 
     if is_admin():
-        with all_tabs[4]:
+        with all_tabs[5]:
             from views.backoffice import render_backoffice_tab
             render_backoffice_tab(get_cached_auth(), get_cached_database())
 

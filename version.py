@@ -3,12 +3,13 @@
 
 import datetime
 
-VERSION = "3.3.0"
+VERSION = "3.4.0"
 BUILD_DATE = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-RELEASE_NOTE = "Bouton ECRASER (update_unified) pour remplacer sauvegarde existante. Master restaure auto au chargement. Gestion versions."
+RELEASE_NOTE = "Module Sitemap Dynamique : generation sitemaps SEO et GEO, import CSV, scoring, preview, historique, download XML. Architecture API-ready."
 
 # Historique des notes de version (précédentes uniquement, plus récente en premier) — date/heure de release
 RELEASE_HISTORY = [
+    {"version": "3.3.0", "date": "2026-02-18", "note": "Bouton ECRASER (update_unified), Master restaure auto, gestion versions."},
     {"version": "3.2.7", "date": "2026-02-18", "note": "Fix parse Mistral JSON-LD : nettoyage balises script et markdown. Prompt renforce pour JSON pur."},
     {"version": "3.2.6", "date": "2026-02-18", "note": "Master JSON-LD : constantes Master integrees a la sauvegarde. Plus de template vide."},
     {"version": "3.2.5", "date": "2026-02-18", "note": "Sauvegarde complete : master_data, jsonld_master, validations, optimized_jsonld tous restaures au chargement."},
