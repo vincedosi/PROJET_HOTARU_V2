@@ -3,12 +3,13 @@
 
 import datetime
 
-VERSION = "3.5.0"
+VERSION = "3.5.1"
 BUILD_DATE = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-RELEASE_NOTE = "Import enrichi crawl->Sitemap, suppression sauvegardes backoffice, onglet Methodologie Sitemap, pre-remplissage projet, gestion doublon."
+RELEASE_NOTE = "README mis à jour (version exemple alignée)."
 
 # Historique des notes de version (précédentes uniquement, plus récente en premier) — date/heure de release
 RELEASE_HISTORY = [
+    {"version": "3.5.1", "date": "2026-02-20", "note": "README mis à jour (version exemple alignée)."},
     {"version": "3.4.1", "date": "2026-02-18", "note": "README et version.py a jour : Sitemap Dynamique, bouton ECRASER, Master save, suppression workspace, fix Mistral parse."},
     {"version": "3.4.0", "date": "2026-02-18", "note": "Module Sitemap Dynamique complet (SEO + GEO). Tables Supabase sitemap_projects/pages/generations."},
     {"version": "3.3.0", "date": "2026-02-18", "note": "Bouton ECRASER (update_unified), Master restaure auto, gestion versions."},
